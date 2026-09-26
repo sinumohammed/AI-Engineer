@@ -1,0 +1,8 @@
+{
+  "name": "phase7-reliability",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "eval": "node eval.js"
+  }
+}
