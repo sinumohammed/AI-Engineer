@@ -1,0 +1,8 @@
+node_modules/
+*.log
+logs/
+.env
+.claude/
+
+# scratch files from local testing during development
+*.output
