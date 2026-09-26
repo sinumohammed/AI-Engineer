@@ -22,16 +22,39 @@ toolCallLog.push({ name: "search_company_docs", args: { query: userQuestion } })
 const docResults = await toolImpls.search_company_docs({ query: userQuestion });
 console.log(`--- Auto-retrieval: search_company_docs({"query":"${userQuestion}"}) ---`);
 
-const isRelevant = Array.isArray(docResults) && docResults.some((r) => r.distance < RELEVANCE_THRESHOLD);
-const bestDistance = Array.isArray(docResults) ? Math.min(...docResults.map((r) => r.distance)) : null;
+// identifierMismatch (Phase 5.6): the question named a specific code/ID but
+// the exact-match keyword search found no chunk containing it, even though
+// vector search alone would have called a similar chunk "relevant" - a
+// proven false-positive pattern. Checked BEFORE the normal relevance
+// threshold, and kept as its own flat branch below rather than nested inside
+// another, per the Phase 7 lesson that this model blends nested conditions
+// into nonsense.
+const identifierMismatch = Array.isArray(docResults) && docResults.identifierMismatch === true;
+// Gate on vectorRows/keywordRows-derived fields, NOT on the merged/display
+// array - a keyword-only hit has no `distance` and would wrongly fail
+// `undefined < threshold` if read off `docResults` directly (see tools.js).
+const isRelevant =
+  !identifierMismatch &&
+  Array.isArray(docResults) &&
+  (docResults.bestVectorDistance < RELEVANCE_THRESHOLD || docResults.keywordHit);
+const bestDistance = Array.isArray(docResults) ? docResults.bestVectorDistance : null;
 
-const systemContent = isRelevant
-  ? "You are a helpful assistant. The company document excerpt below is relevant to the user's question. " +
+let systemContent;
+if (identifierMismatch) {
+  systemContent =
+    "You are a helpful assistant. The user asked about a specific code or ID that does not appear in the " +
+    "company documents. Say plainly that you don't have information about that specific identifier - do not " +
+    "substitute or guess a similar one from the documents.";
+} else if (isRelevant) {
+  systemContent =
+    "You are a helpful assistant. The company document excerpt below is relevant to the user's question. " +
     "Read it carefully and answer specifically using the facts it contains. Only if it truly does not " +
     "address the question at all, say plainly that you don't know.\n\n" +
     "Company document excerpt:\n" +
-    docResults.map((r) => `[${r.source}] ${r.content}`).join("\n---\n")
-  : "You are a helpful assistant. Answer the user's question from your own knowledge.";
+    docResults.map((r) => `[${r.source}] ${r.content}`).join("\n---\n");
+} else {
+  systemContent = "You are a helpful assistant. Answer the user's question from your own knowledge.";
+}
 
 const messages = [
   { role: "system", content: systemContent },
@@ -123,6 +146,7 @@ for (let turn = 0; turn < MAX_TURNS; turn++) {
       question: userQuestion,
       isRelevant,
       bestDistance,
+      identifierMismatch,
       toolCalls: toolCallLog,
       answer: msg.content,
       usage: { promptTokens: data.prompt_eval_count ?? 0, completionTokens: data.eval_count ?? 0, totalTokens, contextWindow: NUM_CTX },
@@ -157,6 +181,7 @@ await logTrace({
   question: userQuestion,
   isRelevant,
   bestDistance,
+  identifierMismatch,
   toolCalls: toolCallLog,
   answer: "Stopped after max turns without a final answer.",
   usage: null,

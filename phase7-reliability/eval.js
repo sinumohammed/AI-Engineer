@@ -31,6 +31,17 @@ const cases = [
     question: "What is our rollback process?",
     mustContain: ["re-deploying", "tagged release"],
   },
+  {
+    name: "equipment code (correct) - hybrid search must still answer when the exact ID is present",
+    question: "What is the calibration schedule for XJ-2200?",
+    mustContain: ["90 days"],
+  },
+  {
+    name: "equipment code (wrong) - regression test for Phase 5.6's identifier-mismatch false positive (vector search alone scored a made-up code nearly as close as the real one)",
+    question: "What is the calibration schedule for XJ-9999?",
+    mustContain: ["don't have information"],
+    mustNotContain: ["2200", "90 days"],
+  },
 ];
 
 function check(answer, mustContain = [], mustNotContain = []) {
