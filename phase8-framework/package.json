@@ -1,0 +1,13 @@
+{
+  "name": "phase8-framework",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "agent-a": "node --env-file=../phase5-rag/.env agent-a.js"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.12",
+    "@langchain/ollama": "^1.3.0",
+    "langchain": "^1.5.12"
+  }
+}

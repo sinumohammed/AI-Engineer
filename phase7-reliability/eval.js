@@ -1,9 +1,12 @@
-// Eval harness for the combined agent (phase6-ui/server/agent.js). Each case
-// is a real regression test drawn from bugs actually found and fixed this
-// project (Phase 6.8's hallucination bug, the always-retrieve fix, etc) -
-// this is the safety net Phase 8 needs before comparing against a rewritten
-// (e.g. LangChain) version of the same agent.
-import { runAgent } from "../phase6-ui/server/agent.js";
+// Eval harness for the combined agent. Each case is a real regression test
+// drawn from bugs actually found and fixed this project (Phase 6.8's
+// hallucination bug, the always-retrieve fix, Phase 5.6's identifier
+// mismatch, etc). AGENT_MODULE lets Phase 8 point this SAME harness (same
+// questions, same assertions) at a different agent implementation - e.g.
+// `AGENT_MODULE=../phase8-framework/agent-a.js npm run eval` - so framework
+// comparisons are measured, not eyeballed.
+const AGENT_MODULE = process.env.AGENT_MODULE ?? "../phase6-ui/server/agent.js";
+const { runAgent } = await import(AGENT_MODULE);
 
 const cases = [
   {
@@ -54,7 +57,7 @@ function check(answer, mustContain = [], mustNotContain = []) {
 let passCount = 0;
 const failures = [];
 
-console.log(`Running ${cases.length} eval cases against the combined agent...\n`);
+console.log(`Running ${cases.length} eval cases against ${AGENT_MODULE}...\n`);
 
 for (const c of cases) {
   const start = Date.now();
