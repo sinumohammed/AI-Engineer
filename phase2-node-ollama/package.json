@@ -1,0 +1,10 @@
+{
+  "name": "phase2-node-ollama",
+  "version": "1.0.0",
+  "description": "Phase 2: calling a local Ollama model from Node.js using raw HTTP calls",
+  "type": "module",
+  "scripts": {
+    "chat": "node chat.js",
+    "chat:stream": "node chat-stream.js"
+  }
+}
