@@ -1,0 +1,13 @@
+{
+  "name": "phase6-ui-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=../../phase5-rag/.env server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "redis": "^6.2.1"
+  }
+}
