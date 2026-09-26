@@ -1,0 +1,12 @@
+{
+  "name": "phase4-mcp",
+  "version": "1.0.0",
+  "description": "Phase 4: wrap tools as an MCP server, connect the local agent as an MCP client",
+  "type": "module",
+  "scripts": {
+    "agent": "node client-agent.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
