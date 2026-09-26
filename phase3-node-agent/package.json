@@ -1,0 +1,9 @@
+{
+  "name": "phase3-node-agent",
+  "version": "1.0.0",
+  "description": "Phase 3: a minimal single agent with real tools, calling a local Ollama model",
+  "type": "module",
+  "scripts": {
+    "agent": "node agent.js"
+  }
+}
