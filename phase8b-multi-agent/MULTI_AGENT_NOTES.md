@@ -159,6 +159,23 @@ more code and more concepts for the same result, so hand-rolled is the simpler c
 The framework starts to pay for itself when the flow has loops, needs to pause and resume, or needs
 per-thread memory - none of which this supervisor has.
 
+## Splitting close-topic questions (routing fix, found in the chat UI)
+
+The results tables above were measured on the first 17 routing cases. Using the UI then showed a
+miss they did not cover: "How are rollbacks done, and how do I list git tags?" was not split - the
+two halves are close in topic (the doc says "tagged release"), and depending on phrasing the message
+went to `company_docs` alone, `coding` alone, or both halves to `company_docs`. The original two-part
+cases all used unrelated halves (rollback + capital of France), which is why they passed.
+
+- **Fix:** the schema now begins with `parts`: the router lists the separate questions in the
+  message first, then assigns one agent per part, judging each part on its own.
+- **A regression the eval caught:** with `parts` added, the one-question "How do I set up a CI build
+  with GitHub Actions?" was split in two - the router treated the document excerpt as a second
+  question. Fixed by labelling the input: "User's message: …" and "Reference only, NOT part of the
+  user's message - excerpt …".
+- **Measured on 24 cases (7 new):** old router 20/24, new router 24/24 on both supervisors.
+  `gemma3:4b`: 23/24.
+
 ## Second-hand answers: a multi-agent bug the single agent cannot have
 
 Found in the chat UI (Phase 8c) by picking a specialist manually. Every specialist gets the

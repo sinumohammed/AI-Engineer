@@ -39,6 +39,26 @@ const routingCases = [
     question: "What is the capital of France, and when does our on-call rotation hand off?",
     expect: ["company_docs", "general"],
   },
+  // Regression cases for a routing miss found in the chat UI: two-part
+  // messages whose parts are close in topic (rollbacks + git tags - the doc
+  // says "tagged release") were NOT split. Depending on the phrasing the
+  // whole message went to company_docs alone, to coding alone, or the git
+  // part was sent to company_docs. Fixed by making the router list the
+  // message's parts before assigning agents (routing.js).
+  { question: "How are rollbacks done, and how do I list git tags?", expect: ["coding", "company_docs"] },
+  { question: "How are rollbacks done and how do I list git tags", expect: ["coding", "company_docs"] },
+  { question: "How do I list git tags, and how are rollbacks done?", expect: ["coding", "company_docs"] },
+  { question: "What is our rollback process and how do I create a git tag?", expect: ["coding", "company_docs"] },
+  {
+    question: "What is the calibration schedule for XJ-2200 and how do I reverse a string in JavaScript?",
+    expect: ["coding", "company_docs"],
+  },
+  { question: "Who wrote Pride and Prejudice and how do I reverse a string in JavaScript?", expect: ["coding", "general"] },
+  // two parts, same specialist - one or two tasks are both fine
+  {
+    question: "What is our rollback process and who approves a deploy before production?",
+    expect: ["company_docs"],
+  },
   // The hard one: nothing in the wording says "company", but the company has
   // a doc that answers it. The router only knows the specialists'
   // descriptions, not what the documents contain.
@@ -66,13 +86,24 @@ const endToEndCases = [
   },
   {
     question: "What is the calibration schedule for XJ-9999, and who wrote Pride and Prejudice?",
-    mustContain: ["austen", ["don't have information", "do not have information", "don't know", "do not know"]],
+    mustContain: [
+      "austen",
+      [
+        "don't have information",
+        "do not have information",
+        "don't have that information",
+        "do not have that information",
+        "don't know",
+        "do not know",
+      ],
+    ],
     mustNotContain: ["2200", "90 days"],
   },
 ];
 
 const normalize = (s) => s.toLowerCase().replace(/[‘’]/g, "'");
-const sameAgents = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+// Compared as sets: two tasks for the same specialist count as that specialist once.
+const sameAgents = (a, b) => JSON.stringify([...new Set(a)].sort()) === JSON.stringify([...new Set(b)].sort());
 
 let failed = 0;
 

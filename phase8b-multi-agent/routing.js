@@ -17,12 +17,19 @@ const ROUTER_EVIDENCE = process.env.ROUTER_EVIDENCE !== "off";
 
 // The hand-off is structured output, not native tool calling: Ollama
 // constrains the reply to this schema, so the agent name is always one of
-// the enum values and the JSON always parses. `reason` comes first so the
-// model writes its reasoning before committing to an agent, and so the trace
-// records WHY a question went where it did.
+// the enum values and the JSON always parses. Field order matters, because
+// the model writes them in order:
+// - `parts` first: the separate questions in the message. Added after a miss
+//   found in the chat UI - "How are rollbacks done, and how do I list git
+//   tags?" went to company_docs alone, because its two halves are close in
+//   topic. Having to list the parts before choosing agents is what makes the
+//   router split them (old router 20/24 on the extended eval, this one 24/24).
+// - `reason` next, so the reasoning is written before committing to an
+//   agent, and the trace records WHY a question went where it did.
 export const ROUTE_SCHEMA = {
   type: "object",
   properties: {
+    parts: { type: "array", items: { type: "string" } },
     reason: { type: "string" },
     tasks: {
       type: "array",
@@ -36,7 +43,7 @@ export const ROUTE_SCHEMA = {
       },
     },
   },
-  required: ["reason", "tasks"],
+  required: ["parts", "reason", "tasks"],
 };
 
 export const ROUTER_PROMPT =
@@ -45,14 +52,20 @@ export const ROUTER_PROMPT =
   "Agents:\n" +
   AGENT_NAMES.map((name) => `- ${name}: ${specialists[name].description}`).join("\n") +
   "\n\nRules:\n" +
-  "- Almost every message is ONE task for ONE agent. Create more than one task only when the message asks " +
-  "clearly separate questions that need different agents.\n" +
+  "- First fill `parts`: the separate questions the message contains, each as its own sentence. Most messages " +
+  "contain exactly one. A message that joins two different questions (\"..., and how do I ...?\") contains two. " +
+  "Parts come only from the user's message - never from the excerpt or the earlier conversation.\n" +
+  "- Then create exactly one task per part. Choose the agent for each part on its own, as if that part had " +
+  "been asked alone - two parts of one message often need different agents.\n" +
   "- Never send the same question to two agents.\n" +
+  "- How to use git, a programming language or a command-line tool is a coding question, even when the " +
+  "company documents mention related words.\n" +
   "- Each task's question must be self-contained: keep the user's own wording, and only rewrite it when it " +
   "refers to earlier conversation (\"that\", \"it\") so it makes sense on its own.\n" +
-  "- You may be shown an excerpt found in the company documents. If the excerpt directly answers a question, " +
-  "send that question to company_docs even when the wording does not mention the company. If the excerpt is " +
-  "only loosely related and does not answer it, ignore the excerpt.\n" +
+  "- You may be shown an excerpt found in the company documents. It may answer one part of the message and " +
+  "not another: judge each part separately. If the excerpt directly answers a part, send that part to " +
+  "company_docs even when the wording does not mention the company. If the excerpt is only loosely related " +
+  "to a part and does not answer it, ignore the excerpt for that part.\n" +
   "- A question about this company goes to company_docs even when no excerpt answers it.";
 
 // Found by the routing eval: "How are rollbacks done?" has no "our" in it, so
@@ -71,7 +84,9 @@ async function docEvidence(question) {
   const meta = { isRelevant, bestDistance };
   if (!isRelevant) return { text: "\n\nCompany document search: nothing relevant found.", meta };
   return {
-    text: `\n\nExcerpt found in the company documents:\n${docResults[0].content.slice(0, 600)}`,
+    text:
+      "\n\nReference only, NOT part of the user's message - excerpt found in the company documents:\n" +
+      docResults[0].content.slice(0, 600),
     meta,
   };
 }
@@ -81,10 +96,14 @@ async function docEvidence(question) {
 export async function routerMessages(question, history = []) {
   const recent = history.slice(-ROUTER_HISTORY_MESSAGES);
   const evidence = await docEvidence(question);
+  // The user's message is always labelled, so the router can tell it apart
+  // from the excerpt below it. Without the label, a one-question message
+  // ("How do I set up a CI build with GitHub Actions?") was split in two: the
+  // router read the excerpt's deployment text as a second question.
   const userContent =
-    (recent.length
-      ? `Earlier conversation:\n${recent.map((m) => `${m.role}: ${m.content}`).join("\n")}\n\nNew message: ${question}`
-      : question) + evidence.text;
+    (recent.length ? `Earlier conversation:\n${recent.map((m) => `${m.role}: ${m.content}`).join("\n")}\n\n` : "") +
+    `User's message: ${question}` +
+    evidence.text;
   return {
     messages: [
       { role: "system", content: ROUTER_PROMPT },
