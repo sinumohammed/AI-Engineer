@@ -3,7 +3,7 @@ import { useChatSession } from "./useChatSession.js";
 import TokenRing from "./TokenRing.jsx";
 
 export default function App() {
-  const { state, ask, newChat, setMode } = useChatSession();
+  const { state, ask, newChat, setMode, setAgent } = useChatSession();
   const [input, setInput] = useState("");
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -82,7 +82,7 @@ export default function App() {
                 {m.role === "assistant" && m.agents?.length > 0 && (
                   <div style={styles.routeBox}>
                     <div style={styles.toolLog}>
-                      <span style={styles.routeLabel}>routed to</span>
+                      <span style={styles.routeLabel}>{m.route?.manual ? "manual pick" : "routed to"}</span>
                       {m.agents.map((a) => (
                         <span key={a.index} style={styles.toolChip(a.status === "running" ? "calling" : "done")} title={a.question}>
                           {a.status === "running" ? "⏳" : "✓"} {a.agent}
@@ -106,6 +106,23 @@ export default function App() {
         </div>
 
         <form onSubmit={handleSubmit} style={styles.form}>
+          {/* Manual override (multi-agent mode only): "Auto" lets the router
+              pick; choosing a specialist skips the router for the next
+              questions. Highlighted while active so it is not forgotten. */}
+          {state.mode === "multi" && (
+            <select
+              style={styles.agentSelect(state.agent !== "auto")}
+              value={state.agent}
+              onChange={(e) => setAgent(e.target.value)}
+              disabled={state.busy}
+              title="Who answers: Auto lets the router decide, or pick a specialist yourself"
+            >
+              <option value="auto">Auto</option>
+              <option value="company_docs">Company docs</option>
+              <option value="coding">Coding</option>
+              <option value="general">General</option>
+            </select>
+          )}
           <input
             ref={inputRef}
             style={styles.input}
@@ -270,6 +287,17 @@ const styles = {
     color: active ? "#0f172a" : "#64748b",
     cursor: "pointer",
     whiteSpace: "nowrap",
+  }),
+  agentSelect: (overriding) => ({
+    padding: "0 10px",
+    borderRadius: 12,
+    border: `1px solid ${overriding ? "#f59e0b" : "#e2e8f0"}`,
+    background: overriding ? "#fef3c7" : "white",
+    color: overriding ? "#92400e" : "#334155",
+    fontSize: 13,
+    fontWeight: 600,
+    outline: "none",
+    cursor: "pointer",
   }),
   routeBox: { marginBottom: 8 },
   routeLabel: { fontSize: 11, color: "#64748b", alignSelf: "center" },

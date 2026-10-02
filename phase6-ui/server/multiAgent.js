@@ -9,12 +9,19 @@ import { NUM_CTX, contextWarning } from "./agent.js";
 // Same contract as agent.js's runAgent: (question, history, callbacks) ->
 // { answer, usage }. The callbacks differ - a supervisor has no tool calls
 // to report, it has a routing decision and specialists starting/finishing.
-export async function runMultiAgent(question, history = [], { onRoute, onAgentStart, onAgentDone, summary } = {}) {
+// `forceAgent` (optional) is the manual override: skip the router and send
+// the question straight to that specialist.
+export async function runMultiAgent(
+  question,
+  history = [],
+  { onRoute, onAgentStart, onAgentDone, summary, forceAgent } = {}
+) {
   const { answer, usage: totals } = await runSupervisor(question, history, {
     onRoute,
     onAgentStart,
     onAgentDone,
     summary,
+    forceAgent,
   });
 
   // The UI's token ring means "how full is the context window". With one

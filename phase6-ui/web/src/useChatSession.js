@@ -58,7 +58,13 @@ function reducer(state, action) {
     // each specialist starting and finishing. `index` identifies a step, so
     // two tasks sent to the same specialist stay separate chips.
     case "ROUTE":
-      return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, route: { reason: action.reason, fallback: action.fallback } })) };
+      return {
+        ...state,
+        messages: updateLast(state.messages, (m) => ({
+          ...m,
+          route: { reason: action.reason, fallback: action.fallback, manual: action.manual },
+        })),
+      };
     case "AGENT_START":
       return {
         ...state,
@@ -77,6 +83,8 @@ function reducer(state, action) {
       };
     case "SET_MODE":
       return { ...state, mode: action.mode };
+    case "SET_AGENT":
+      return { ...state, agent: action.agent };
     case "ANSWER_CHUNK":
       return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, text: m.text + action.text })) };
     case "USAGE":
@@ -92,7 +100,7 @@ function reducer(state, action) {
         messages: updateLast(state.messages, (m) => ({ ...m, text: m.text || action.message })),
       };
     case "RESET":
-      return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId, mode: state.mode };
+      return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId, mode: state.mode, agent: "auto" };
     default:
       return state;
   }
@@ -115,6 +123,11 @@ export function useChatSession() {
     // "single" = the Phase 6 agent, "multi" = the Phase 8b supervisor.
     // Remembered across refreshes, like the session id.
     mode: localStorage.getItem("agentMode") === "single" ? "single" : "multi",
+    // Manual override for multi-agent mode: "auto" lets the router decide,
+    // a specialist's name skips the router. Deliberately NOT remembered
+    // across refreshes or new chats - a forgotten override would keep
+    // sending later questions to the wrong specialist.
+    agent: "auto",
   });
   const esRef = useRef(null);
 
@@ -130,7 +143,8 @@ export function useChatSession() {
   function ask(question) {
     dispatch({ type: "ASK_START", question });
 
-    const url = `${API_BASE}/api/chat/stream?sessionId=${state.sessionId}&mode=${state.mode}&q=${encodeURIComponent(question)}`;
+    const override = state.mode === "multi" && state.agent !== "auto" ? `&agent=${state.agent}` : "";
+    const url = `${API_BASE}/api/chat/stream?sessionId=${state.sessionId}&mode=${state.mode}${override}&q=${encodeURIComponent(question)}`;
     const es = new EventSource(url);
     esRef.current = es;
 
@@ -164,5 +178,9 @@ export function useChatSession() {
     dispatch({ type: "SET_MODE", mode });
   }
 
-  return { state, ask, newChat, setMode };
+  function setAgent(agent) {
+    dispatch({ type: "SET_AGENT", agent });
+  }
+
+  return { state, ask, newChat, setMode, setAgent };
 }

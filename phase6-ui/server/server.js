@@ -72,6 +72,9 @@ app.get("/api/chat/stream", async (req, res) => {
             onAgentStart: (step) => send("agent_start", step),
             onAgentDone: (step) => send("agent_done", step),
             summary,
+            // Manual override: `?agent=coding` skips the router. Absent or
+            // unrecognized means the router decides (validated in supervisor.js).
+            forceAgent: req.query.agent,
           })
         : await runAgent(question, history, {
             onToolCall: (name, args) => send("tool_call", { name, args }),
