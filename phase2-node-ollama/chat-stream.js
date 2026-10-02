@@ -1,7 +1,7 @@
 // Streaming call to a local Ollama model.
 // Ollama streams newline-delimited JSON objects, one per token chunk.
 const OLLAMA_URL = "http://localhost:11434/api/chat";
-const MODEL = "qwen2.5-coder:7b-instruct-q4_K_M";
+const MODEL = "qwen3-coder:30b";
 
 const messages = [
   { role: "system", content: "You are a concise coding assistant." },

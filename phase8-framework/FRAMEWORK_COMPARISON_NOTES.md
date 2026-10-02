@@ -99,6 +99,103 @@ finding to a fix.
   — it's the ONLY one of the two designs that survives being ported to a framework at all, on this
   hardware.
 
+## Re-run on bigger models (2026-09-30, after moving to an M1 Max / 32GB Mac)
+
+The Version B conclusion above was explicitly tied to "this model, on this hardware" - so once the
+project moved from the Windows laptop (GTX 1050 Ti, 4GB VRAM) to an M1 Max with 32GB unified memory,
+it could finally be tested against models that were never an option before. Same eval harness, same 7
+cases, same retrieval/config - only `CHAT_MODEL` changed (via `phase5-rag/.env`), with `NUM_CTX=32768`
+(both models fit 100% on GPU at that size, verified with `ollama ps`).
+
+| Agent | `qwen2.5-coder:7b` (old, Windows) | `qwen3-coder:30b` | `qwen3.5:27b` |
+|---|---|---|---|
+| Hand-rolled (`phase6-ui/server/agent.js`) | 7/7 | **7/7**, ~0.5s/answer | 6/7, ~40s/answer |
+| Version A (`agent-a.js`) | 7/7 | **7/7**, ~0.4s | 6/7, ~40s |
+| Version B (`agent-b.js`) | 0/7 | 4/7, ~1.3s | 4/7, ~22s |
+
+**Version B's 0/7 was the model, not only the framework - verified, not assumed.** Logged
+`toolCallLog` for each question on `qwen3-coder:30b`: every company question produced a real,
+structured `search_company_docs` call through Ollama's native `tool_calls` field, and "capital of
+France" correctly made no call at all. No JSON-in-`content` dumps. So `@langchain/ollama`'s missing
+fallback only mattered because the old model needed one - with a model that populates `tool_calls`
+reliably, `createAgent` works as intended. Still no `extractToolCalls`-style fallback added (same
+reasoning as above).
+
+**Every remaining failure is a correct answer in different wording - not a wrong fact:**
+- Version B, both models: "Monday at **10 AM**" / "**10:00 AM**" (eval wants `10am`); refusals worded
+  as "search results do not contain specific information…" / "I couldn't find…" / "unable to find…"
+  (eval wants `don't know` / `don't have information`).
+- Hand-rolled and Version A on `qwen3.5:27b`: "I **do not** have information…" (eval wants
+  `don't have information`).
+
+**Root cause of Version B's 3 failures: its system prompt, not the tool loop.** The hand-rolled agent
+(`agent.js:185`, `:191`) and Version A (`agent-a.js:37`, `:43`) both tell the model to "say plainly that
+you don't have information about that specific identifier" / "say plainly that you don't know".
+Version B's `createAgent` prompt only says *when* to call the tool - never how to refuse - so the model
+picks its own phrasing. So the original comparison wasn't fully controlled: Version B differed from the
+other two in prompt as well as architecture. (Turned out to be worse than that - see "Prompt parity fix"
+below: Version B's prompt wasn't reaching the model at all.)
+
+**One small real bug on `qwen3-coder:30b`:** one Version B answer ended with a stray `<tool_call>` text
+token after an otherwise correct refusal - a milder cousin of the original JSON-in-`content` leak.
+
+**Why `qwen3.5:27b` is ~80x slower despite a similar size:** `qwen3-coder:30b` is mixture-of-experts
+(30.5B total, only ~3B active per token); `qwen3.5:27b` is dense (all 27.8B used for every token) AND
+has thinking enabled by default (`ollama show`) - hidden reasoning tokens before every answer, and none
+of our agents pass `think: false`. No accuracy gain on this eval to justify it, so `qwen3-coder:30b` is
+the new default.
+
+**Also learned - the eval is brittle to model upgrades:** exact-substring checks (`10am`,
+`don't know`) passed on the small model partly because it repeated the prompt's exact phrases
+literally. Larger models paraphrase more freely, so correct answers can fail on formatting alone.
+
+### Prompt parity fix - and a bigger bug it exposed: Version B never had a system prompt
+
+Added the same answering/refusal wording as Version A to Version B's prompt, then re-ran. **The
+answers came back word-for-word identical to before** - a prompt change with literally zero effect
+on a temperature-0 model means the prompt isn't reaching it. Checked `langchain@1.5.12`'s source:
+`createAgent` only reads **`options.systemPrompt`** at runtime (`dist/agents/ReactAgent.js:96`,
+`normalizeSystemPrompt(this.options.systemPrompt)`); the `prompt` key `agent-b.js` was passing is
+silently ignored - no error, no warning. The trap: `createAgent`'s own JSDoc in `index.d.ts` still
+documents `@param options.prompt - System instructions`, while the actual type (`types.d.ts`) only
+declares `systemPrompt`. Since `agent-b.js` is plain JS, nothing type-checked it.
+
+**Consequence: every Version B run before 2026-09-30 - including the original 0/7 - ran with no
+system prompt at all.** That doesn't change the 0/7's diagnosis (the JSON-in-`content` dumps were
+verified at the `bindTools().invoke()` level, bypassing `createAgent` entirely), but the "for general
+knowledge questions, answer directly" instruction was never in play either.
+
+After renaming `prompt` → `systemPrompt` (`qwen3-coder:30b`, 2 runs, identical results):
+
+| | Before (no system prompt) | After (`systemPrompt`, prompt parity) |
+|---|---|---|
+| Version B | 4/7 | **6/7** |
+
+"10 AM" became "10am" and the XJ-9999 refusal now says "don't have information" - both instructions
+the model had simply never received. The one remaining failure: the backup-schedule refusal is correct
+("The search results do not contain information about the database backup schedule…") but still not
+phrased as "don't know", and it still ends with the stray `<tool_call>` token. Deliberately not tuned
+further - pushing the prompt harder for one exact phrase would be teaching to the test.
+
+A likely reason this one case differs: Version A and the hand-rolled agent put the retrieved excerpt
+and the refusal instruction together in ONE system message built per question, while Version B's
+instruction sits in a generic up-front prompt and the "no relevant results" evidence arrives later as
+a tool message - so the instruction is further from the moment it applies.
+
+**Updated conclusion:** the "Version B: no, not for this model" verdict above still holds for
+`qwen2.5-coder:7b`, but it was a model limitation more than a framework one. With a model that has
+reliable native tool-calling AND a system prompt that actually reaches it, LangChain's agentic loop
+gets 6/7 (7/7 on facts) versus 7/7 for always-retrieve. New framework lesson, arguably the most
+useful one from Phase 8a: **a framework option that's silently ignored is worse than an error** - the
+hand-rolled agent can't have this bug, because there is no config object to misname.
+
+**Next steps (not done yet):**
+1. Consider loosening eval matching (case/space-insensitive times, accepting `do not know` alongside
+   `don't know`) - weighed against keeping the regression tests strict.
+2. Strip stray `<tool_call>` tokens from Version B's final answer? Would be a small post-processing
+   step - but it's the same category of fallback deliberately left out of Version B, so needs a
+   decision rather than a default.
+
 ## Files
 
 | File | Purpose |

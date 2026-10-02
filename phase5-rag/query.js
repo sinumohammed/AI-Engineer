@@ -3,7 +3,7 @@ import pg from "pg";
 
 const OLLAMA_URL = "http://localhost:11434/api";
 const EMBED_MODEL = "nomic-embed-text";
-const CHAT_MODEL = "qwen2.5-coder:7b-instruct-q4_K_M";
+const CHAT_MODEL = "qwen3-coder:30b";
 const TOP_K = 4;
 
 const question = process.argv[2];

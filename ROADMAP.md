@@ -3,13 +3,19 @@
 Personal project: learn AI/agent engineering hands-on by building each phase locally, then applying it at work.
 
 ## Machine specs
+**Current (from 2026-09-30):** MacBook, Apple M1 Max, 32GB unified memory - models up to ~30B at Q4 run 100% on GPU.
+
+Original (Phases 1-8a):
 - CPU: i7-8750H (6C/12T)
 - RAM: 16GB
 - GPU: GTX 1050 Ti (4GB VRAM)
 - Free disk: ~286GB
 - Constrained/quantized setup — Ollama offloads a few layers to GPU, leans on CPU/RAM for the rest.
 
-## Model picks (in order to try)
+## Model picks
+**Current default (M1 Max):** `qwen3-coder:30b` (mixture-of-experts, ~18.6GB, ~3B active per token - fast), `NUM_CTX=32768`, set in `phase5-rag/.env`. Also tested `qwen3.5:27b` - no accuracy gain on the eval, ~80x slower (dense + thinking on by default). See `phase8-framework/FRAMEWORK_COMPARISON_NOTES.md`.
+
+Original picks (Windows laptop):
 1. `qwen2.5-coder:7b-instruct-q4_K_M` — best default, ~4.7GB, usable speed
 2. `qwen2.5-coder:3b-instruct` — fast fallback if 7B is sluggish
 3. Skip 14B+ — VRAM/RAM combo would make it painfully slow
@@ -175,8 +181,14 @@ Personal project: learn AI/agent engineering hands-on by building each phase loc
     - **Version A** (`agent-a.js`, classic RAG replica - always-retrieve, no tool loop): **7/7 eval cases passed**, identical correctness to the hand-rolled agent. Confirmed real, verified wins: LangChain's `AsyncCaller` retries transient failures internally (default `maxRetries: 6`, same "skip 4xx" logic as our hand-written `retry.js`, confirmed by reading `async_caller.js`), and `response.usage_metadata`/`response_metadata` exposes token counts (both a normalized shape AND Ollama's raw `prompt_eval_count`/`eval_count` untouched) with no manual parsing needed. Also hit and fixed a real Windows-specific bug along the way: the standard ESM "is this the main module" check breaks on Windows (`process.argv[1]` uses backslashes, `import.meta.url` doesn't) - fixed with `pathToFileURL()`.
     - **Version B** (`agent-b.js`, agentic RAG via LangChain v1's `createAgent` - model decides whether to call the tool, `toolCallLimitMiddleware` as the equivalent of our hand-rolled `MAX_TURNS`): **0/7 eval cases passed.** Root cause verified directly (not assumed): this quantized model (`qwen2.5-coder:7b-instruct-q4_K_M`) sometimes dumps a tool call as raw JSON text into `content` instead of using Ollama's structured `tool_calls` field - the EXACT failure mode `phase5-rag/agent.js` was hand-written to survive back in Phase 3 (`extractJsonObjects`/`extractToolCalls`). Confirmed via `grep` on `@langchain/ollama`'s source that no equivalent fallback exists there - it only trusts the native `tool_calls` field. Deliberately NOT patched around (would just re-derive Phase 3's fallback inside a LangChain wrapper, defeating the point of testing the framework) - documented as an honest limitation instead, same practice as Phase 6.11's refusal-bias finding.
     - **Conclusion**: LangChain is a mild, real win for always-retrieve RAG at this project's size (less boilerplate, free retries, richer usage reporting) - but actively worse for agentic tool-choice on this specific hardware/model combo, because it removes exactly the hand-rolled escape hatch Phase 3 proved necessary, with no clean way to add it back. Also validates the Phase 6.8 architecture decision from a new angle: always-retrieve RAG isn't just more reliable when hand-rolled for this model - it's the only one of the two designs that survives being ported to a framework at all. Full write-up: `phase8-framework/FRAMEWORK_COMPARISON_NOTES.md`.
+    - **Re-run on the M1 Max (2026-09-30)**: with `qwen3-coder:30b`, Version B went **0/7 → 4/7**, and all 7 answers are factually correct. Its tool calls now come back through Ollama's native `tool_calls` field (verified via `toolCallLog`), so the original 0/7 was mainly the small model's tool-calling, not LangChain. The 3 remaining failures were wording mismatches ("10 AM" vs `10am`, refusals not phrased as `don't know`). Hand-rolled and Version A: still 7/7.
+    - **Bug found: Version B never had a system prompt.** Adding the other agents' refusal instructions changed nothing - identical output - which exposed that `agent-b.js` passed `prompt:` to `createAgent`, but langchain@1.5.12 only reads `systemPrompt` at runtime and silently ignores `prompt` (even though its own JSDoc still documents `options.prompt`). Renamed to `systemPrompt` with prompt parity → **Version B 6/7** (stable across 2 runs); the last failure is a correct refusal not phrased as "don't know", plus a stray `<tool_call>` token. Lesson: a silently ignored framework option is worse than an error. Details in `FRAMEWORK_COMPARISON_NOTES.md`.
   - **8b. Multi-agent orchestration**: never part of any earlier phase - everything through Phase 7 stays single-agent (one model, one system prompt, several tools it picks between). This is a genuinely different architecture: e.g. a router/supervisor agent that hands off to specialist sub-agents (one for company docs, one for general coding help, one for something else), or agents that call OTHER agents as if they were tools. Goal: understand the real coordination problems this introduces (who decides which agent handles a question, how do results get combined, how do you debug a chain of multiple agents instead of one) - not just wire up a framework's multi-agent demo without understanding why each piece exists.
   - Both sub-phases are about comparison/understanding, not just "get it working" - the deliverable each time is being able to explain clearly what changed and why, same as how Phase 6.8/6.9 documented what was tried, what failed, and why the final approach won.
+
+- **Moved to Mac** (2026-09-30)
+  Cloned from GitHub onto an M1 Max. Installed Node v24 (in `~/.local`), Ollama, Docker Desktop; Postgres+pgvector (`phase5-rag`) and Redis (`phase6-ui`) running via `docker compose up -d`; docs re-ingested; `phase5-rag/.env` recreated (gitignored - `npm start` in `phase6-ui/server` and `npm run agent-a` fail without it, since they use `node --env-file`).
+  - Switched every hardcoded model name (`phase2-node-ollama/`, `phase3-node-agent/`, `phase4-mcp/client-agent.js`, `phase5-rag/query.js`) plus the `phase5-rag/config.js` default and `.env.example` from `qwen2.5-coder:7b-instruct-q4_K_M` to `qwen3-coder:30b` (`.env.example` also `NUM_CTX=32768`). Smoke-tested phases 2, 3, 4, 5 and the Phase 6 UI end-to-end on the new model.
 
 ## Career angle
 Given frontend + Node/Postgres/Mongo background, the fastest "AI engineer" path is: RAG systems + agent orchestration + API integration — not model training. That's exactly what phases 3-6 build. Employers want people who can wire LLMs into real products reliably, not researchers.

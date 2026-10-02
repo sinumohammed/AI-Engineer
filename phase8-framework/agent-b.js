@@ -49,13 +49,31 @@ const searchCompanyDocs = tool(
 // exhausting MAX_TURNS with no final answer. toolCallLimitMiddleware is
 // LangChain's built-in equivalent of our hand-rolled `MAX_TURNS` cap -
 // "end" gracefully returns whatever the model has instead of erroring.
+// The answering/refusal instructions after the tool-choice sentence are the
+// SAME wording agent-a.js and the hand-rolled agent use in their system
+// prompts. Originally Version B only said WHEN to call the tool, never how to
+// answer or refuse - so the 2026-09-30 re-run on qwen3-coder:30b failed 3/7
+// on correct-but-differently-worded refusals, making the comparison vary the
+// prompt as well as the agent loop. Prompt parity keeps the loop the only
+// variable under test.
+//
+// Must be `systemPrompt`, NOT `prompt`: langchain@1.5.12's createAgent only
+// reads `options.systemPrompt` at runtime (ReactAgent.js), and silently
+// ignores `prompt` - even though its own JSDoc on createAgent still documents
+// `options.prompt`. Until 2026-09-30 this file used `prompt`, so every Version
+// B run before that (including the original 0/7) had NO system prompt at all.
 const agent = createAgent({
   model,
   tools: [searchCompanyDocs],
-  prompt:
+  systemPrompt:
     "You are a helpful assistant. For questions that could be about internal company processes, policies, " +
     "or docs, call search_company_docs first. For general knowledge questions, answer directly without " +
-    "calling any tool.",
+    "calling any tool.\n\n" +
+    "When search_company_docs returns relevant excerpts, read them carefully and answer specifically using " +
+    "the facts they contain. Only if they truly do not address the question at all, say plainly that you " +
+    "don't know. If the search reports that a specific code or ID does not appear in the company documents, " +
+    "say plainly that you don't have information about that specific identifier - do not substitute or " +
+    "guess a similar one from the documents.",
   middleware: [toolCallLimitMiddleware({ runLimit: 5, exitBehavior: "end" })],
 });
 

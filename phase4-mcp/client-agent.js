@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const OLLAMA_URL = "http://localhost:11434/api/chat";
-const MODEL = "qwen2.5-coder:7b-instruct-q4_K_M";
+const MODEL = "qwen3-coder:30b";
 
 // --- 1. Connect to the MCP server and discover its tools ---
 const transport = new StdioClientTransport({

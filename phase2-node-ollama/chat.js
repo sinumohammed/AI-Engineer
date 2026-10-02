@@ -1,7 +1,7 @@
 // Non-streaming call to a local Ollama model.
 // Ollama exposes a REST API on localhost:11434 once `ollama serve` is running.
 const OLLAMA_URL = "http://localhost:11434/api/chat";
-const MODEL = "qwen2.5-coder:7b-instruct-q4_K_M";
+const MODEL = "qwen3-coder:30b";
 
 const messages = [
   { role: "system", content: "You are a concise coding assistant." },

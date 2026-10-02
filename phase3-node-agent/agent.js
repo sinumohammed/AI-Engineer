@@ -3,7 +3,7 @@
 import { toolDefs, toolImpls } from "./tools.js";
 
 const OLLAMA_URL = "http://localhost:11434/api/chat";
-const MODEL = "qwen2.5-coder:7b-instruct-q4_K_M";
+const MODEL = "qwen3-coder:30b";
 
 const userQuestion = process.argv[2] ?? "What files are in the current directory, and what time is it?";
 

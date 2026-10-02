@@ -5,7 +5,7 @@
 // model, or even swap from local Ollama to a hosted OpenAI-compatible API,
 // by editing .env - never by editing code.
 export const LLM_BASE_URL = process.env.LLM_BASE_URL ?? "http://localhost:11434";
-export const CHAT_MODEL = process.env.CHAT_MODEL ?? "qwen2.5-coder:7b-instruct-q4_K_M"; //qwen2.5-coder:3b-instruct
+export const CHAT_MODEL = process.env.CHAT_MODEL ?? "qwen3-coder:30b";
 export const EMBED_MODEL = process.env.EMBED_MODEL ?? "nomic-embed-text";
 export const NUM_CTX = Number(process.env.NUM_CTX ?? 8192);
 export const TEMPERATURE = Number(process.env.TEMPERATURE ?? 0);
