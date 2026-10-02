@@ -1,0 +1,10 @@
+{
+  "name": "phase8b-multi-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "ask": "node --env-file=../phase5-rag/.env supervisor.js",
+    "eval": "node --env-file=../phase5-rag/.env eval.js",
+    "eval:regression": "AGENT_MODULE=../phase8b-multi-agent/supervisor.js node --env-file=../phase5-rag/.env ../phase7-reliability/eval.js"
+  }
+}
