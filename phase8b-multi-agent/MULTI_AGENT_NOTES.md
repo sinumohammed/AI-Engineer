@@ -105,10 +105,64 @@ Version B could not run on this model at all (`does not support tools`); this de
 hand-off is structured output. `ROUTER_MODEL` and `SPECIALIST_MODEL` can be set separately (both
 default to `CHAT_MODEL`); a mixed setup has not been tested.
 
+## LangGraph version (`supervisor-graph.js`)
+
+The same supervisor rebuilt with LangGraph (`@langchain/langgraph` 1.4.18), same approach as Phase 8a:
+reuse everything except the part under test. Prompts, schema, validation (`routing.js`), specialists
+and retrieval (`specialists.js`) are shared, so only the orchestration differs. Model calls go
+through `ChatOllama` instead of `llm.js`.
+
+How the hand-rolled pieces map onto the graph:
+
+| Hand-rolled (`supervisor.js`) | LangGraph (`supervisor-graph.js`) |
+|---|---|
+| local variables inside `runAgent` | one shared state object (`Annotation.Root`) that nodes read and write |
+| three stages called in order | three nodes: `router` -> `specialist` -> `combine`, joined by edges |
+| `Promise.all(tasks.map(...))` | a conditional edge returning one `Send("specialist", ...)` per task |
+| result array + the `count()` closure | reducers on `steps` and `usage` that merge parallel writes |
+| `chat({ format: ROUTE_SCHEMA })` + `JSON.parse` | `withStructuredOutput(ROUTE_SCHEMA, { method: "jsonSchema", includeRaw: true })` |
+
+**Results: identical.** Same evals, pointed at the graph via `SUPERVISOR_MODULE` / `AGENT_MODULE`:
+
+| Test | Hand-rolled | LangGraph |
+|---|---|---|
+| Routing, 17 cases (`qwen3-coder:30b`) | 17/17 | 17/17 |
+| Two-specialist answers | 3/3 | 3/3 |
+| Single-agent regression suite | 7/7 | 7/7 |
+| Whole routing + end-to-end eval, wall time | ~37s | ~38s |
+| All roles on `gemma3:4b` | 16/17, 3/3, 7/7 | 16/17, 3/3, 7/7 (same one miss) |
+
+No measurable latency overhead from the framework. (One hand-rolled eval run took 6 minutes instead
+of ~37s; a re-run was normal and the cause was not identified.)
+
+**What the framework gave:**
+- Parallel fan-out and merging the results are built in (`Send` + reducers).
+- A diagram of the flow generated from the code: `npm run ask:graph -- --diagram` prints Mermaid text.
+- Features not used here but available without restructuring: a checkpointer (per-thread memory and
+  resuming a run), streaming each node's update as it finishes, pausing for human approval.
+
+**What it cost:**
+- More code for this size of problem: 119 lines vs 89 (comments and blanks excluded), plus 63MB of
+  `node_modules` where the hand-rolled version has no dependencies of its own.
+- New concepts before the first line works: state, reducers, conditional edges, `Send`.
+- A node started by `Send` receives only the `Send` payload, not the shared state - so `history` has
+  to be passed explicitly. Easy to miss: the specialist would just run with no conversation history.
+- Token usage is lost on a structured-output call unless `includeRaw: true` is set.
+- `withStructuredOutput`'s `method` has to be the right one. Verified on `gemma3:4b`: `"jsonSchema"`
+  works; `"functionCalling"` fails with `does not support tools`. `"jsonSchema"` is the default in
+  `@langchain/ollama` 1.3.0, but it is set explicitly so a changed default cannot silently turn the
+  router into a tool call - the Phase 8a lesson about silently-ignored options, applied in advance.
+
+**Conclusion:** unlike Phase 8a's Version B, nothing broke - the LangGraph version worked on the
+first run and matches the hand-rolled one case for case. For a three-node, one-direction flow it is
+more code and more concepts for the same result, so hand-rolled is the simpler choice at this size.
+The framework starts to pay for itself when the flow has loops, needs to pause and resume, or needs
+per-thread memory - none of which this supervisor has.
+
 ## Not done
 
 - The Phase 6 UI still uses the single agent; the supervisor is CLI and eval only.
-- No framework version (e.g. LangGraph) to compare against, as 8a did for the single agent.
+- The LangGraph version does not use the checkpointer; history is passed in, as in the hand-rolled one.
 - No "agents as tools" variant, where one agent calls another mid-answer.
 - Retrieval runs twice for a company question (once for the router's evidence, once in the
   specialist). Cheap at this corpus size, not optimized.
@@ -118,8 +172,10 @@ default to `CHAT_MODEL`); a mixed setup has not been tested.
 
 | File | Purpose |
 |---|---|
-| `supervisor.js` | Router, dispatch, synthesis, trace. `npm run ask -- "question"` |
-| `specialists.js` | The three specialists and the shared retrieval gate |
-| `llm.js` | One chat call for every role, with optional JSON-schema `format` |
-| `eval.js` | Routing cases + two-specialist end-to-end cases. `npm run eval` |
-| `package.json` | `npm run eval:regression` runs `phase7-reliability/eval.js` against the supervisor |
+| `supervisor.js` | Hand-rolled orchestration: route, dispatch, combine, trace. `npm run ask -- "question"` |
+| `supervisor-graph.js` | The same supervisor as a LangGraph graph. `npm run ask:graph -- "question"` |
+| `routing.js` | Shared by both: router prompt, schema, document evidence, validation, synthesizer prompt |
+| `specialists.js` | Shared by both: the three specialists and the retrieval gate |
+| `llm.js` | The hand-rolled chat call, with optional JSON-schema `format` |
+| `eval.js` | Routing cases + two-specialist end-to-end cases. `npm run eval` / `npm run eval:graph` |
+| `package.json` | `npm run eval:regression` / `eval:regression:graph` run `phase7-reliability/eval.js` against a supervisor |

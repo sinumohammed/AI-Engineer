@@ -7,7 +7,12 @@
 //      answer still contain BOTH parts?
 // The single-agent regression cases are not copied here: run them against
 // the supervisor with `npm run eval:regression` (same harness, AGENT_MODULE).
-import { route, runAgent } from "./supervisor.js";
+// SUPERVISOR_MODULE points this same eval at another implementation of the
+// supervisor (e.g. ./supervisor-graph.js) - same idea as AGENT_MODULE in
+// phase7-reliability/eval.js.
+const SUPERVISOR_MODULE = process.env.SUPERVISOR_MODULE ?? "./supervisor.js";
+const { route, runAgent } = await import(SUPERVISOR_MODULE);
+console.log(`Supervisor under test: ${SUPERVISOR_MODULE}\n`);
 
 const routingCases = [
   // company questions

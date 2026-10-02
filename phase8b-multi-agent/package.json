@@ -4,7 +4,15 @@
   "type": "module",
   "scripts": {
     "ask": "node --env-file=../phase5-rag/.env supervisor.js",
+    "ask:graph": "node --env-file=../phase5-rag/.env supervisor-graph.js",
     "eval": "node --env-file=../phase5-rag/.env eval.js",
-    "eval:regression": "AGENT_MODULE=../phase8b-multi-agent/supervisor.js node --env-file=../phase5-rag/.env ../phase7-reliability/eval.js"
+    "eval:graph": "SUPERVISOR_MODULE=./supervisor-graph.js node --env-file=../phase5-rag/.env eval.js",
+    "eval:regression": "AGENT_MODULE=../phase8b-multi-agent/supervisor.js node --env-file=../phase5-rag/.env ../phase7-reliability/eval.js",
+    "eval:regression:graph": "AGENT_MODULE=../phase8b-multi-agent/supervisor-graph.js node --env-file=../phase5-rag/.env ../phase7-reliability/eval.js"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.14",
+    "@langchain/langgraph": "^1.4.18",
+    "@langchain/ollama": "^1.3.0"
   }
 }
