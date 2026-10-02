@@ -60,10 +60,17 @@ export async function getSummary(sessionId) {
   }
 }
 
-export async function appendTurn(sessionId, userMsg, assistantMsg) {
+// `fromCompanyDocs` tags an answer that contains facts read from the company
+// documents. The multi-agent specialists without document access are not
+// shown such answers later (phase8b-multi-agent/specialists.js, historyFor) -
+// otherwise they repeat company facts second-hand from the chat history.
+export async function appendTurn(sessionId, userMsg, assistantMsg, { fromCompanyDocs = false } = {}) {
   try {
     const history = await getHistory(sessionId);
-    history.push({ role: "user", content: userMsg }, { role: "assistant", content: assistantMsg });
+    history.push(
+      { role: "user", content: userMsg },
+      { role: "assistant", content: assistantMsg, ...(fromCompanyDocs ? { fromCompanyDocs: true } : {}) }
+    );
 
     const maxMessages = MAX_TURNS_STORED * 2;
     if (history.length > maxMessages) {

@@ -12,7 +12,7 @@ import { ChatOllama } from "@langchain/ollama";
 import { logTrace } from "../phase5-rag/tracer.js";
 import { LLM_BASE_URL, NUM_CTX, TEMPERATURE } from "../phase5-rag/config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
-import { specialists, specialistMessages } from "./specialists.js";
+import { specialists, specialistMessages, historyFor } from "./specialists.js";
 import { ROUTE_SCHEMA, routerMessages, validateRoute, synthesizerMessages } from "./routing.js";
 
 const newModel = (model) =>
@@ -89,7 +89,9 @@ async function specialistNode({ task, index, history }) {
   let answer = prep.answer;
   let usage = { llmCalls: 0, promptTokens: 0, completionTokens: 0 };
   if (answer === undefined) {
-    const res = await specialistModel.invoke(specialistMessages(prep.systemContent, task.question, history));
+    const res = await specialistModel.invoke(
+      specialistMessages(prep.systemContent, task.question, historyFor(task.agent, history))
+    );
     answer = res.content;
     usage = usageOf(res);
   }
@@ -152,7 +154,9 @@ export async function runAgent(question, history = []) {
   };
   await logTrace(trace);
 
-  return { answer: state.answer, usage, trace };
+  const fromCompanyDocs = trace.steps.some((s) => s.agent === "company_docs" && s.meta.isRelevant);
+
+  return { answer: state.answer, usage, trace, fromCompanyDocs };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

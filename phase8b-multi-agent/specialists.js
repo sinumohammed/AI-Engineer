@@ -67,6 +67,32 @@ async function prepareCompanyDocs(question) {
   };
 }
 
+// Found in the chat UI (Phase 8c): with `general` picked manually, "what is
+// rollback process" was answered in full - not from the documents, which
+// these two specialists never see, but from EARLIER ANSWERS in the same
+// conversation, which every specialist gets as history. The facts happened
+// to be right, but a second-hand answer can embellish (the forced `coding`
+// answer added a step that is in no document) and it was presented as "based
+// on the company documents".
+//
+// Tried first: the instruction below, added to both prompts. Measured against
+// a conversation that already contained the rollback answer: it changed
+// nothing, 4 of 4 forced answers still repeated the process from history.
+// Text already in the conversation outweighs an instruction about it - the
+// Phase 6.8 lesson again (prompt wording is advisory, never a guarantee).
+//
+// The real fix is structural: historyFor() below. Answers that came from the
+// company documents are tagged when the turn is stored (`fromCompanyDocs`),
+// and for the specialists that cannot see documents their content is replaced
+// with a placeholder. The model cannot repeat what it is never shown. The
+// instruction is kept because it tells the model what to say instead.
+const NO_COMPANY_ANSWERS_FROM_HISTORY =
+  " Earlier messages in this conversation may include facts about this company that another assistant read " +
+  "from its documents. You cannot see those documents or check those facts. So when the user asks about this " +
+  "company's own processes, policies, schedules or equipment, do not answer from the earlier messages and do " +
+  "not describe anything as coming from the company documents: tell the user you cannot look up company " +
+  "documents here, and that the Company docs specialist can.";
+
 // `description` is what the router reads to decide who gets a task - it is
 // the only thing the router knows about a specialist, so it is written for
 // that reader, not for humans browsing this file.
@@ -76,6 +102,7 @@ export const specialists = {
       "Questions about THIS company: its internal processes, policies, schedules, on-call, deployments, " +
       "equipment and equipment codes - typically phrased with \"our\" or \"we\". Answers only from the company's documents.",
     prepare: prepareCompanyDocs,
+    seesCompanyAnswers: true,
   },
   coding: {
     description:
@@ -85,7 +112,8 @@ export const specialists = {
       systemContent:
         "You are a senior software engineer helping a colleague. Answer programming, debugging and command-line " +
         "questions directly and concisely, with a short code example when it helps. You have no access to this " +
-        "company's internal documents or systems - if the question depends on them, say so instead of guessing.",
+        "company's internal documents or systems - if the question depends on them, say so instead of guessing." +
+        NO_COMPANY_ANSWERS_FROM_HISTORY,
       meta: {},
     }),
   },
@@ -96,11 +124,30 @@ export const specialists = {
       systemContent:
         "You are a helpful assistant. Answer the user's question from your own knowledge, briefly. If the user asks " +
         "about something they told you earlier in this conversation, use the earlier messages. You have no access " +
-        "to this company's internal documents - if the question depends on them, say so instead of guessing.",
+        "to this company's internal documents - if the question depends on them, say so instead of guessing." +
+        NO_COMPANY_ANSWERS_FROM_HISTORY,
       meta: {},
     }),
   },
 };
+
+// The conversation history as a given specialist is allowed to see it.
+// Every message is reduced to { role, content } (the stored `fromCompanyDocs`
+// tag is ours, not something to send to the model). For a specialist without
+// `seesCompanyAnswers`, an earlier answer that came from the company
+// documents is replaced by a placeholder: the turn is still there, so the
+// conversation's shape and the user's own questions are intact ("what did I
+// ask first?" still works), but the company facts are not.
+const REDACTED_COMPANY_ANSWER =
+  "[This earlier answer was read from the company documents by the Company docs specialist. Its content is not available to you.]";
+
+export function historyFor(name, history) {
+  const redact = !specialists[name].seesCompanyAnswers;
+  return history.map((m) => ({
+    role: m.role,
+    content: redact && m.role === "assistant" && m.fromCompanyDocs ? REDACTED_COMPANY_ANSWER : m.content,
+  }));
+}
 
 // The messages a specialist's model call gets: its system prompt, the
 // running summary of turns older than the stored window (if the chat UI
@@ -127,7 +174,7 @@ export async function runSpecialist(name, question, history = [], summary) {
   const res = await chat({
     model: SPECIALIST_MODEL,
     label: name,
-    messages: specialistMessages(prep.systemContent, question, history, summary),
+    messages: specialistMessages(prep.systemContent, question, historyFor(name, history), summary),
   });
   return {
     answer: res.content,

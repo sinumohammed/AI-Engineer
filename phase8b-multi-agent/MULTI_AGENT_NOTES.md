@@ -159,6 +159,24 @@ more code and more concepts for the same result, so hand-rolled is the simpler c
 The framework starts to pay for itself when the flow has loops, needs to pause and resume, or needs
 per-thread memory - none of which this supervisor has.
 
+## Second-hand answers: a multi-agent bug the single agent cannot have
+
+Found in the chat UI (Phase 8c) by picking a specialist manually. Every specialist gets the
+conversation history. If an earlier turn was answered from the company documents, `general` and
+`coding` - which never see documents - could repeat those facts from the history, and present them as
+"based on the company documents".
+
+- **Prompt instruction: no effect.** 4 of 4 forced answers still repeated the rollback process.
+- **Structural fix: works.** Answers that used a document excerpt are stored with a
+  `fromCompanyDocs` tag, and `historyFor()` replaces them with a placeholder for specialists without
+  document access. 4 of 4 then say they have no access; the user's own messages stay visible.
+
+This is a coordination problem specific to several agents sharing one memory: **what one agent
+learned leaks to another agent through the shared history.** The single agent has no such boundary to
+protect - it always has the documents. `npm run eval` covers it ("Second-hand answers", 4 cases).
+
+Known gap: the running summary of older turns (Phase 6.11) is not redacted.
+
 ## Not done
 
 - ~~The Phase 6 UI still uses the single agent~~ - done as Phase 8c: the chat UI has a

@@ -16,7 +16,7 @@ export async function runMultiAgent(
   history = [],
   { onRoute, onAgentStart, onAgentDone, summary, forceAgent } = {}
 ) {
-  const { answer, usage: totals } = await runSupervisor(question, history, {
+  const { answer, usage: totals, fromCompanyDocs } = await runSupervisor(question, history, {
     onRoute,
     onAgentStart,
     onAgentDone,
@@ -41,5 +41,5 @@ export async function runMultiAgent(
   usage.remainingTokens = usage.contextWindow - usage.totalTokens;
   Object.assign(usage, contextWarning(usage));
 
-  return { answer, usage };
+  return { answer, usage, fromCompanyDocs };
 }

@@ -130,7 +130,12 @@ export async function runAgent(
   };
   await logTrace(trace);
 
-  return { answer, usage, trace };
+  // True when the answer contains facts read from the company documents.
+  // The chat server stores this with the turn, so later a specialist that
+  // cannot see documents is not shown this answer (see historyFor).
+  const fromCompanyDocs = steps.some((s) => s.agent === "company_docs" && s.meta.isRelevant);
+
+  return { answer, usage, trace, fromCompanyDocs };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

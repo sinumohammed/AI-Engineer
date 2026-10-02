@@ -206,7 +206,9 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
     // into this short running summary instead of being fully forgotten -
     // the model at least keeps the gist of anything beyond the last 10 turns.
     ...(summary ? [{ role: "system", content: `Summary of earlier conversation (before the recent messages below): ${summary}` }] : []),
-    ...history,
+    // Only role/content go to the model - stored turns can also carry our
+    // own `fromCompanyDocs` tag (see sessionStore.js).
+    ...history.map(({ role, content }) => ({ role, content })),
     { role: "user", content: question },
   ];
 
@@ -240,7 +242,10 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
         latencyMs: Date.now() - startedAt,
         turns: turn + 1,
       });
-      return { answer: msg.content, usage };
+      // fromCompanyDocs: this answer was written with a document excerpt in
+      // the prompt. Stored with the turn so the multi-agent specialists
+      // that cannot see documents are not shown it later (Phase 8c).
+      return { answer: msg.content, usage, fromCompanyDocs: isRelevant };
     }
 
     msg.tool_calls = toolCalls;

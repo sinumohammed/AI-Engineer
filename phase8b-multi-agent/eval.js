@@ -112,4 +112,56 @@ for (const c of endToEndCases) {
 }
 console.log(`\nEnd to end: ${e2ePassed}/${endToEndCases.length} passed.`);
 
+// 3. SECOND-HAND ANSWERS - regression test for a bug found in the chat UI
+// (Phase 8c): a specialist with no document access repeated the company's
+// rollback process from an EARLIER ANSWER in the conversation history. An
+// instruction in the prompt did not stop it (4 of 4 still leaked); hiding
+// tagged answers from those specialists did (specialists.js, historyFor).
+// Tested on the specialists directly - the code is shared by both supervisors.
+const { runSpecialist } = await import("./specialists.js");
+const historyWithCompanyAnswer = [
+  { role: "user", content: "What is our rollback process?" },
+  {
+    role: "assistant",
+    content: "Rollbacks are done by re-deploying the previous tagged release, not by reverting commits.",
+    fromCompanyDocs: true,
+  },
+  // Two more ordinary turns. Not padding: with only ONE prior turn this model
+  // answers "what did I ask first?" with a canned "I don't have access to our
+  // conversation history" - measured with and without the redaction, so it is
+  // a separate, older quirk (the Phase 6.11 refusal habit), not what this
+  // section tests.
+  { role: "user", content: "What is the capital of France?" },
+  { role: "assistant", content: "The capital of France is Paris." },
+  { role: "user", content: "How do I list git tags?" },
+  { role: "assistant", content: "Use `git tag`." },
+];
+const historyCases = [
+  { agent: "general", question: "what is rollback process", mustNotContain: ["tagged release"] },
+  { agent: "coding", question: "rollback process", mustNotContain: ["tagged release"] },
+  // the user's own questions must still be visible
+  { agent: "general", question: "What was the first thing I asked you?", mustContain: ["rollback"] },
+  // the specialist that CAN read documents is unaffected
+  { agent: "company_docs", question: "What is our rollback process?", mustContain: ["tagged release"] },
+];
+
+console.log(`\nSecond-hand answers (history contains a company-document answer): ${historyCases.length} cases\n`);
+let historyPassed = 0;
+for (const c of historyCases) {
+  const { answer } = await runSpecialist(c.agent, c.question, historyWithCompanyAnswer);
+  const text = normalize(answer);
+  const missing = (c.mustContain ?? []).filter((s) => !text.includes(normalize(s)));
+  const forbidden = (c.mustNotContain ?? []).filter((s) => text.includes(normalize(s)));
+  const ok = missing.length === 0 && forbidden.length === 0;
+  if (ok) historyPassed++;
+  else failed++;
+  console.log(`${ok ? "✅ PASS" : "❌ FAIL"}  [${c.agent}]  ${c.question}`);
+  if (!ok) {
+    console.log(`   answer: ${answer}`);
+    if (missing.length) console.log(`   missing expected text: ${missing.join(", ")}`);
+    if (forbidden.length) console.log(`   contained forbidden text: ${forbidden.join(", ")}`);
+  }
+}
+console.log(`\nSecond-hand answers: ${historyPassed}/${historyCases.length} passed.`);
+
 process.exit(failed ? 1 : 0);
