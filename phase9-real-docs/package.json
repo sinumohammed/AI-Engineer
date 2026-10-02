@@ -1,0 +1,8 @@
+{
+  "name": "phase9-real-docs",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "eval": "node --env-file=../phase5-rag/.env retrieval-eval.js"
+  }
+}

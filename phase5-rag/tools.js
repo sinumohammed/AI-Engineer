@@ -50,6 +50,37 @@ async function embed(text) {
   );
 }
 
+// Diagnostics for the Phase 9 retrieval eval: plain vector search, more
+// results than the agent ever sees, against any chunk table (experiment
+// tables are created by ingest.js with INGEST_TABLE). Not used by the agents.
+export async function vectorSearch(query, { k = 10, table = "doc_chunks" } = {}) {
+  if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
+  await ensureDb();
+  const queryEmbedding = await embed(query);
+  const { rows } = await db.query(
+    `SELECT source, chunk_index, content, embedding <=> $1 AS distance
+     FROM ${table}
+     ORDER BY distance ASC
+     LIMIT $2`,
+    [`[${queryEmbedding.join(",")}]`, k]
+  );
+  return rows;
+}
+
+// How many chunks of a table contain a piece of text, ignoring case and
+// line breaks. Lets the eval tell "search did not find it" apart from
+// "no single chunk holds it" (the text was cut in two by a chunk boundary).
+export async function countChunksContaining(text, table = "doc_chunks") {
+  if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
+  await ensureDb();
+  const { rows } = await db.query(
+    `SELECT count(*)::int AS n FROM ${table}
+     WHERE position(lower($1) in lower(regexp_replace(content, '\\s+', ' ', 'g'))) > 0`,
+    [text]
+  );
+  return rows[0].n;
+}
+
 export const toolDefs = [
   {
     type: "function",

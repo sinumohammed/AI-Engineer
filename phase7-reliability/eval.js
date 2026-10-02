@@ -42,9 +42,16 @@ const cases = [
     mustContain: ["paris"],
   },
   {
+    // Phase 9: this case assumed the documents say nothing about backups.
+    // True with 2 sample docs; no longer true with the 241-page handbook,
+    // which describes backups in general ("periodic snapshots...") without
+    // giving a schedule. The honest answer is now either a refusal or "the
+    // documents do not specify a schedule" - both accepted. What it still
+    // guards against is an invented schedule.
     name: "out-of-domain company question - must admit not knowing, not hallucinate",
     question: "What is our database backup schedule?",
-    mustContain: [REFUSAL],
+    mustContain: [[...REFUSAL, "not specified", "do not specify", "does not specify", "doesn't specify", "don't specify"]],
+    mustNotContain: ["every night", "nightly", "daily at", "every day at", "weekly on"],
   },
   {
     name: "repeated question in same turn context - regression test for Phase 6.8's temp-0 skip-and-hallucinate case",

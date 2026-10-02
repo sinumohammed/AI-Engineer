@@ -6,3 +6,7 @@ logs/
 
 # scratch files from local testing during development
 *.output
+
+# Private documents for the RAG pipeline: ingested locally, never pushed.
+# (The public corpus lives in phase5-rag/docs/ and IS committed.)
+phase5-rag/docs-private/
