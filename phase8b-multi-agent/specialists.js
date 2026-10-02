@@ -103,14 +103,23 @@ export const specialists = {
 };
 
 // The messages a specialist's model call gets: its system prompt, the
-// conversation so far, then the task.
-export function specialistMessages(systemContent, question, history) {
-  return [{ role: "system", content: systemContent }, ...history, { role: "user", content: question }];
+// running summary of turns older than the stored window (if the chat UI
+// passed one - same wording as phase6-ui/server/agent.js), the conversation
+// so far, then the task.
+export function specialistMessages(systemContent, question, history, summary) {
+  return [
+    { role: "system", content: systemContent },
+    ...(summary
+      ? [{ role: "system", content: `Summary of earlier conversation (before the recent messages below): ${summary}` }]
+      : []),
+    ...history,
+    { role: "user", content: question },
+  ];
 }
 
 // Every specialist returns the same shape, so the supervisor can dispatch to
 // any of them without special cases.
-export async function runSpecialist(name, question, history = []) {
+export async function runSpecialist(name, question, history = [], summary) {
   const prep = await specialists[name].prepare(question);
   if (prep.answer !== undefined) {
     return { answer: prep.answer, llmCalls: 0, promptTokens: 0, completionTokens: 0, meta: prep.meta };
@@ -118,7 +127,7 @@ export async function runSpecialist(name, question, history = []) {
   const res = await chat({
     model: SPECIALIST_MODEL,
     label: name,
-    messages: specialistMessages(prep.systemContent, question, history),
+    messages: specialistMessages(prep.systemContent, question, history, summary),
   });
   return {
     answer: res.content,

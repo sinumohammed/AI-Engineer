@@ -3,7 +3,7 @@ import { useChatSession } from "./useChatSession.js";
 import TokenRing from "./TokenRing.jsx";
 
 export default function App() {
-  const { state, ask, newChat } = useChatSession();
+  const { state, ask, newChat, setMode } = useChatSession();
   const [input, setInput] = useState("");
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -35,6 +35,24 @@ export default function App() {
             <h1 style={styles.title}>Agent Chat</h1>
             <p style={styles.subtitle}>Company docs + general knowledge, remembered across refreshes.</p>
           </div>
+          {/* Phase 8c: which backend answers the next question. Switching
+              keeps the conversation - both modes share the same session. */}
+          <div style={styles.modeToggle} title="Single agent: one model call. Multi-agent: a router picks a specialist.">
+            {[
+              ["single", "Single agent"],
+              ["multi", "Multi-agent"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                style={styles.modeButton(state.mode === value)}
+                onClick={() => setMode(value)}
+                disabled={state.busy}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button style={styles.newChatButton} onClick={newChat} disabled={state.busy}>
             + New chat
           </button>
@@ -56,6 +74,23 @@ export default function App() {
                         {t.status === "calling" ? "⏳" : "✓"} {t.name}
                       </span>
                     ))}
+                  </div>
+                )}
+                {/* Phase 8c: the supervisor's hand-off - one chip per
+                    specialist (hover for the task it was given), then the
+                    router's own reason for sending the question there. */}
+                {m.role === "assistant" && m.agents?.length > 0 && (
+                  <div style={styles.routeBox}>
+                    <div style={styles.toolLog}>
+                      <span style={styles.routeLabel}>routed to</span>
+                      {m.agents.map((a) => (
+                        <span key={a.index} style={styles.toolChip(a.status === "running" ? "calling" : "done")} title={a.question}>
+                          {a.status === "running" ? "⏳" : "✓"} {a.agent}
+                          {a.latencyMs != null && ` · ${(a.latencyMs / 1000).toFixed(1)}s`}
+                        </span>
+                      ))}
+                    </div>
+                    {m.route?.reason && <div style={styles.routeReason}>{m.route.reason}</div>}
                   </div>
                 )}
                 <div style={styles.bubbleText}>
@@ -114,6 +149,9 @@ function UsageFooter({ usage }) {
         </div>
         <span style={styles.usageText}>
           {usage.totalTokens} / {usage.contextWindow} tokens ({usage.remainingTokens} left)
+          {/* Multi-agent mode only: the bar shows the largest single call;
+              this is what the whole question cost across all calls. */}
+          {usage.llmCalls != null && ` · ${usage.llmCalls} model calls, ${usage.allCallsTokens} tokens in total`}
         </span>
       </div>
       {usage.warningLevel && (
@@ -214,6 +252,28 @@ const styles = {
     background: status === "calling" ? "#fef3c7" : "#dcfce7",
     color: status === "calling" ? "#92400e" : "#166534",
   }),
+  modeToggle: {
+    display: "flex",
+    padding: 3,
+    borderRadius: 10,
+    background: "#f1f5f9",
+    flexShrink: 0,
+  },
+  modeButton: (active) => ({
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "none",
+    background: active ? "white" : "transparent",
+    boxShadow: active ? "0 1px 3px rgba(15, 23, 42, 0.12)" : "none",
+    fontSize: 12,
+    fontWeight: 600,
+    color: active ? "#0f172a" : "#64748b",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  }),
+  routeBox: { marginBottom: 8 },
+  routeLabel: { fontSize: 11, color: "#64748b", alignSelf: "center" },
+  routeReason: { fontSize: 11.5, color: "#64748b", fontStyle: "italic", lineHeight: 1.45 },
   usageFooter: { marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)" },
   usageBarWrap: { display: "flex", alignItems: "center", gap: 8 },
   usageTrack: { width: 90, height: 5, borderRadius: 3, background: "rgba(0,0,0,0.1)", overflow: "hidden", flexShrink: 0 },

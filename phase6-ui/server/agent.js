@@ -48,7 +48,7 @@ export const NUM_CTX = Number(process.env.NUM_CTX ?? 8192);
 // promptTokens=8158/8192, no error, just older turns quietly dropped and a
 // ~3x slower response). Since the model/API gives no signal of this, we
 // compute our own threshold-based warning from the usage numbers we do get.
-function contextWarning(usage) {
+export function contextWarning(usage) {
   const usedFraction = usage.totalTokens / usage.contextWindow;
   if (usedFraction >= 0.95) {
     return {

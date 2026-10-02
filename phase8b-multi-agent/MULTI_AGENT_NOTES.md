@@ -161,13 +161,14 @@ per-thread memory - none of which this supervisor has.
 
 ## Not done
 
-- The Phase 6 UI still uses the single agent; the supervisor is CLI and eval only.
+- ~~The Phase 6 UI still uses the single agent~~ - done as Phase 8c: the chat UI has a
+  "Single agent / Multi-agent" switch (hand-rolled supervisor). See ROADMAP.md.
+- Conversation summaries are passed to the hand-rolled supervisor's specialists (8c), not to the
+  router and not to the LangGraph version.
 - The LangGraph version does not use the checkpointer; history is passed in, as in the hand-rolled one.
 - No "agents as tools" variant, where one agent calls another mid-answer.
 - Retrieval runs twice for a company question (once for the router's evidence, once in the
   specialist). Cheap at this corpus size, not optimized.
-- Conversation summaries (Phase 6.11) are not passed to the supervisor, only recent history.
-
 ## Files
 
 | File | Purpose |

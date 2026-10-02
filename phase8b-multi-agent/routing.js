@@ -114,7 +114,8 @@ export function synthesizerMessages(question, steps) {
       content:
         "You combine answers from specialist agents into one reply to the user. Cover each part of the user's " +
         "message in the order they asked it. Use only what the specialists said: do not add, correct or drop " +
-        "facts. If a specialist said it does not have the information, say that plainly for that part.",
+        "facts. If a specialist said it does not have the information, say that plainly for that part. Answer " +
+        "the user directly, as one assistant: do not mention specialists, agents or that answers were combined.",
     },
     {
       role: "user",

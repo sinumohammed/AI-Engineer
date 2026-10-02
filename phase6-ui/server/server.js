@@ -4,6 +4,7 @@
 import express from "express";
 import cors from "cors";
 import { runAgent } from "./agent.js";
+import { runMultiAgent } from "./multiAgent.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
 
 const app = express();
@@ -52,13 +53,31 @@ app.get("/api/chat/stream", async (req, res) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
+  // Phase 8c: `?mode=multi` answers with the Phase 8b supervisor instead of
+  // the single agent. Chosen per request so the UI can switch between the
+  // two and compare them on the same question. Anything else (including no
+  // `mode` at all) keeps the single agent, so older clients behave as before.
+  const mode = req.query.mode === "multi" ? "multi" : "single";
+
   try {
     const [history, summary] = await Promise.all([getHistory(sessionId), getSummary(sessionId)]);
-    const { answer, usage } = await runAgent(question, history, {
-      onToolCall: (name, args) => send("tool_call", { name, args }),
-      onToolResult: (name, result) => send("tool_result", { name, result }),
-      summary,
-    });
+    // Sessions, memory, summaries and the answer/usage/memory events below
+    // are identical for both modes - only the progress events differ: the
+    // single agent reports tool calls, the supervisor reports its routing
+    // decision and each specialist starting and finishing.
+    const { answer, usage } =
+      mode === "multi"
+        ? await runMultiAgent(question, history, {
+            onRoute: (decision) => send("route", decision),
+            onAgentStart: (step) => send("agent_start", step),
+            onAgentDone: (step) => send("agent_done", step),
+            summary,
+          })
+        : await runAgent(question, history, {
+            onToolCall: (name, args) => send("tool_call", { name, args }),
+            onToolResult: (name, result) => send("tool_result", { name, result }),
+            summary,
+          });
 
     await appendTurn(sessionId, question, answer);
     await saveUsage(sessionId, usage);

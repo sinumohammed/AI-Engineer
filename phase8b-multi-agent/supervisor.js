@@ -40,30 +40,37 @@ export async function route(question, history = []) {
 
 // Same signature and `{ answer }` return as the single-agent runAgent, so
 // phase7-reliability/eval.js can run against this unchanged via AGENT_MODULE.
-export async function runAgent(question, history = []) {
+//
+// The optional third argument is for the chat UI (Phase 8c): progress
+// callbacks so the browser can show the hand-off as it happens, and the
+// session's running summary of older turns (Phase 6.11), passed on to the
+// specialists. `index` identifies a step: one per task, then the synthesizer.
+export async function runAgent(question, history = [], { onRoute, onAgentStart, onAgentDone, summary } = {}) {
   const startedAt = Date.now();
-  const usage = { llmCalls: 0, promptTokens: 0, completionTokens: 0 };
+  // Totals across every model call, plus the largest single call: with
+  // several calls per question, "how full is the context window" is about
+  // the biggest one, not the sum.
+  const usage = { llmCalls: 0, promptTokens: 0, completionTokens: 0, peakCallTokens: 0 };
   const count = (r, calls = 1) => {
     usage.llmCalls += calls;
     usage.promptTokens += r.promptTokens;
     usage.completionTokens += r.completionTokens;
+    usage.peakCallTokens = Math.max(usage.peakCallTokens, r.promptTokens + r.completionTokens);
   };
 
   const routing = await route(question, history);
   count(routing);
+  onRoute?.({ reason: routing.reason, tasks: routing.tasks, fallback: routing.fallback });
 
   const steps = await Promise.all(
-    routing.tasks.map(async (task) => {
+    routing.tasks.map(async (task, index) => {
       const stepStartedAt = Date.now();
-      const result = await runSpecialist(task.agent, task.question, history);
+      onAgentStart?.({ index, agent: task.agent, question: task.question });
+      const result = await runSpecialist(task.agent, task.question, history, summary);
       count(result, result.llmCalls);
-      return {
-        agent: task.agent,
-        question: task.question,
-        answer: result.answer,
-        meta: result.meta,
-        latencyMs: Date.now() - stepStartedAt,
-      };
+      const latencyMs = Date.now() - stepStartedAt;
+      onAgentDone?.({ index, agent: task.agent, latencyMs });
+      return { agent: task.agent, question: task.question, answer: result.answer, meta: result.meta, latencyMs };
     })
   );
 
@@ -74,6 +81,7 @@ export async function runAgent(question, history = []) {
   let synthesis = null;
   if (steps.length > 1) {
     const synthStartedAt = Date.now();
+    onAgentStart?.({ index: steps.length, agent: "synthesizer", question });
     const res = await chat({
       model: SPECIALIST_MODEL,
       label: "synthesizer",
@@ -82,6 +90,7 @@ export async function runAgent(question, history = []) {
     count(res);
     answer = res.content;
     synthesis = { latencyMs: Date.now() - synthStartedAt };
+    onAgentDone?.({ index: steps.length, agent: "synthesizer", latencyMs: synthesis.latencyMs });
   }
 
   usage.totalTokens = usage.promptTokens + usage.completionTokens;

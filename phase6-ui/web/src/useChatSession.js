@@ -21,6 +21,8 @@ function historyToMessages(history, lastUsage) {
     role: turn.role,
     text: turn.content,
     tools: [],
+    agents: [],
+    route: null,
     usage: null,
   }));
   const lastAssistant = messages.filter((m) => m.role === "assistant").at(-1);
@@ -39,7 +41,7 @@ function reducer(state, action) {
         messages: [
           ...state.messages,
           { role: "user", text: action.question },
-          { role: "assistant", text: "", tools: [], usage: null },
+          { role: "assistant", text: "", tools: [], agents: [], route: null, usage: null },
         ],
       };
     case "TOOL_CALL":
@@ -52,6 +54,29 @@ function reducer(state, action) {
           tools: m.tools.map((t) => (t.name === action.name && t.status === "calling" ? { ...t, status: "done" } : t)),
         })),
       };
+    // Phase 8c (multi-agent mode): the supervisor's routing decision, then
+    // each specialist starting and finishing. `index` identifies a step, so
+    // two tasks sent to the same specialist stay separate chips.
+    case "ROUTE":
+      return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, route: { reason: action.reason, fallback: action.fallback } })) };
+    case "AGENT_START":
+      return {
+        ...state,
+        messages: updateLast(state.messages, (m) => ({
+          ...m,
+          agents: [...m.agents, { index: action.index, agent: action.agent, question: action.question, status: "running" }],
+        })),
+      };
+    case "AGENT_DONE":
+      return {
+        ...state,
+        messages: updateLast(state.messages, (m) => ({
+          ...m,
+          agents: m.agents.map((a) => (a.index === action.index ? { ...a, status: "done", latencyMs: action.latencyMs } : a)),
+        })),
+      };
+    case "SET_MODE":
+      return { ...state, mode: action.mode };
     case "ANSWER_CHUNK":
       return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, text: m.text + action.text })) };
     case "USAGE":
@@ -67,7 +92,7 @@ function reducer(state, action) {
         messages: updateLast(state.messages, (m) => ({ ...m, text: m.text || action.message })),
       };
     case "RESET":
-      return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId };
+      return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId, mode: state.mode };
     default:
       return state;
   }
@@ -87,6 +112,9 @@ export function useChatSession() {
     busy: false,
     loaded: false,
     sessionId: getOrCreateSessionId(),
+    // "single" = the Phase 6 agent, "multi" = the Phase 8b supervisor.
+    // Remembered across refreshes, like the session id.
+    mode: localStorage.getItem("agentMode") === "single" ? "single" : "multi",
   });
   const esRef = useRef(null);
 
@@ -102,10 +130,13 @@ export function useChatSession() {
   function ask(question) {
     dispatch({ type: "ASK_START", question });
 
-    const url = `${API_BASE}/api/chat/stream?sessionId=${state.sessionId}&q=${encodeURIComponent(question)}`;
+    const url = `${API_BASE}/api/chat/stream?sessionId=${state.sessionId}&mode=${state.mode}&q=${encodeURIComponent(question)}`;
     const es = new EventSource(url);
     esRef.current = es;
 
+    es.addEventListener("route", (e) => dispatch({ type: "ROUTE", ...JSON.parse(e.data) }));
+    es.addEventListener("agent_start", (e) => dispatch({ type: "AGENT_START", ...JSON.parse(e.data) }));
+    es.addEventListener("agent_done", (e) => dispatch({ type: "AGENT_DONE", ...JSON.parse(e.data) }));
     es.addEventListener("tool_call", (e) => dispatch({ type: "TOOL_CALL", ...JSON.parse(e.data) }));
     es.addEventListener("tool_result", (e) => dispatch({ type: "TOOL_RESULT", ...JSON.parse(e.data) }));
     es.addEventListener("answer_chunk", (e) => dispatch({ type: "ANSWER_CHUNK", ...JSON.parse(e.data) }));
@@ -128,5 +159,10 @@ export function useChatSession() {
     dispatch({ type: "RESET", sessionId: freshId });
   }
 
-  return { state, ask, newChat };
+  function setMode(mode) {
+    localStorage.setItem("agentMode", mode);
+    dispatch({ type: "SET_MODE", mode });
+  }
+
+  return { state, ask, newChat, setMode };
 }
