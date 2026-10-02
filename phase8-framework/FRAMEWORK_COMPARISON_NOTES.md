@@ -190,11 +190,38 @@ useful one from Phase 8a: **a framework option that's silently ignored is worse 
 hand-rolled agent can't have this bug, because there is no config object to misname.
 
 **Next steps (not done yet):**
-1. Consider loosening eval matching (case/space-insensitive times, accepting `do not know` alongside
-   `don't know`) - weighed against keeping the regression tests strict.
+1. ~~Consider loosening eval matching~~ - done 2026-10-02, see below.
 2. Strip stray `<tool_call>` tokens from Version B's final answer? Would be a small post-processing
    step - but it's the same category of fallback deliberately left out of Version B, so needs a
    decision rather than a default.
+
+## Eval wording fix + a 4B model (2026-10-02)
+
+Tested `gemma3:4b` (4.3B, 4.0GB loaded at `NUM_CTX=32768` vs ~21GB for `qwen3-coder:30b`) to see
+whether always-retrieve RAG needs a big model at all. First run: 5/7 - but both failures were correct
+answers in different wording (a curly apostrophe in "don’t know"; "do not have information" instead of
+`don't have information`). The eval was wrong, not the model, so the eval was fixed first:
+`mustContain` entries can now be a list of acceptable phrasings, and apostrophes are normalized before
+comparing. The `mustNotContain` checks that guard against wrong answers are unchanged.
+
+| Agent | `qwen3-coder:30b` | `gemma3:4b` |
+|---|---|---|
+| Hand-rolled (`phase6-ui/server/agent.js`) | 7/7 | 7/7 |
+| Version A (`agent-a.js`) | 7/7 | 7/7 |
+| Version B (`agent-b.js`) | 7/7 | **cannot run** |
+
+- **Version B on Gemma fails before the model runs:** Ollama returns
+  `gemma3:4b does not support tools` (`ollama show` lists only `completion` and `vision`). Nothing to
+  tune - the agentic design needs a model with the tools capability.
+- **Why the hand-rolled agent is unaffected:** it still sends `tools` on every request, but
+  `AGENT_TOOL_DEFS` filters out all four tools, so the list is empty and Ollama accepts it.
+- **Version B on Qwen is now 7/7:** its last failure was a correct refusal ("The search results do
+  not contain information about…") that the old exact-substring check rejected.
+- **Decision:** default stays `qwen3-coder:30b`, because one `.env` drives all three agents and Gemma
+  breaks one of them. Also verified live through the Phase 6 API on Gemma (multi-turn memory worked).
+- **Takeaway:** always-retrieve RAG is a "read this excerpt and answer" job a 4B model handles; model
+  size starts to matter when the model itself has to choose and call tools. Caveat: 7 short
+  single-turn questions - long chats and multi-chunk answers are untested on the small model.
 
 ## Files
 

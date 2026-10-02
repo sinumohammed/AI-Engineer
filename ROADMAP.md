@@ -190,5 +190,12 @@ Original picks (Windows laptop):
   Cloned from GitHub onto an M1 Max. Installed Node v24 (in `~/.local`), Ollama, Docker Desktop; Postgres+pgvector (`phase5-rag`) and Redis (`phase6-ui`) running via `docker compose up -d`; docs re-ingested; `phase5-rag/.env` recreated (gitignored - `npm start` in `phase6-ui/server` and `npm run agent-a` fail without it, since they use `node --env-file`).
   - Switched every hardcoded model name (`phase2-node-ollama/`, `phase3-node-agent/`, `phase4-mcp/client-agent.js`, `phase5-rag/query.js`) plus the `phase5-rag/config.js` default and `.env.example` from `qwen2.5-coder:7b-instruct-q4_K_M` to `qwen3-coder:30b` (`.env.example` also `NUM_CTX=32768`). Smoke-tested phases 2, 3, 4, 5 and the Phase 6 UI end-to-end on the new model.
 
+- **Eval wording fix + small-model test** (2026-10-02)
+  Asked whether always-retrieve RAG needs a 30B model. Pulled `gemma3:4b` (4.0GB loaded vs ~21GB for `qwen3-coder:30b` at `NUM_CTX=32768`) and ran the eval: 5/7, but both failures were correct answers in different wording (curly apostrophe, "do not" vs "don't"). Fixed the eval first, since it was the thing that was wrong.
+  - `phase7-reliability/eval.js`: a `mustContain` entry can now be a list of acceptable phrasings (any one passes), apostrophes are normalized, refusals and the `10am` time accept common variants. `mustNotContain` checks are unchanged.
+  - Result on `gemma3:4b`: hand-rolled 7/7, Version A 7/7, Version B cannot run (`does not support tools`). On `qwen3-coder:30b`: all three 7/7.
+  - Default stays `qwen3-coder:30b` - one `.env` drives all three agents and Gemma breaks Version B. Details in `phase8-framework/FRAMEWORK_COMPARISON_NOTES.md`.
+  - Also added `phase6-ui/start.sh` + `STARTUP.md` (one command starts Docker, Redis, API server and web UI). Ollama itself starts at login via its own launch agent; it holds no model in memory until the first request and unloads 5 minutes after the last one.
+
 ## Career angle
 Given frontend + Node/Postgres/Mongo background, the fastest "AI engineer" path is: RAG systems + agent orchestration + API integration — not model training. That's exactly what phases 3-6 build. Employers want people who can wire LLMs into real products reliably, not researchers.

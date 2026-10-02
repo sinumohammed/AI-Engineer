@@ -8,6 +8,23 @@
 const AGENT_MODULE = process.env.AGENT_MODULE ?? "../phase6-ui/server/agent.js";
 const { runAgent } = await import(AGENT_MODULE);
 
+// The assertions check the MEANING of an answer, not one model's exact
+// wording. Found by swapping models (Phase 8 re-run, then gemma3:4b): correct
+// answers failed on phrasing alone - "I do not have information" vs "don't
+// have information", "10 AM" vs "10am", a curly apostrophe in "don’t". So a
+// mustContain entry may be an array of acceptable phrasings (any one passes),
+// and check() normalizes apostrophes before comparing.
+const REFUSAL = [
+  "don't know",
+  "do not know",
+  "don't have information",
+  "do not have information",
+  "don't contain information",
+  "do not contain information",
+  "doesn't contain information",
+  "does not contain information",
+];
+
 const cases = [
   {
     name: "rollback process - grounded in company doc",
@@ -17,7 +34,7 @@ const cases = [
   {
     name: "on-call handoff - regression test for the Phase 6.8 hallucination bug (model once answered '10 PM UTC', real answer is Monday 10am)",
     question: "When does the on-call rotation hand off?",
-    mustContain: ["monday", "10am"],
+    mustContain: ["monday", ["10am", "10 am", "10:00 am"]],
   },
   {
     name: "general knowledge - must NOT be derailed by always-on retrieval",
@@ -27,7 +44,7 @@ const cases = [
   {
     name: "out-of-domain company question - must admit not knowing, not hallucinate",
     question: "What is our database backup schedule?",
-    mustContain: ["don't know"],
+    mustContain: [REFUSAL],
   },
   {
     name: "repeated question in same turn context - regression test for Phase 6.8's temp-0 skip-and-hallucinate case",
@@ -42,15 +59,18 @@ const cases = [
   {
     name: "equipment code (wrong) - regression test for Phase 5.6's identifier-mismatch false positive (vector search alone scored a made-up code nearly as close as the real one)",
     question: "What is the calibration schedule for XJ-9999?",
-    mustContain: ["don't have information"],
+    mustContain: [REFUSAL],
     mustNotContain: ["2200", "90 days"],
   },
 ];
 
 function check(answer, mustContain = [], mustNotContain = []) {
-  const lower = answer.toLowerCase();
-  const missing = mustContain.filter((s) => !lower.includes(s.toLowerCase()));
-  const forbidden = mustNotContain.filter((s) => lower.includes(s.toLowerCase()));
+  const normalize = (s) => s.toLowerCase().replace(/[‘’]/g, "'");
+  const text = normalize(answer);
+  const missing = mustContain
+    .filter((s) => ![s].flat().some((alt) => text.includes(normalize(alt))))
+    .map((s) => [s].flat().join(" | "));
+  const forbidden = mustNotContain.filter((s) => text.includes(normalize(s)));
   return { passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
 }
 
