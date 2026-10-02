@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Thirteen steps from a first local model call to a multi-agent chat app, with flow diagrams and a log of every problem, change and result.">
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>AI Engineer Learning Guide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Red+Hat+Display:wght@600;700;800&display=swap">
+<style>
+  /* Layout: a lab notebook. Sticky step index on the left, one reading column on the right;
+     each step is an entry with the same parts in the same order. */
+  :root {
+    --bg: #f3f5f8;
+    --panel: #ffffff;
+    --fg: #17212c;
+    --muted: #5b6876;
+    --line: #d4dbe3;
+    --accent: #2348c5;
+    --accent-soft: #e5ebfc;
+    --warn: #9a5800;
+    --warn-soft: #fbefd8;
+    --font-display: "Red Hat Display", "Avenir Next", "Segoe UI", sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151c; --panel: #171e28; --fg: #e3e9f0; --muted: #98a5b4; --line: #2b3542;
+      --accent: #93abff; --accent-soft: #1c2950; --warn: #f0b55a; --warn-soft: #37280f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151c; --panel: #171e28; --fg: #e3e9f0; --muted: #98a5b4; --line: #2b3542;
+    --accent: #93abff; --accent-soft: #1c2950; --warn: #f0b55a; --warn-soft: #37280f;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  }
+  .wrap {
+    max-width: 1120px; margin-inline: auto; padding-inline: 20px; padding-block: 36px 96px;
+    display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 56px; align-items: start;
+  }
+  main { min-width: 0; max-width: 760px; display: flex; flex-direction: column; gap: 56px; }
+
+  /* index */
+  nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); font-size: 13.5px; }
+  nav.index p { margin: 0 0 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  nav.index ol { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  nav.index a { display: flex; gap: 8px; padding: 3px 0; color: var(--fg); text-decoration: none; }
+  nav.index a:hover, nav.index a:focus-visible { color: var(--accent); }
+  nav.index a span { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 1.6em; font-variant-numeric: tabular-nums; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  /* type */
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+  h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; }
+  h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  h3 { font-size: 20px; font-weight: 700; }
+  p { margin: 0; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+  code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 60ch; }
+  .eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+  header.top { display: flex; flex-direction: column; gap: 14px; }
+  section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 20px; }
+  section > p, section li { max-width: 68ch; }
+
+  /* step entries */
+  .steps { display: flex; flex-direction: column; gap: 44px; }
+  .step { display: flex; flex-direction: column; gap: 14px; padding-top: 22px; border-top: 1px solid var(--line); scroll-margin-top: 20px; }
+  .step-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  .step-no { font-family: var(--font-mono); font-size: 13px; color: var(--accent); font-weight: 500; }
+  .phase { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .goal { font-size: 17px; }
+  dl.parts { margin: 0; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px 16px; }
+  dl.parts dt { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-top: 4px; }
+  dl.parts dd { margin: 0; min-width: 0; }
+  dl.parts ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+  @media (max-width: 560px) { dl.parts { grid-template-columns: 1fr; gap: 2px 0; } dl.parts dd { margin-bottom: 10px; } }
+
+  /* commands */
+  .cmd { display: flex; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .cmd pre { margin: 0; padding: 10px 14px; overflow-x: auto; flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 13px; line-height: 1.55; }
+  .cmd button { border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; padding: 0 12px; cursor: pointer; }
+  .cmd button:hover { color: var(--accent); }
+
+  /* figures */
+  figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .scroll { overflow-x: auto; }
+  figure .scroll { padding: 16px 16px 8px; }
+  figcaption { padding: 10px 16px 14px; font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); }
+  svg.dg { display: block; width: 100%; height: auto; min-width: 600px; color: var(--fg); font-family: var(--font-body); }
+  .dg text { fill: currentColor; font-size: 13px; }
+  .dg .s { font-size: 11px; fill: var(--muted); }
+  .dg .k { font-size: 11px; fill: var(--muted); font-family: var(--font-mono); letter-spacing: 0.06em; }
+  .dg .m { font-family: var(--font-mono); font-size: 12px; }
+  .dg .t { font-weight: 600; }
+  .dg .b { fill: var(--panel); stroke: currentColor; stroke-width: 1.2; }
+  .dg .ba { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+  .dg .bw { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.4; }
+  .dg .w { fill: var(--warn); }
+  .dg .ln { stroke: currentColor; stroke-width: 1.3; fill: none; }
+  .dg .dash { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+
+  /* tables */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; white-space: nowrap; }
+  td.n { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.res { font-weight: 500; }
+  .wide table { min-width: 640px; }
+
+  dl.words { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 32px; }
+  dl.words div { min-width: 0; }
+  dl.words dt { font-weight: 600; }
+  dl.words dd { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  ol.lessons { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; }
+  ol.lessons strong { font-weight: 600; }
+
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+    nav.index { position: static; }
+    nav.index ol { flex-direction: row; flex-wrap: wrap; gap: 4px 16px; }
+  }
+  main p a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="index" aria-label="Contents">
+    <p>Guide</p>
+    <ol>
+      <li><a href="#picture">The big picture</a></li>
+      <li><a href="#words">Key words</a></li>
+      <li><a href="#log">Iteration log</a></li>
+      <li><a href="#lessons">Lessons</a></li>
+      <li><a href="#run">Run it</a></li>
+    </ol>
+    <p>Steps</p>
+    <ol>
+      <li><a href="#s1"><span>1</span>A local model</a></li>
+      <li><a href="#s2"><span>2</span>Call it from code</a></li>
+      <li><a href="#s3"><span>3</span>An agent</a></li>
+      <li><a href="#s4"><span>4</span>MCP</a></li>
+      <li><a href="#s5"><span>5</span>RAG</a></li>
+      <li><a href="#s6"><span>6</span>Combined agent</a></li>
+      <li><a href="#s7"><span>7</span>Chat UI</a></li>
+      <li><a href="#s8"><span>8</span>Memory and fixes</a></li>
+      <li><a href="#s9"><span>9</span>Reliability</a></li>
+      <li><a href="#s10"><span>10</span>Hybrid search</a></li>
+      <li><a href="#s11"><span>11</span>A framework</a></li>
+      <li><a href="#s12"><span>12</span>Multi-agent</a></li>
+      <li><a href="#s13"><span>13</span>Multi-agent in the UI</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="top">
+      <span class="eyebrow">Phases 1 to 8c · local models with Ollama</span>
+      <h1>AI Engineer Learning Guide</h1>
+      <p class="lede">Thirteen steps from the first local model call to a multi-agent chat app. Each step adds one capability, and each one was proved to work before the next began.</p>
+      <p><a href="https://github.com/sinumohammed/AI-Engineer">Source code on GitHub</a></p>
+    </header>
+
+    <section id="picture">
+      <h2>The big picture</h2>
+      <p>This is the system as it stands after the last step. Everything below explains how each box got there.</p>
+      <figure>
+        <div class="scroll">
+          <svg class="dg" viewBox="0 0 720 500" role="img" aria-label="The browser sends a question to the API server, which keeps chat history in Redis and hands the question either to the single agent or to the supervisor. The supervisor picks one of three specialists. The single agent and the company docs specialist search the documents, and every agent calls the model in Ollama.">
+            <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+            <rect class="b" x="260" y="16" width="200" height="46" rx="6"/>
+            <text class="t" x="360" y="36" text-anchor="middle">Browser (React app)</text>
+            <text class="s" x="360" y="53" text-anchor="middle">localhost:5173</text>
+            <line class="ln" x1="360" y1="62" x2="360" y2="105" marker-end="url(#a1)"/>
+            <text class="s" x="370" y="88">question, session id, mode</text>
+
+            <rect class="b" x="260" y="106" width="200" height="46" rx="6"/>
+            <text class="t" x="360" y="126" text-anchor="middle">API server (Express)</text>
+            <text class="s" x="360" y="143" text-anchor="middle">localhost:3001</text>
+            <line class="ln" x1="461" y1="129" x2="539" y2="129" marker-start="url(#a1)" marker-end="url(#a1)"/>
+            <text class="s" x="500" y="121" text-anchor="middle">turns</text>
+            <rect class="b" x="540" y="106" width="150" height="46" rx="6"/>
+            <text class="t" x="615" y="126" text-anchor="middle">Redis</text>
+            <text class="s" x="615" y="143" text-anchor="middle">chat history</text>
+
+            <line class="ln" x1="320" y1="152" x2="162" y2="206" marker-end="url(#a1)"/>
+            <text class="s" x="222" y="172" text-anchor="end">mode = single</text>
+            <line class="ln" x1="400" y1="152" x2="508" y2="206" marker-end="url(#a1)"/>
+            <text class="s" x="470" y="172">mode = multi</text>
+
+            <rect class="b" x="60" y="208" width="200" height="46" rx="6"/>
+            <text class="t" x="160" y="228" text-anchor="middle">Single agent</text>
+            <text class="s" x="160" y="245" text-anchor="middle">one prompt, one model call</text>
+            <rect class="ba" x="400" y="208" width="220" height="46" rx="6"/>
+            <text class="t" x="510" y="228" text-anchor="middle">Supervisor</text>
+            <text class="s" x="510" y="245" text-anchor="middle">router: picks who answers</text>
+
+            <line class="ln" x1="470" y1="254" x2="407" y2="298" marker-end="url(#a1)"/>
+            <line class="ln" x1="510" y1="254" x2="534" y2="298" marker-end="url(#a1)"/>
+            <line class="ln" x1="560" y1="254" x2="648" y2="298" marker-end="url(#a1)"/>
+            <rect class="b" x="340" y="300" width="130" height="38" rx="6"/>
+            <text class="m" x="405" y="324" text-anchor="middle">company_docs</text>
+            <rect class="b" x="485" y="300" width="100" height="38" rx="6"/>
+            <text class="m" x="535" y="324" text-anchor="middle">coding</text>
+            <rect class="b" x="600" y="300" width="100" height="38" rx="6"/>
+            <text class="m" x="650" y="324" text-anchor="middle">general</text>
+
+            <rect class="b" x="130" y="372" width="200" height="44" rx="6"/>
+            <text class="t" x="230" y="391" text-anchor="middle">Document search</text>
+            <text class="s" x="230" y="407" text-anchor="middle">Postgres + pgvector</text>
+            <line class="ln" x1="200" y1="254" x2="200" y2="371" marker-end="url(#a1)"/>
+            <text class="s" x="208" y="318">always searches</text>
+            <path class="ln" d="M380,338 V394 H332" marker-end="url(#a1)"/>
+            <text class="s" x="372" y="362" text-anchor="end">searches</text>
+
+            <rect class="b" x="60" y="446" width="640" height="42" rx="6"/>
+            <text class="t" x="380" y="465" text-anchor="middle">Ollama: the model</text>
+            <text class="s" x="380" y="481" text-anchor="middle">localhost:11434</text>
+            <line class="ln" x1="90" y1="254" x2="90" y2="445" marker-end="url(#a1)"/>
+            <line class="ln" x1="230" y1="416" x2="230" y2="445" marker-end="url(#a1)"/>
+            <text class="s" x="238" y="435">embeddings</text>
+            <line class="ln" x1="430" y1="338" x2="430" y2="445" marker-end="url(#a1)"/>
+            <line class="ln" x1="535" y1="338" x2="535" y2="445" marker-end="url(#a1)"/>
+            <line class="ln" x1="650" y1="338" x2="650" y2="445" marker-end="url(#a1)"/>
+            <text class="s" x="543" y="398">model calls</text>
+          </svg>
+        </div>
+        <figcaption>One chat app, two ways to answer. The supervisor path (blue) was added in the last two steps; everything else was built before it.</figcaption>
+      </figure>
+
+      <div class="scroll wide">
+        <table>
+          <thead><tr><th>Step</th><th>Phase</th><th>What was added</th><th>The idea in one line</th></tr></thead>
+          <tbody>
+            <tr><td class="n">1</td><td class="n">1</td><td>A model on the laptop</td><td>Ollama serves a model on a local port</td></tr>
+            <tr><td class="n">2</td><td class="n">2</td><td>Calling it from code</td><td>Send messages, get text back</td></tr>
+            <tr><td class="n">3</td><td class="n">3</td><td>An agent</td><td>The model can ask the code to run tools</td></tr>
+            <tr><td class="n">4</td><td class="n">4</td><td>MCP</td><td>Tools live in a separate server with a standard interface</td></tr>
+            <tr><td class="n">5</td><td class="n">5</td><td>RAG</td><td>Answer from your own documents</td></tr>
+            <tr><td class="n">6</td><td class="n">5.5</td><td>Combined agent</td><td>Document search becomes one of the agent's tools</td></tr>
+            <tr><td class="n">7</td><td class="n">6</td><td>Chat UI</td><td>A browser app in front of the agent</td></tr>
+            <tr><td class="n">8</td><td class="n">6.5 to 6.11</td><td>Memory and fixes</td><td>Sessions, Redis, token usage, always-search, summaries</td></tr>
+            <tr><td class="n">9</td><td class="n">7</td><td>Reliability</td><td>Evals, tracing, retries, config</td></tr>
+            <tr><td class="n">10</td><td class="n">5.6</td><td>Hybrid search</td><td>Stop search confusing similar codes</td></tr>
+            <tr><td class="n">11</td><td class="n">8a</td><td>A framework</td><td>Rebuild the agent with LangChain and compare</td></tr>
+            <tr><td class="n">12</td><td class="n">8b</td><td>Multi-agent</td><td>A router plus specialist agents</td></tr>
+            <tr><td class="n">13</td><td class="n">8c</td><td>Multi-agent in the UI</td><td>Switch between the two in the chat app</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="words">
+      <h2>Key words</h2>
+      <dl class="words">
+        <div><dt>Model (LLM)</dt><dd>The program that turns text into text. Here <code>qwen3-coder:30b</code>, run by Ollama.</dd></div>
+        <div><dt>Messages</dt><dd>The list sent to the model: system instructions, then user and assistant turns.</dd></div>
+        <div><dt>System prompt</dt><dd>The instructions at the top of the messages. Guidance, never a guarantee.</dd></div>
+        <div><dt>Token</dt><dd>A piece of a word. Models read and write tokens, and limits are counted in them.</dd></div>
+        <div><dt>Context window</dt><dd>The most tokens a model can read in one call. Past it, older text is dropped without warning.</dd></div>
+        <div><dt>Temperature</dt><dd>Randomness. At 0 the same question gives the same answer, which tests need.</dd></div>
+        <div><dt>Tool</dt><dd>A function in your code that the model can ask to be run.</dd></div>
+        <div><dt>Agent</dt><dd>A loop: call the model, run any tool it asks for, give it the result, repeat.</dd></div>
+        <div><dt>Embedding</dt><dd>A list of numbers that stands for the meaning of a text. Similar meaning, close numbers.</dd></div>
+        <div><dt>RAG</dt><dd>Find relevant text first, then let the model answer from it.</dd></div>
+        <div><dt>Hallucination</dt><dd>The model stating something false as if it were true.</dd></div>
+        <div><dt>Eval</dt><dd>An automated test for an AI system: fixed questions with checks on the answers.</dd></div>
+        <div><dt>Trace</dt><dd>A saved record of one run: what was found, what was called, what was answered.</dd></div>
+        <div><dt>Structured output</dt><dd>Forcing the model's reply to match a JSON schema.</dd></div>
+        <div><dt>Router (supervisor)</dt><dd>An agent whose only job is deciding which other agent answers.</dd></div>
+        <div><dt>Specialist</dt><dd>An agent with one narrow job and its own prompt.</dd></div>
+      </dl>
+    </section>
+
+    <section id="steps">
+      <h2>Step by step</h2>
+      <div class="steps">
+
+        <article class="step" id="s1">
+          <div class="step-head"><span class="step-no">Step 1</span><h3>A model on the laptop</h3><span class="phase">Phase 1</span></div>
+          <p class="goal">Have a model running locally, with no cloud service.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd>Installed Ollama and pulled a model.</dd>
+            <dt>Learned</dt><dd>Ollama starts at login and listens on <code>localhost:11434</code>. It holds no model in memory until the first request, loads it on demand (about 21 GB for the current one) and unloads it 5 minutes after the last request.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>ollama list
+ollama ps</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s2">
+          <div class="step-head"><span class="step-no">Step 2</span><h3>Call the model from code</h3><span class="phase">Phase 2</span></div>
+          <p class="goal">Talk to the model from Node.js, with no framework in between.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase2-node-ollama/chat.js</code> waits for the whole answer. <code>chat-stream.js</code> prints it as it arrives.</dd>
+            <dt>Flow</dt><dd>Your code posts <code>{ model, messages }</code> to Ollama's <code>/api/chat</code> and gets a message back.</dd>
+            <dt>Learned</dt><dd>The messages array, system prompts, temperature and streaming. The model has no memory: it only knows what is in the messages you send.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase2-node-ollama
+npm run chat
+npm run chat:stream</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s3">
+          <div class="step-head"><span class="step-no">Step 3</span><h3>An agent</h3><span class="phase">Phase 3</span></div>
+          <p class="goal">Let the model do things, not only talk.</p>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 210" role="img" aria-label="The question goes to the model. The model either asks for a tool, which your code runs and returns the result, or replies in plain text, which is the final answer.">
+                <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <rect class="b" x="30" y="30" width="120" height="46" rx="6"/>
+                <text class="t" x="90" y="58" text-anchor="middle">Question</text>
+                <line class="ln" x1="150" y1="53" x2="249" y2="53" marker-end="url(#a2)"/>
+                <rect class="ba" x="250" y="30" width="150" height="46" rx="6"/>
+                <text class="t" x="325" y="58" text-anchor="middle">Model</text>
+                <line class="ln" x1="400" y1="53" x2="569" y2="53" marker-end="url(#a2)"/>
+                <text class="s" x="485" y="45" text-anchor="middle">plain text: finished</text>
+                <rect class="b" x="570" y="30" width="120" height="46" rx="6"/>
+                <text class="t" x="630" y="58" text-anchor="middle">Answer</text>
+                <line class="ln" x1="295" y1="76" x2="295" y2="145" marker-end="url(#a2)"/>
+                <text class="s" x="287" y="114" text-anchor="end">asks for a tool</text>
+                <line class="ln" x1="355" y1="146" x2="355" y2="77" marker-end="url(#a2)"/>
+                <text class="s" x="363" y="114">result goes back</text>
+                <rect class="b" x="250" y="146" width="150" height="46" rx="6"/>
+                <text class="t" x="325" y="166" text-anchor="middle">Your code</text>
+                <text class="s" x="325" y="182" text-anchor="middle">runs the tool</text>
+              </svg>
+            </div>
+            <figcaption>The loop repeats until the model replies in plain text. The model never runs anything itself.</figcaption>
+          </figure>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase3-node-agent/agent.js</code> is the loop. <code>tools.js</code> holds <code>list_files</code>, <code>read_file</code> and <code>get_current_time</code>.</dd>
+            <dt>Learned</dt><dd>Small models sometimes write the tool request as plain text instead of in the proper field, so the agent has a fallback that reads it from the text.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase3-node-agent
+npm run agent</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s4">
+          <div class="step-head"><span class="step-no">Step 4</span><h3>MCP</h3><span class="phase">Phase 4</span></div>
+          <p class="goal">Move the tools out of the agent, behind a standard interface.</p>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 150" role="img" aria-label="The agent asks the MCP server which tools it has and asks it to run one. The server replies with the tool list and the result.">
+                <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <rect class="b" x="30" y="40" width="210" height="70" rx="6"/>
+                <text class="t" x="135" y="72" text-anchor="middle">Agent</text>
+                <text class="s" x="135" y="90" text-anchor="middle">MCP client, same loop as step 3</text>
+                <rect class="ba" x="480" y="40" width="210" height="70" rx="6"/>
+                <text class="t" x="585" y="64" text-anchor="middle">MCP server</text>
+                <text class="s" x="585" y="82" text-anchor="middle">list_files, read_file,</text>
+                <text class="s" x="585" y="97" text-anchor="middle">get_current_time</text>
+                <line class="ln" x1="240" y1="60" x2="479" y2="60" marker-end="url(#a3)"/>
+                <text class="s" x="360" y="52" text-anchor="middle">which tools do you have? · run read_file</text>
+                <line class="ln" x1="480" y1="92" x2="241" y2="92" marker-end="url(#a3)"/>
+                <text class="s" x="360" y="108" text-anchor="middle">tool list · result</text>
+              </svg>
+            </div>
+            <figcaption>The agent no longer contains the tools. It discovers them by asking the server.</figcaption>
+          </figure>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase4-mcp/mcp-server.js</code> offers the tools. <code>client-agent.js</code> is the same loop, now asking the server what exists.</dd>
+            <dt>Learned</dt><dd>Any MCP server can be plugged into the same agent. Claude Code uses this interface for its own tools.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase4-mcp
+npm run agent</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s5">
+          <div class="step-head"><span class="step-no">Step 5</span><h3>RAG for company documents</h3><span class="phase">Phase 5</span></div>
+          <p class="goal">Answer questions from your own documents, not only from what the model remembers.</p>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 220" role="img" aria-label="Ingest: a document is split into chunks, each chunk is embedded and stored in Postgres. Query: the question is embedded, the closest stored chunks are found, and the model answers from them.">
+                <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="24">INGEST · ONCE PER DOCUMENT</text>
+                <rect class="b" x="20" y="38" width="130" height="44" rx="6"/>
+                <text x="85" y="65" text-anchor="middle">Document</text>
+                <line class="ln" x1="150" y1="60" x2="179" y2="60" marker-end="url(#a4)"/>
+                <rect class="b" x="180" y="38" width="130" height="44" rx="6"/>
+                <text x="245" y="65" text-anchor="middle">Split into chunks</text>
+                <line class="ln" x1="310" y1="60" x2="339" y2="60" marker-end="url(#a4)"/>
+                <rect class="b" x="340" y="38" width="130" height="44" rx="6"/>
+                <text x="405" y="65" text-anchor="middle">Embed each chunk</text>
+                <line class="ln" x1="470" y1="60" x2="509" y2="60" marker-end="url(#a4)"/>
+                <rect class="ba" x="510" y="38" width="190" height="44" rx="6"/>
+                <text class="t" x="605" y="57" text-anchor="middle">Postgres + pgvector</text>
+                <text class="s" x="605" y="73" text-anchor="middle">chunks and their embeddings</text>
+
+                <text class="k" x="20" y="146">QUERY · EVERY QUESTION</text>
+                <rect class="b" x="20" y="160" width="130" height="44" rx="6"/>
+                <text x="85" y="187" text-anchor="middle">Question</text>
+                <line class="ln" x1="150" y1="182" x2="179" y2="182" marker-end="url(#a4)"/>
+                <rect class="b" x="180" y="160" width="130" height="44" rx="6"/>
+                <text x="245" y="187" text-anchor="middle">Embed it</text>
+                <line class="ln" x1="310" y1="182" x2="339" y2="182" marker-end="url(#a4)"/>
+                <rect class="b" x="340" y="160" width="130" height="44" rx="6"/>
+                <text x="405" y="187" text-anchor="middle">Find closest chunks</text>
+                <line class="ln" x1="470" y1="182" x2="509" y2="182" marker-end="url(#a4)"/>
+                <rect class="b" x="510" y="160" width="190" height="44" rx="6"/>
+                <text class="t" x="605" y="179" text-anchor="middle">Model answers</text>
+                <text class="s" x="605" y="195" text-anchor="middle">from the chunks in its prompt</text>
+                <path class="ln" d="M560,82 V120 H405 V159" marker-end="url(#a4)"/>
+                <text class="s" x="482" y="112" text-anchor="middle">stored chunks</text>
+              </svg>
+            </div>
+            <figcaption>Two separate jobs share one store. The model only ever reads the chunks that search returns.</figcaption>
+          </figure>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase5-rag/ingest.js</code> prepares the documents, <code>query.js</code> answers a question, Postgres with pgvector runs in Docker, sample docs live in <code>phase5-rag/docs/</code>.</dd>
+            <dt>Learned</dt><dd>Answer quality depends on finding the right chunk. If search returns the wrong text, the model answers from the wrong text.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase5-rag
+docker compose up -d
+npm run ingest
+node query.js "What is our rollback process?"</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s6">
+          <div class="step-head"><span class="step-no">Step 6</span><h3>Combined agent</h3><span class="phase">Phase 5.5</span></div>
+          <p class="goal">One agent that answers company questions and general questions.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase5-rag/agent.js</code> and <code>tools.js</code>. Document search became a tool called <code>search_company_docs</code>.</dd>
+            <dt>Flow</dt><dd>The model reads the question and decides: search the documents, or answer directly.</dd>
+            <dt>Learned</dt><dd>This "model decides" design is called agentic RAG. It worked in testing and later turned out to be the source of a hallucination bug, fixed in step 8.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase5-rag
+node --env-file=.env agent.js "What is our rollback process?"</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s7">
+          <div class="step-head"><span class="step-no">Step 7</span><h3>Chat UI</h3><span class="phase">Phase 6</span></div>
+          <p class="goal">Use the agent from a browser.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase6-ui/server/</code> is an Express API. <code>phase6-ui/web/</code> is a React app.</dd>
+            <dt>Flow</dt><dd>The browser opens <code>/api/chat/stream?q=…</code> and the server pushes events back as they happen: <code>tool_call</code>, <code>tool_result</code>, <code>answer_chunk</code>, <code>done</code>.</dd>
+            <dt>Learned</dt><dd>Server-Sent Events let the server report progress while the agent is still working.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase6-ui
+./start.sh</pre><button type="button">Copy</button></div> Then open <code>http://localhost:5173</code>.</dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s8">
+          <div class="step-head"><span class="step-no">Step 8</span><h3>Making the chat app real</h3><span class="phase">Phases 6.5 to 6.11</span></div>
+          <p class="goal">Seven small iterations, each fixing one gap found by using the app.</p>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>Phase</th><th>Gap found</th><th>What changed</th></tr></thead>
+              <tbody>
+                <tr><td class="n">6.5</td><td>Every question was independent, so follow-ups failed</td><td>The server keeps the conversation per session and sends the last 10 turns with each question</td></tr>
+                <tr><td class="n">6.6</td><td>Memory lived inside one server process</td><td>History moved to Redis, so several server copies share it</td></tr>
+                <tr><td class="n">6.7</td><td>The context window size was never set</td><td><code>num_ctx</code> is set explicitly and the UI shows tokens used</td></tr>
+                <tr><td class="n">6.8</td><td>The model sometimes skipped the search and made up an answer</td><td>Search runs on every question, in code</td></tr>
+                <tr><td class="n">6.9</td><td>Ollama gives no warning when the context is full</td><td>The app computes its own warning at 75% and 95%</td></tr>
+                <tr><td class="n">6.10</td><td>A refresh showed an empty chat, and Redis going down crashed the server</td><td>The UI restores history on load, and Redis errors are handled</td></tr>
+                <tr><td class="n">6.11</td><td>Turns older than 10 were forgotten</td><td>Old turns are folded into a short running summary</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Phase 6.8 is the one to remember. A stricter prompt reduced the problem and did not remove it. Removing the choice did.</p>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 300" role="img" aria-label="Before: the model decides whether to search, and when it decides not to, it can answer from memory and make things up. After: the code always searches first and the model answers from what was found.">
+                <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="180" y="20" text-anchor="middle">BEFORE · THE MODEL DECIDES</text>
+                <text class="k" x="540" y="20" text-anchor="middle">AFTER · THE CODE ALWAYS SEARCHES</text>
+                <line class="dash" x1="360" y1="8" x2="360" y2="292"/>
+
+                <rect class="b" x="110" y="38" width="140" height="36" rx="6"/>
+                <text x="180" y="61" text-anchor="middle">Question</text>
+                <line class="ln" x1="180" y1="74" x2="180" y2="103" marker-end="url(#a5)"/>
+                <rect class="b" x="95" y="104" width="170" height="36" rx="6"/>
+                <text x="180" y="127" text-anchor="middle">Model: search or not?</text>
+                <line class="ln" x1="140" y1="140" x2="97" y2="183" marker-end="url(#a5)"/>
+                <text class="s" x="108" y="160" text-anchor="end">yes</text>
+                <line class="ln" x1="220" y1="140" x2="263" y2="183" marker-end="url(#a5)"/>
+                <text class="s" x="250" y="160">no</text>
+                <rect class="b" x="30" y="184" width="130" height="36" rx="6"/>
+                <text x="95" y="207" text-anchor="middle">Search the docs</text>
+                <line class="ln" x1="95" y1="220" x2="95" y2="247" marker-end="url(#a5)"/>
+                <rect class="b" x="30" y="248" width="130" height="36" rx="6"/>
+                <text x="95" y="271" text-anchor="middle">Answer from docs</text>
+                <rect class="bw" x="195" y="184" width="150" height="50" rx="6"/>
+                <text x="270" y="205" text-anchor="middle">Answer from memory</text>
+                <text class="s w" x="270" y="222" text-anchor="middle">may be made up</text>
+
+                <rect class="b" x="470" y="38" width="140" height="36" rx="6"/>
+                <text x="540" y="61" text-anchor="middle">Question</text>
+                <line class="ln" x1="540" y1="74" x2="540" y2="103" marker-end="url(#a5)"/>
+                <rect class="ba" x="455" y="104" width="170" height="36" rx="6"/>
+                <text class="t" x="540" y="127" text-anchor="middle">Code: search the docs</text>
+                <line class="ln" x1="540" y1="140" x2="540" y2="183" marker-end="url(#a5)"/>
+                <rect class="b" x="440" y="184" width="200" height="36" rx="6"/>
+                <text x="540" y="207" text-anchor="middle">Model reads what was found</text>
+                <line class="ln" x1="540" y1="220" x2="540" y2="247" marker-end="url(#a5)"/>
+                <rect class="b" x="470" y="248" width="140" height="36" rx="6"/>
+                <text x="540" y="271" text-anchor="middle">Answer from docs</text>
+              </svg>
+            </div>
+            <figcaption>The fix removed the "no" branch. With the search done in code, the model cannot skip it.</figcaption>
+          </figure>
+        </article>
+
+        <article class="step" id="s9">
+          <div class="step-head"><span class="step-no">Step 9</span><h3>Reliability</h3><span class="phase">Phase 7</span></div>
+          <p class="goal">Know when a change breaks something.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><ul>
+              <li><code>phase7-reliability/eval.js</code>: fixed questions with checks on the answers.</li>
+              <li><code>phase5-rag/tracer.js</code>: one saved record per run.</li>
+              <li><code>phase5-rag/retry.js</code>: retry temporary failures with a growing delay.</li>
+              <li><code>phase5-rag/config.js</code> and <code>.env</code>: model, context size and thresholds in one place.</li>
+            </ul></dd>
+            <dt>Flow</dt><dd>For each test question, run the agent and check that the answer contains certain text and avoids other text.</dd>
+            <dt>Learned</dt><dd>The eval found 4 bugs that manual testing had missed, because it re-ran old questions after every change. One fix moved the "is this document relevant?" decision out of the prompt and into code, using the search distance number.</dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase7-reliability
+node --env-file=../phase5-rag/.env eval.js</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s10">
+          <div class="step-head"><span class="step-no">Step 10</span><h3>Hybrid search</h3><span class="phase">Phase 5.6</span></div>
+          <p class="goal">Stop search confusing codes that look alike.</p>
+          <dl class="parts">
+            <dt>Problem</dt><dd>Asking about a made-up code <code>XJ-9999</code> returned the real <code>XJ-2200</code> document, because the two look almost the same to vector search.</dd>
+            <dt>Built</dt><dd>Keyword search next to vector search, plus a check: if the question names a code and that exact code is not in the document found, the agent says it has no information.</dd>
+            <dt>Learned</dt><dd>Vector search is good at meaning and bad at exact identifiers.</dd>
+            <dt>Try it</dt><dd>Ask the chat app about <code>XJ-2200</code> (it answers "every 90 days") and <code>XJ-9999</code> (it refuses).</dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s11">
+          <div class="step-head"><span class="step-no">Step 11</span><h3>A framework</h3><span class="phase">Phase 8a</span></div>
+          <p class="goal">Rebuild the same agent with LangChain and measure the difference.</p>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>Version</th><th>Design</th><th>Result</th></tr></thead>
+              <tbody>
+                <tr><td class="n">A</td><td>Always search in code, then one model call</td><td class="res">Same score as hand-written, less code</td></tr>
+                <tr><td class="n">B</td><td>The model decides whether to call the search tool</td><td class="res">0/7 on the small model, 7/7 on the bigger one after fixes</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="parts">
+            <dt>Built</dt><dd><code>phase8-framework/agent-a.js</code> and <code>agent-b.js</code>, run through the same eval as the hand-written agent.</dd>
+            <dt>Learned</dt><dd><ul>
+              <li>Version B's first 0/7 was mostly the small model's unreliable tool calling.</li>
+              <li>Version B passed its system prompt under the wrong option name and LangChain silently ignored it. A silently ignored option is worse than an error.</li>
+              <li><code>gemma3:4b</code>, a 4 GB model, matches the 21 GB model on Version A and the hand-written agent. It cannot run Version B, because it does not support tools.</li>
+            </ul></dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase7-reliability
+AGENT_MODULE=../phase8-framework/agent-a.js node --env-file=../phase5-rag/.env eval.js</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s12">
+          <div class="step-head"><span class="step-no">Step 12</span><h3>Multi-agent</h3><span class="phase">Phase 8b</span></div>
+          <p class="goal">Split the work across several agents and see what that costs.</p>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 390" role="img" aria-label="The question goes to a router that lists its parts and picks a specialist for each. The chosen specialists run. A combine step passes a single answer through, or makes one more model call to join several answers.">
+                <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="112">1 ROUTE</text>
+                <text class="k" x="20" y="202">2 DISPATCH</text>
+                <text class="k" x="20" y="292">3 COMBINE</text>
+                <rect class="b" x="290" y="14" width="140" height="36" rx="6"/>
+                <text x="360" y="37" text-anchor="middle">Question</text>
+                <line class="ln" x1="360" y1="50" x2="360" y2="83" marker-end="url(#a6)"/>
+                <rect class="ba" x="210" y="84" width="300" height="48" rx="6"/>
+                <text class="t" x="360" y="104" text-anchor="middle">Router</text>
+                <text class="s" x="360" y="121" text-anchor="middle">lists the parts, picks a specialist for each</text>
+                <text class="s" x="522" y="112">1 model call</text>
+                <line class="ln" x1="300" y1="132" x2="207" y2="177" marker-end="url(#a6)"/>
+                <line class="ln" x1="360" y1="132" x2="360" y2="177" marker-end="url(#a6)"/>
+                <line class="ln" x1="420" y1="132" x2="513" y2="177" marker-end="url(#a6)"/>
+                <rect class="b" x="130" y="178" width="150" height="40" rx="6"/>
+                <text class="m" x="205" y="203" text-anchor="middle">company_docs</text>
+                <rect class="b" x="285" y="178" width="150" height="40" rx="6"/>
+                <text class="m" x="360" y="203" text-anchor="middle">coding</text>
+                <rect class="b" x="440" y="178" width="150" height="40" rx="6"/>
+                <text class="m" x="515" y="203" text-anchor="middle">general</text>
+                <text class="s" x="602" y="202">1 call each</text>
+                <line class="ln" x1="205" y1="218" x2="298" y2="263" marker-end="url(#a6)"/>
+                <line class="ln" x1="360" y1="218" x2="360" y2="263" marker-end="url(#a6)"/>
+                <line class="ln" x1="515" y1="218" x2="422" y2="263" marker-end="url(#a6)"/>
+                <rect class="b" x="190" y="264" width="340" height="48" rx="6"/>
+                <text class="t" x="360" y="284" text-anchor="middle">Combine</text>
+                <text class="s" x="360" y="301" text-anchor="middle">one answer: passed through · several: joined</text>
+                <text class="s" x="542" y="292">0 or 1 call</text>
+                <line class="ln" x1="360" y1="312" x2="360" y2="341" marker-end="url(#a6)"/>
+                <rect class="b" x="290" y="342" width="140" height="36" rx="6"/>
+                <text x="360" y="365" text-anchor="middle">Answer</text>
+              </svg>
+            </div>
+            <figcaption>A normal question uses one specialist and costs 2 model calls. A two-part question uses two specialists and costs 4.</figcaption>
+          </figure>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>File</th><th>Job</th></tr></thead>
+              <tbody>
+                <tr><td><code>supervisor.js</code></td><td>The hand-written flow</td></tr>
+                <tr><td><code>supervisor-graph.js</code></td><td>The same flow written with LangGraph</td></tr>
+                <tr><td><code>routing.js</code></td><td>Router prompt and rules, shared by both</td></tr>
+                <tr><td><code>specialists.js</code></td><td>The three specialists, shared by both</td></tr>
+                <tr><td><code>llm.js</code></td><td>The hand-written call to Ollama</td></tr>
+                <tr><td><code>eval.js</code></td><td>Routing tests, two-part tests, history tests</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="parts">
+            <dt>Learned</dt><dd><ul>
+              <li>The router chooses by structured output, not tool calling, so it works on models without tool support.</li>
+              <li>Splitting into agents created a bug the single agent did not have. "How are rollbacks done?" went to the coding specialist, because the router knew what each specialist is for and not what the documents contain. The fix was to search first and show the router what was found.</li>
+              <li>LangGraph gave the same results with more code. It pays off for flows with loops, pauses or per-conversation memory, which this one does not have.</li>
+            </ul></dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase8b-multi-agent
+npm run ask -- "What is our rollback process, and how do I list git tags?"</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
+
+        <article class="step" id="s13">
+          <div class="step-head"><span class="step-no">Step 13</span><h3>Multi-agent in the chat UI</h3><span class="phase">Phase 8c</span></div>
+          <p class="goal">Use the supervisor from the chat app and compare it with the single agent on the same question.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><ul>
+              <li>A "Single agent / Multi-agent" switch in the header.</li>
+              <li>A row above each answer showing which specialist answered, with timings and the router's reason.</li>
+              <li>A dropdown to pick a specialist yourself: Auto, Company docs, Coding, General.</li>
+            </ul></dd>
+            <dt>Learned</dt><dd>Three problems were found only by using the app. Each was fixed and added to the eval.</dd>
+          </dl>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>Problem found</th><th>Cause</th><th>Fix</th></tr></thead>
+              <tbody>
+                <tr><td>General answered a company question it should not know</td><td>It read the earlier answers in the chat history</td><td>Answers from documents are tagged when stored and hidden from specialists that cannot read documents</td></tr>
+                <tr><td>A prompt instruction did not stop that</td><td>Text already in the conversation outweighs an instruction about it</td><td>The tagging fix above</td></tr>
+                <tr><td>"How are rollbacks done, and how do I list git tags?" was not split</td><td>The two halves are close in topic</td><td>The router must list the parts of the message before choosing specialists</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 236" role="img" aria-label="The stored chat history passes through a filter. The user's messages and ordinary answers are unchanged. An answer tagged as coming from the company documents is replaced with a placeholder before the General and Coding specialists see it.">
+                <defs><marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="20">STORED CHAT HISTORY</text>
+                <text class="k" x="430" y="20">WHAT GENERAL AND CODING ARE SHOWN</text>
+
+                <rect class="b" x="20" y="32" width="270" height="34" rx="6"/>
+                <text class="s" x="32" y="53">you: What is our rollback process?</text>
+                <rect class="ba" x="20" y="74" width="270" height="66" rx="6"/>
+                <text class="s" x="32" y="94">assistant: Rollbacks are done by</text>
+                <text class="s" x="32" y="110">re-deploying the previous tagged release</text>
+                <text class="k" x="32" y="129">TAG: FROM COMPANY DOCUMENTS</text>
+                <rect class="b" x="20" y="148" width="270" height="34" rx="6"/>
+                <text class="s" x="32" y="169">you: What is the capital of France?</text>
+                <rect class="b" x="20" y="190" width="270" height="34" rx="6"/>
+                <text class="s" x="32" y="211">assistant: Paris.</text>
+
+                <line class="ln" x1="290" y1="49" x2="429" y2="49" marker-end="url(#a7)"/>
+                <text class="s" x="360" y="41" text-anchor="middle">unchanged</text>
+                <line class="ln" x1="290" y1="107" x2="429" y2="107" marker-end="url(#a7)"/>
+                <text class="s w" x="360" y="99" text-anchor="middle">replaced</text>
+                <line class="ln" x1="290" y1="165" x2="429" y2="165" marker-end="url(#a7)"/>
+                <line class="ln" x1="290" y1="207" x2="429" y2="207" marker-end="url(#a7)"/>
+
+                <rect class="b" x="430" y="32" width="270" height="34" rx="6"/>
+                <text class="s" x="442" y="53">you: What is our rollback process?</text>
+                <rect class="bw" x="430" y="74" width="270" height="66" rx="6"/>
+                <text class="s" x="442" y="102">assistant: [this answer came from the</text>
+                <text class="s" x="442" y="118">company documents and is hidden]</text>
+                <rect class="b" x="430" y="148" width="270" height="34" rx="6"/>
+                <text class="s" x="442" y="169">you: What is the capital of France?</text>
+                <rect class="b" x="430" y="190" width="270" height="34" rx="6"/>
+                <text class="s" x="442" y="211">assistant: Paris.</text>
+              </svg>
+            </div>
+            <figcaption>The specialists without document access cannot repeat an answer they are never shown. The Company docs specialist sees the history unchanged.</figcaption>
+          </figure>
+          <dl class="parts">
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase6-ui
+./start.sh</pre><button type="button">Copy</button></div> Open <code>http://localhost:5173</code> and ask the same question in both modes.</dd>
+          </dl>
+        </article>
+      </div>
+    </section>
+
+    <section id="log">
+      <h2>Iteration log</h2>
+      <p>Every row is one loop of finding a problem, changing one thing and measuring again.</p>
+      <div class="scroll wide">
+        <table>
+          <thead><tr><th>#</th><th>Phase</th><th>Problem</th><th>Change</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td class="n">1</td><td class="n">3</td><td>Small model writes tool calls as plain text</td><td>Fallback that reads the tool call from the text</td><td class="res">Agent keeps working</td></tr>
+            <tr><td class="n">2</td><td class="n">6</td><td>Model re-reads source files to check search results and fails</td><td>Told it not to in the prompt. The tools were removed outright in 6.8</td><td class="res">Answers stop derailing</td></tr>
+            <tr><td class="n">3</td><td class="n">6.5</td><td>No memory between questions</td><td>Per-session history, last 10 turns</td><td class="res">Follow-ups work</td></tr>
+            <tr><td class="n">4</td><td class="n">6.6</td><td>Memory lost across server copies</td><td>History in Redis</td><td class="res">Two servers share one conversation</td></tr>
+            <tr><td class="n">5</td><td class="n">6.7</td><td>Context size unset</td><td>Set <code>num_ctx</code>, show token usage</td><td class="res">Usage visible in the UI</td></tr>
+            <tr><td class="n">6</td><td class="n">6.8</td><td>Model skips search and hallucinates</td><td>Always search in code</td><td class="res">Hallucination gone</td></tr>
+            <tr><td class="n">7</td><td class="n">6.9</td><td>No warning near the context limit</td><td>Own warning at 75% and 95%</td><td class="res">Banner in the UI</td></tr>
+            <tr><td class="n">8</td><td class="n">6.10</td><td>Redis outage crashed the server</td><td>Error handling with a graceful fallback</td><td class="res">Server survives and recovers</td></tr>
+            <tr><td class="n">9</td><td class="n">6.11</td><td>Old turns forgotten</td><td>Running summary</td><td class="res">Gist of old turns kept</td></tr>
+            <tr><td class="n">10</td><td class="n">7</td><td>General question answered with nonsense</td><td>Relevance decided in code by distance</td><td class="res">Passes</td></tr>
+            <tr><td class="n">11</td><td class="n">7</td><td>Model echoed "I don't know" from the prompt</td><td>Stopped quoting that phrase in the prompt</td><td class="res">Passes</td></tr>
+            <tr><td class="n">12</td><td class="n">7</td><td>Model looped on the only tool left</td><td>Removed the tool</td><td class="res">5/5, and faster</td></tr>
+            <tr><td class="n">13</td><td class="n">5.6</td><td>Made-up code matched the real one</td><td>Exact-identifier check</td><td class="res">Refuses the wrong code</td></tr>
+            <tr><td class="n">14</td><td class="n">8a</td><td>Version B scored 0/7</td><td>Traced it to the small model's tool calling</td><td class="res">Documented, not patched</td></tr>
+            <tr><td class="n">15</td><td class="n">8a</td><td>Version B's system prompt silently ignored</td><td>Correct option name</td><td class="res">6/7</td></tr>
+            <tr><td class="n">16</td><td class="n">eval</td><td>Correct answers failing on wording</td><td>Accept several phrasings, normalise apostrophes</td><td class="res">All agents 7/7</td></tr>
+            <tr><td class="n">17</td><td class="n">8b</td><td>Company question sent to coding</td><td>Show the router the search result</td><td class="res">17/17</td></tr>
+            <tr><td class="n">18</td><td class="n">8c</td><td>Joined answer mentioned "the specialists"</td><td>Told the joiner to answer as one assistant</td><td class="res">Clean answers</td></tr>
+            <tr><td class="n">19</td><td class="n">8c</td><td>Wrong specialist repeats company facts from history</td><td>Tag and hide document answers</td><td class="res">4/4 refuse</td></tr>
+            <tr><td class="n">20</td><td class="n">8c</td><td>Close-topic two-part questions not split</td><td>Router lists the parts first</td><td class="res">20/24 to 24/24</td></tr>
+            <tr><td class="n">21</td><td class="n">8c</td><td>That fix split a one-part question</td><td>Label the user's message and the excerpt</td><td class="res">24/24</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Where the tests stand</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Test</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Single agent, 7 cases</td><td class="n">7/7</td></tr>
+            <tr><td>LangChain Version A and B, 7 cases</td><td class="n">7/7 each</td></tr>
+            <tr><td>Supervisor routing, 24 cases (hand-written and LangGraph)</td><td class="n">24/24</td></tr>
+            <tr><td>Supervisor two-part answers</td><td class="n">3/3</td></tr>
+            <tr><td>Supervisor history-leak cases</td><td class="n">4/4</td></tr>
+            <tr><td>Supervisor on the 7 single-agent cases</td><td class="n">7/7</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="lessons">
+      <h2>The lessons that keep repeating</h2>
+      <ol class="lessons">
+        <li><strong>A prompt is advice, not a rule.</strong> Three times a stricter prompt failed where a change in code worked: always-search (6.8), relevance by distance (7), hiding tagged answers (8c).</li>
+        <li><strong>If code can decide, let code decide.</strong> Use the model for reading and writing, and keep decisions that a number or a check can make out of the prompt.</li>
+        <li><strong>Remove the wrong option instead of forbidding it.</strong> Unused tools were deleted, not discouraged.</li>
+        <li><strong>Prove the bug before fixing it.</strong> Each fix started by reproducing the failure, so the fix could be measured.</li>
+        <li><strong>Re-run old tests after every change.</strong> Most bugs were regressions: a fix for one question broke another.</li>
+        <li><strong>Tests can be wrong too.</strong> Correct answers failed on wording, and a test set with only easy two-part questions hid a routing bug.</li>
+        <li><strong>Using the app finds what tests miss.</strong> All three problems in step 13 came from clicking around, then became permanent tests.</li>
+        <li><strong>More agents means more places to fail.</strong> Multi-agent added routing mistakes and memory leaking between agents, and doubled the model calls.</li>
+        <li><strong>Bigger is not always needed.</strong> For "read this text and answer", a 4 GB model matched a 21 GB one. Size mattered when the model had to choose and call tools.</li>
+      </ol>
+    </section>
+
+    <section id="run">
+      <h2>Run it</h2>
+      <p>One-time setup: install Node, Ollama and Docker Desktop, pull <code>qwen3-coder:30b</code> and <code>nomic-embed-text</code>, copy <code>phase5-rag/.env.example</code> to <code>.env</code>, and run <code>npm install</code> in each folder that has a <code>package.json</code>.</p>
+      <div class="scroll wide">
+        <table>
+          <thead><tr><th>What</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>Start the database</td><td><code>cd phase5-rag &amp;&amp; docker compose up -d</code></td></tr>
+            <tr><td>Create the tables (new database only)</td><td><code>docker exec -i phase5-rag-db-1 psql -U rag -d rag &lt; schema.sql</code></td></tr>
+            <tr><td>Load documents</td><td><code>cd phase5-rag &amp;&amp; npm run ingest</code></td></tr>
+            <tr><td>Start the chat app</td><td><code>cd phase6-ui &amp;&amp; ./start.sh</code></td></tr>
+            <tr><td>Single-agent eval</td><td><code>cd phase7-reliability &amp;&amp; node --env-file=../phase5-rag/.env eval.js</code></td></tr>
+            <tr><td>Multi-agent eval</td><td><code>cd phase8b-multi-agent &amp;&amp; npm run eval</code></td></tr>
+            <tr><td>Multi-agent eval, LangGraph</td><td><code>cd phase8b-multi-agent &amp;&amp; npm run eval:graph</code></td></tr>
+            <tr><td>What is loaded in memory</td><td><code>ollama ps</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>To try another model, change <code>CHAT_MODEL</code> in <code>phase5-rag/.env</code> and restart the chat app. The full detail for every phase is in <code>ROADMAP.md</code>, and <code>LEARNING_GUIDE.md</code> lists the commit for each step.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+  document.querySelectorAll(".cmd button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.parentElement.querySelector("pre");
+      function selectText() {
+        var range = document.createRange();
+        range.selectNodeContents(pre);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = "Selected";
+      }
+      try {
+        navigator.clipboard.writeText(pre.textContent).then(
+          function () { btn.textContent = "Copied"; },
+          selectText
+        );
+      } catch (e) {
+        selectText();
+      }
+      setTimeout(function () { btn.textContent = "Copy"; }, 1600);
+    });
+  });
+</script>
+</body>
+</html>
