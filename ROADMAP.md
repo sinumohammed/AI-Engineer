@@ -2,6 +2,8 @@
 
 Personal project: learn AI/agent engineering hands-on by building each phase locally, then applying it at work.
 
+**New here, or revising?** Read `LEARNING_GUIDE.md` first - the simple step-by-step version, with the flow of each phase and a table of every problem/change/result. This file is the detailed log.
+
 ## Machine specs
 **Current (from 2026-09-30):** MacBook, Apple M1 Max, 32GB unified memory - models up to ~30B at Q4 run 100% on GPU.
 
