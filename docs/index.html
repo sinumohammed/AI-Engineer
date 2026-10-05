@@ -820,18 +820,34 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
 
     <section id="lessons">
       <h2>The lessons that keep repeating</h2>
+      <p>Several of these were first learned on 2 sample documents and had to be qualified once Phase 9 loaded a real handbook. The wording below is the current version; the table after the list shows what changed.</p>
       <ol class="lessons">
-        <li><strong>A prompt is advice, not a rule.</strong> Three times a stricter prompt failed where a change in code worked: always-search (6.8), relevance by distance (7), hiding tagged answers (8c).</li>
-        <li><strong>If code can decide, let code decide.</strong> Use the model for reading and writing, and keep decisions that a number or a check can make out of the prompt.</li>
+        <li><strong>A prompt is advice when it asks the model to follow a rule.</strong> A stricter prompt failed where a change in code worked: always-search (6.8), hiding tagged answers (8c), and in Phase 9 a router instruction that did not stop "Who is eligible for FMLA?" going to the general specialist. Exception found in 9.4: a focused question with a structured answer ("which of these excerpts answer the question?") did respond to better wording, from 1 to 0 false positives out of 8. Asking a model to obey a policy against its own preference failed; asking it to judge one specific thing worked. Measure either way.</li>
+        <li><strong>Let code decide when it has a reliable signal, and re-check the signal when the data changes.</strong> Relevance by vector distance (Phase 7) was a reliable code rule at 2 chunks and failed at 4,288. It was replaced by the model's judgement (9.4), which in turn feeds a code rule (9.6).</li>
         <li><strong>Remove the wrong option instead of forbidding it.</strong> Unused tools were deleted, not discouraged.</li>
         <li><strong>Prove the bug before fixing it.</strong> Each fix started by reproducing the failure, so the fix could be measured.</li>
         <li><strong>Re-run old tests after every change.</strong> Most bugs were regressions: a fix for one question broke another.</li>
-        <li><strong>Tests can be wrong too.</strong> Correct answers failed on wording, and a test set with only easy two-part questions hid a routing bug.</li>
+        <li><strong>Tests can be wrong too.</strong> Correct answers failed on wording, a test set with only easy two-part questions hid a routing bug, and a test assumed the documents say nothing about backups, which stopped being true.</li>
         <li><strong>Using the app finds what tests miss.</strong> All three problems in step 13 came from clicking around, then became permanent tests.</li>
         <li><strong>More agents means more places to fail.</strong> Multi-agent added routing mistakes and memory leaking between agents, and doubled the model calls.</li>
         <li><strong>Test the parts, not only the final answer.</strong> A retrieval eval with no model call found problems that answer tests could not see, and showed which step to fix.</li>
-        <li><strong>Bigger is not always needed.</strong> For "read this text and answer", a 4 GB model matched a 21 GB one. Size mattered when the model had to choose and call tools.</li>
+        <li><strong>A result measured on toy data is a guess about real data.</strong> The 0.5 threshold, fixed 800-character chunks and "the keyword search rarely helps" were all right for 2 chunks and wrong for 4,288.</li>
+        <li><strong>Bigger is not always needed, so far.</strong> For "read this text and answer", a 4 GB model matched a 21 GB one, and size mattered when the model had to choose and call tools. That was measured on the 2-document corpus and has not been re-tested on the handbook.</li>
       </ol>
+      <h3>What changed when the data got real</h3>
+      <div class="scroll wide">
+        <table>
+          <thead><tr><th>Earlier decision</th><th>Measured on</th><th>What Phase 9 found</th><th>Now</th></tr></thead>
+          <tbody>
+            <tr><td>Relevance = vector distance under 0.5 (Phase 7)</td><td>2 chunks: real questions 0.36 to 0.44, off-topic 0.67</td><td>Off-topic questions as close as 0.30; 7 of 8 treated as relevant</td><td class="res">The model judges relevance (9.4)</td></tr>
+            <tr><td>Fixed 800-character chunks of raw text (Phase 5)</td><td>2 tiny files</td><td>Markup inside chunks, cuts mid-topic</td><td class="res">Cleaned text, cut at headings, 500 characters, section labels</td></tr>
+            <tr><td>Embeddings with no task prefix (Phase 5)</td><td>Never tested</td><td>The embedding model expects task prefixes</td><td class="res">Prefixes on (9.3)</td></tr>
+            <tr><td>Keyword half of hybrid search "rarely contributes" (5.6)</td><td>2 chunks</td><td>Rescued answers vector search missed</td><td class="res">Confirmed as needed</td></tr>
+            <tr><td>"Distance means company_docs" routing rule rejected (8b)</td><td>Noisy distances</td><td>Works with the model's judgement as the signal</td><td class="res">A code rule (9.6)</td></tr>
+            <tr><td>Always search, in code (6.8)</td><td>2 chunks</td><td>Still right</td><td class="res">Unchanged; the search now feeds the relevance step</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section id="run">

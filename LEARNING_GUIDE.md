@@ -423,25 +423,52 @@ Where things stand:
 
 ## 5. The lessons that keep repeating
 
-1. **A prompt is advice, not a rule.** Three times a stricter prompt failed where a change in code
-   worked: always-retrieve (6.8), relevance by distance (7), hiding tagged answers (8c).
-2. **If code can decide, let code decide.** Use the model for reading and writing, not for decisions
-   that a number or a check can make.
+Several of these were first learned on 2 sample documents and had to be qualified once Phase 9
+loaded a real handbook. The wording below is the current version; the table after the list shows
+what changed.
+
+1. **A prompt is advice when it asks the model to follow a rule.** A stricter prompt failed where a
+   change in code worked: always-search (6.8), hiding tagged answers (8c), and in Phase 9 a router
+   instruction that did not stop "Who is eligible for FMLA?" going to the general specialist.
+   **Exception found in 9.4:** a focused question with a structured answer ("which of these
+   excerpts answer the question?") did respond to better wording, from 1 to 0 false positives out
+   of 8. Asking a model to obey a policy against its own preference failed; asking it to judge one
+   specific thing worked. Measure either way.
+2. **Let code decide when it has a reliable signal, and re-check the signal when the data changes.**
+   Relevance by vector distance (Phase 7) was a reliable code rule at 2 chunks and failed at 4,288.
+   It was replaced by the model's judgement (9.4), which in turn feeds a code rule
+   (`applyDocPriority`, 9.6).
 3. **Remove the wrong option instead of forbidding it.** Unused tools were deleted, not discouraged.
 4. **Prove the bug before fixing it.** Each fix started by reproducing the failure, so the fix could
    be measured.
 5. **Re-run old tests after every change.** Most bugs were regressions: a fix for one question broke
    another.
 6. **Tests can be wrong too.** Correct answers failed on wording; a test set with only easy two-part
-   questions hid a routing bug.
+   questions hid a routing bug; a test assumed the documents say nothing about backups, which
+   stopped being true.
 7. **Using the app finds what tests miss.** All three Phase 8c problems came from clicking around,
    then became permanent tests.
 8. **More agents means more places to fail.** Multi-agent added routing mistakes and memory leaks
    between agents, and doubled the model calls. Use it when one prompt can no longer do the job.
 9. **Test the parts, not only the final answer.** A retrieval eval with no model call found
    problems that answer tests could not see, and showed which step to fix.
-10. **Bigger is not always needed.** For "read this text and answer", a 4 GB model matched a 21 GB
-   one. Size mattered when the model had to choose and call tools.
+10. **A result measured on toy data is a guess about real data.** The 0.5 threshold, fixed
+    800-character chunks and "the keyword search rarely helps" were all right for 2 chunks and
+    wrong for 4,288.
+11. **Bigger is not always needed, so far.** For "read this text and answer", a 4 GB model matched a
+    21 GB one, and size mattered when the model had to choose and call tools. That was measured on
+    the 2-document corpus and has not been re-tested on the handbook.
+
+### What changed when the data got real (Phase 9)
+
+| Earlier decision | Measured on | What Phase 9 found | Now |
+|---|---|---|---|
+| Relevance = vector distance under 0.5 (Phase 7) | 2 chunks: real questions 0.36-0.44, off-topic 0.67 | Off-topic questions as close as 0.30; 7 of 8 treated as relevant | The model judges relevance (9.4) |
+| Fixed 800-character chunks of raw text (Phase 5) | 2 tiny files | Markup inside chunks, cuts mid-topic | Cleaned text, cut at headings, 500 characters, "Page > Section" labels (9.2, 9.3) |
+| Embeddings with no task prefix (Phase 5) | Never tested | The embedding model expects `search_document:` / `search_query:` | Prefixes on (9.3) |
+| Keyword half of hybrid search "rarely contributes" (5.6) | 2 chunks | Rescued answers vector search missed | Confirmed as needed |
+| "Distance means company_docs" routing rule rejected (8b) | Noisy distances | Works with the model's judgement as the signal | `applyDocPriority` in code (9.6) |
+| Always search, in code (6.8) | 2 chunks | Still right | Unchanged; the search now feeds the relevance step |
 
 ---
 
