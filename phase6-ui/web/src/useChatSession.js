@@ -83,6 +83,9 @@ function reducer(state, action) {
           agents: m.agents.map((a) => (a.index === action.index ? { ...a, status: "done", latencyMs: action.latencyMs } : a)),
         })),
       };
+    // Phase 9.6: which document sections the answer cited
+    case "SOURCES":
+      return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, sources: action.sources })) };
     case "SET_MODE":
       return { ...state, mode: action.mode };
     case "SET_AGENT":
@@ -156,6 +159,7 @@ export function useChatSession() {
     es.addEventListener("tool_call", (e) => dispatch({ type: "TOOL_CALL", ...JSON.parse(e.data) }));
     es.addEventListener("tool_result", (e) => dispatch({ type: "TOOL_RESULT", ...JSON.parse(e.data) }));
     es.addEventListener("answer_chunk", (e) => dispatch({ type: "ANSWER_CHUNK", ...JSON.parse(e.data) }));
+    es.addEventListener("sources", (e) => dispatch({ type: "SOURCES", sources: JSON.parse(e.data) }));
     es.addEventListener("usage", (e) => dispatch({ type: "USAGE", usage: JSON.parse(e.data) }));
     es.addEventListener("memory", (e) => dispatch({ type: "MEMORY", memory: JSON.parse(e.data) }));
     es.addEventListener("done", () => {

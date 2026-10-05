@@ -9,13 +9,15 @@
 //   hit@4  - it is within the 4 chunks the agent is actually given (TOP_K)
 //   hit@10 - search found it, but too low for the agent to ever see
 //   MRR    - mean of 1/rank, a single number for "how high up, on average"
-// "agent sees it" runs the real search_company_docs tool (vector + keyword,
-// merged), which is what the chat app uses.
+// "agent sees it" runs the real retrieval step the agents use (retrieve.js):
+// vector + keyword search, then - from step 9.4, unless RERANK=0 - the
+// model's judgement of which candidates answer the question.
 //
 // EVAL_TABLE points the vector part at another chunk table, to compare
 // chunking experiments (see ingest.js, INGEST_TABLE).
 import { existsSync, readFileSync } from "node:fs";
-import { toolImpls, vectorSearch, countChunksContaining } from "../phase5-rag/tools.js";
+import { vectorSearch, countChunksContaining } from "../phase5-rag/tools.js";
+import { retrieve, RERANK } from "../phase5-rag/retrieve.js";
 import { RELEVANCE_THRESHOLD } from "../phase5-rag/config.js";
 import { direct, paraphrased, original, offTopic } from "./cases.js";
 
@@ -26,7 +28,17 @@ const AGENT_K = 4;
 // numbers above them are reproducible from the repo alone.
 const PRIVATE_CASES = new URL("../phase5-rag/docs-private/eval-cases.json", import.meta.url);
 
-const normalize = (s) => s.toLowerCase().replace(/\s+/g, " ");
+// Compare text as a reader sees it, so raw and cleaned chunks (step 9.2) are
+// judged the same way: drop link addresses and markdown emphasis characters,
+// ignore case and line breaks. Must match countChunksContaining in tools.js.
+const retrieveMs = [];
+
+const normalize = (s) =>
+  s
+    .replace(/\]\((?:<[^>]*>|[^)]*)\)/g, "")
+    .replace(/[[\]_*`]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 const contains = (chunk, text) => normalize(chunk.content).includes(normalize(text));
 
 async function runGroup(name, cases) {
@@ -36,11 +48,13 @@ async function runGroup(name, cases) {
     const index = rows.findIndex((r) => contains(r, c.mustFind));
     const rank = index === -1 ? null : index + 1;
 
-    // Only meaningful on the live table - the tool always reads doc_chunks.
+    // Only meaningful on the live table - retrieval always reads doc_chunks.
     let agentSees = null;
     if (TABLE === "doc_chunks") {
-      const merged = await toolImpls.search_company_docs({ query: c.question });
-      agentSees = Array.isArray(merged) && merged.some((r) => contains(r, c.mustFind));
+      const startedAt = Date.now();
+      const r = await retrieve(c.question);
+      retrieveMs.push(Date.now() - startedAt);
+      agentSees = r.isRelevant && r.chunks.some((chunk) => contains(chunk, c.mustFind));
     }
 
     // A miss has two different causes: search ranked the chunk too low, or
@@ -69,7 +83,7 @@ async function runGroup(name, cases) {
   return results;
 }
 
-console.log(`Retrieval eval on table "${TABLE}"`);
+console.log(`Retrieval eval on table "${TABLE}"${TABLE === "doc_chunks" ? `, ${RERANK ? "with" : "without"} model reranking` : ""}`);
 const all = [
   ...(await runGroup("Direct wording", direct)),
   ...(await runGroup("Paraphrased", paraphrased)),
@@ -91,15 +105,17 @@ for (const q of offTopic) {
   const distance = rows[0].distance;
   offTop.push(distance);
   let flagged = distance < RELEVANCE_THRESHOLD;
-  if (TABLE === "doc_chunks") {
-    const merged = await toolImpls.search_company_docs({ query: q });
-    flagged = merged.bestVectorDistance < RELEVANCE_THRESHOLD || merged.keywordHit;
-  }
+  if (TABLE === "doc_chunks") flagged = (await retrieve(q)).isRelevant;
   if (flagged) falsePositives++;
   console.log(`  ${flagged ? "❌ treated as relevant" : "✅ not relevant       "}  ${distance.toFixed(3)}  ${q}`);
 }
 const range = (xs) => (xs.length ? `${Math.min(...xs).toFixed(3)} - ${Math.max(...xs).toFixed(3)}` : "n/a");
-console.log(`  => ${falsePositives}/${offTopic.length} wrongly treated as relevant (threshold ${RELEVANCE_THRESHOLD})`);
+const gate = TABLE !== "doc_chunks" || !RERANK ? `threshold ${RELEVANCE_THRESHOLD}` : "model-judged relevance";
+console.log(`  => ${falsePositives}/${offTopic.length} wrongly treated as relevant (${gate})`);
+if (retrieveMs.length) {
+  const avg = Math.round(retrieveMs.reduce((a, b) => a + b, 0) / retrieveMs.length);
+  console.log(`\nRetrieval step: average ${avg} ms per question (${RERANK ? "search + model judgement" : "search only"})`);
+}
 console.log(`\nBest-match distance, correct top result:  ${range(relevantTop)}`);
 console.log(`Best-match distance, off-topic question:  ${range(offTop)}`);
 

@@ -101,6 +101,19 @@ export default function App() {
                 <div style={styles.bubbleText}>
                   {m.text || (m.role === "assistant" ? <TypingDots /> : "")}
                 </div>
+                {/* Phase 9.6: the document sections this answer cited, by the
+                    same numbers that appear in the text, e.g. [1]. */}
+                {m.role === "assistant" && m.sources?.length > 0 && (
+                  <div style={styles.sources}>
+                    <span style={styles.sourcesLabel}>Sources</span>
+                    {m.sources.map((src) => (
+                      <div key={`${src.n}-${src.source}`} style={styles.sourceRow} title={src.source}>
+                        <span style={styles.sourceNumber}>[{src.n}]</span> {src.section}
+                        <span style={styles.sourceFile}> · {src.source}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {m.role === "assistant" && m.usage && (
                   <UsageFooter usage={m.usage} />
                 )}
@@ -304,6 +317,11 @@ const styles = {
     outline: "none",
     cursor: "pointer",
   }),
+  sources: { marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", gap: 3 },
+  sourcesLabel: { fontSize: 10.5, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" },
+  sourceRow: { fontSize: 12, color: "#334155", lineHeight: 1.4, overflowWrap: "anywhere" },
+  sourceNumber: { fontFamily: "monospace", color: "#2563eb", fontWeight: 600 },
+  sourceFile: { color: "#94a3b8", fontSize: 11 },
   routeBox: { marginBottom: 8 },
   routeLabel: { fontSize: 11, color: "#64748b", alignSelf: "center" },
   routeReason: { fontSize: 11.5, color: "#64748b", fontStyle: "italic", lineHeight: 1.45 },

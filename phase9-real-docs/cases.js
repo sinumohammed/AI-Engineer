@@ -26,7 +26,9 @@ export const direct = [
   { question: "Which Zoom domain do I enter to sign in?", mustFind: "gsa.zoomgov.com" },
   { question: "On which schedule can I earn credit hours?", mustFind: "you can earn/use credit hours if you are on a flexible schedule" },
   { question: "Can my last day at TTS be a federal holiday?", mustFind: "cannot be a federal holiday" },
-  { question: "Where is the GSA bug bounty program run?", mustFind: "hackerone.com/gsa_bbp" },
+  // mustFind is the visible link text, not its address: from step 9.2 on,
+  // cleaned chunks keep link text and drop URLs.
+  { question: "Where is the GSA bug bounty program run?", mustFind: "GSA administers a Bug Bounty Program" },
   { question: "Who is eligible for FMLA?", mustFind: "at least one year of federal service" },
 ];
 

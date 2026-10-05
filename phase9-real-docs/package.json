@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "eval": "node --env-file=../phase5-rag/.env retrieval-eval.js"
+    "eval": "node --env-file=../phase5-rag/.env retrieval-eval.js",
+    "eval:citations": "node --env-file=../phase5-rag/.env citation-eval.js",
+    "eval:citations:multi": "AGENT=multi node --env-file=../phase5-rag/.env citation-eval.js"
   }
 }

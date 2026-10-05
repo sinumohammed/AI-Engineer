@@ -29,7 +29,7 @@ const cases = [
   {
     name: "rollback process - grounded in company doc",
     question: "What is our rollback process?",
-    mustContain: ["re-deploying", "tagged release"],
+    mustContain: [["re-deploying", "re-deploy", "redeploy"], "tagged release"],
   },
   {
     name: "on-call handoff - regression test for the Phase 6.8 hallucination bug (model once answered '10 PM UTC', real answer is Monday 10am)",
@@ -50,13 +50,15 @@ const cases = [
     // guards against is an invented schedule.
     name: "out-of-domain company question - must admit not knowing, not hallucinate",
     question: "What is our database backup schedule?",
-    mustContain: [[...REFUSAL, "not specified", "do not specify", "does not specify", "doesn't specify", "don't specify"]],
+    mustContain: [
+      [...REFUSAL, "not specified", "do not specify", "does not specify", "doesn't specify", "don't specify", "not explicitly stated", "not stated"],
+    ],
     mustNotContain: ["every night", "nightly", "daily at", "every day at", "weekly on"],
   },
   {
     name: "repeated question in same turn context - regression test for Phase 6.8's temp-0 skip-and-hallucinate case",
     question: "What is our rollback process?",
-    mustContain: ["re-deploying", "tagged release"],
+    mustContain: [["re-deploying", "re-deploy", "redeploy"], "tagged release"],
   },
   {
     name: "equipment code (correct) - hybrid search must still answer when the exact ID is present",

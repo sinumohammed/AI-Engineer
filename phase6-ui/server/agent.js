@@ -5,7 +5,9 @@
 import { toolDefs, toolImpls } from "../../phase5-rag/tools.js";
 import { logTrace } from "../../phase5-rag/tracer.js";
 import { withRetry } from "../../phase5-rag/retry.js";
-import { LLM_BASE_URL, CHAT_MODEL, TEMPERATURE, RELEVANCE_THRESHOLD, authHeaders } from "../../phase5-rag/config.js";
+import { LLM_BASE_URL, CHAT_MODEL, TEMPERATURE, authHeaders } from "../../phase5-rag/config.js";
+import { retrieve } from "../../phase5-rag/retrieve.js";
+import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "../../phase5-rag/citations.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
 // It runs unconditionally on every question (cheap - one embed call + a
@@ -157,25 +159,18 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // see the AGENT_TOOL_DEFS comment above for why. Still reported through
   // the same onToolCall/onToolResult callbacks so the UI shows it happened.
   trackedOnToolCall("search_company_docs", { query: question });
-  const docResults = await toolImpls.search_company_docs({ query: question });
-
-  // identifierMismatch (Phase 5.6): the question named a specific code/ID
-  // but the exact-match keyword search (see tools.js) found no chunk
-  // containing it, even though vector search alone would have called a
-  // similar chunk "relevant" - a proven false-positive pattern (a made-up
-  // equipment code scored nearly as close as the real one). Checked before
-  // the normal relevance threshold, and kept as its own flat branch below
-  // rather than nested inside another - per the Phase 7 lesson that this
-  // model blends nested conditions into nonsense.
-  const identifierMismatch = Array.isArray(docResults) && docResults.identifierMismatch === true;
-  // Gate on vectorRows/keywordRows-derived fields, NOT on the merged/display
-  // array - a keyword-only hit has no `distance` and would wrongly fail
-  // `undefined < threshold` if read off `docResults` directly (see tools.js).
-  const isRelevant =
-    !identifierMismatch &&
-    Array.isArray(docResults) &&
-    (docResults.bestVectorDistance < RELEVANCE_THRESHOLD || docResults.keywordHit);
-  const bestDistance = Array.isArray(docResults) ? docResults.bestVectorDistance : null;
+  // Phase 9.4: search plus the relevance decision, in one shared step
+  // (retrieve.js). The model now judges which candidates answer the
+  // question; that replaced the fixed distance threshold, which stopped
+  // working once the corpus grew from 2 chunks to 4,288.
+  // identifierMismatch (Phase 5.6) is still decided in code: the question
+  // named a specific code/ID that no document contains, even though vector
+  // search alone would call a similar chunk "relevant". Kept as its own flat
+  // branch below rather than nested inside another - per the Phase 7 lesson
+  // that this model blends nested conditions into nonsense.
+  const retrieval = await retrieve(question);
+  const { identifierMismatch, isRelevant, bestDistance } = retrieval;
+  const docResults = retrieval.chunks;
 
   // Phase 9: report what the search led to, not just that it ran. The search
   // runs on every question, so "search_company_docs ✓" alone looked the same
@@ -195,9 +190,10 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
     systemContent =
       "You are a helpful assistant. The company document excerpt below is relevant to the user's question. " +
       "Read it carefully and answer specifically using the facts it contains. Only if it truly does not " +
-      "address the question at all, say plainly that you don't know.\n\n" +
-      "Company document excerpt:\n" +
-      docResults.map((r) => `[${r.source}] ${r.content}`).join("\n---\n");
+      "address the question at all, say plainly that you don't know. " +
+      CITE_INSTRUCTION +
+      "\n\nCompany document excerpts:\n" +
+      numberedExcerpts(docResults);
   } else {
     systemContent =
       "You are a helpful assistant. If the user asks about something they told you earlier in this " +
@@ -252,7 +248,9 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       // fromCompanyDocs: this answer was written with a document excerpt in
       // the prompt. Stored with the turn so the multi-agent specialists
       // that cannot see documents are not shown it later (Phase 8c).
-      return { answer: msg.content, usage, fromCompanyDocs: isRelevant };
+      // sources (Phase 9.6): the excerpts the answer cited by number.
+      const sources = isRelevant ? citedSources(msg.content, docResults) : [];
+      return { answer: msg.content, usage, fromCompanyDocs: isRelevant, sources };
     }
 
     msg.tool_calls = toolCalls;

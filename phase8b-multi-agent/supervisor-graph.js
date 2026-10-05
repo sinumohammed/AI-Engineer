@@ -12,8 +12,8 @@ import { ChatOllama } from "@langchain/ollama";
 import { logTrace } from "../phase5-rag/tracer.js";
 import { LLM_BASE_URL, NUM_CTX, TEMPERATURE } from "../phase5-rag/config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
-import { specialists, specialistMessages, historyFor } from "./specialists.js";
-import { ROUTE_SCHEMA, routerMessages, validateRoute, synthesizerMessages } from "./routing.js";
+import { specialists, specialistMessages, historyFor, sourcesFor } from "./specialists.js";
+import { ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, synthesizerMessages } from "./routing.js";
 
 const newModel = (model) =>
   new ChatOllama({ baseUrl: LLM_BASE_URL, model, temperature: TEMPERATURE, numCtx: NUM_CTX });
@@ -66,7 +66,11 @@ async function routerNode(state) {
   const { messages, evidence } = await routerMessages(state.question, state.history);
   const { raw, parsed } = await routerModel.invoke(messages);
   return {
-    route: { ...validateRoute(parsed, state.question), evidence, latencyMs: Date.now() - startedAt },
+    route: {
+      ...applyDocPriority(validateRoute(parsed, state.question), evidence),
+      evidence,
+      latencyMs: Date.now() - startedAt,
+    },
     usage: usageOf(raw),
   };
 }
@@ -98,7 +102,15 @@ async function specialistNode({ task, index, history }) {
 
   return {
     steps: [
-      { index, agent: task.agent, question: task.question, answer, meta: prep.meta, latencyMs: Date.now() - startedAt },
+      {
+        index,
+        agent: task.agent,
+        question: task.question,
+        answer,
+        meta: prep.meta,
+        sources: prep.answer === undefined ? sourcesFor(prep, answer) : [],
+        latencyMs: Date.now() - startedAt,
+      },
     ],
     usage,
   };
@@ -155,8 +167,9 @@ export async function runAgent(question, history = []) {
   await logTrace(trace);
 
   const fromCompanyDocs = trace.steps.some((s) => s.agent === "company_docs" && s.meta.isRelevant);
+  const sources = trace.steps.flatMap((s) => s.sources ?? []);
 
-  return { answer: state.answer, usage, trace, fromCompanyDocs };
+  return { answer: state.answer, usage, trace, fromCompanyDocs, sources };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

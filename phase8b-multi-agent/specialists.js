@@ -8,27 +8,36 @@
 //   runSpecialist()   -> prepare + the hand-rolled model call (llm.js)
 // The LangGraph supervisor calls prepare() and makes the model call itself
 // through ChatOllama, so the prompts and retrieval stay identical.
-import { toolImpls } from "../phase5-rag/tools.js";
-import { RELEVANCE_THRESHOLD } from "../phase5-rag/config.js";
+import { retrieve } from "../phase5-rag/retrieve.js";
+import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "../phase5-rag/citations.js";
 import { chat, SPECIALIST_MODEL } from "./llm.js";
 
-// Retrieval plus the same in-code relevance gate the single agent uses.
-// Exported because the supervisor also runs it BEFORE routing, to show the
-// router what the documents contain (see routing.js).
-export async function searchDocs(question) {
-  const docResults = await toolImpls.search_company_docs({ query: question });
+// Retrieval plus the same relevance decision the single agent uses - since
+// Phase 9.4 the shared retrieve() step, where the model judges which
+// candidates answer the question. Exported because the supervisor also runs it
+// BEFORE routing, to show the router what the documents contain (see
+// routing.js).
+//
+// Remembered briefly per question: a company question is retrieved once for
+// the router's evidence and again by the company_docs specialist, usually
+// with the same wording. Since 9.4 retrieval includes a model call (about
+// 1.7s), so the second one reuses the first.
+const recent = new Map();
+const RECENT_MAX = 50;
 
-  const identifierMismatch = Array.isArray(docResults) && docResults.identifierMismatch === true;
-  const isRelevant =
-    !identifierMismatch &&
-    Array.isArray(docResults) &&
-    (docResults.bestVectorDistance < RELEVANCE_THRESHOLD || docResults.keywordHit);
-  return {
-    docResults,
-    isRelevant,
-    identifierMismatch,
-    bestDistance: Array.isArray(docResults) ? docResults.bestVectorDistance : null,
-  };
+export async function searchDocs(question) {
+  if (!recent.has(question)) {
+    if (recent.size >= RECENT_MAX) recent.delete(recent.keys().next().value);
+    recent.set(
+      question,
+      retrieve(question).catch((err) => {
+        recent.delete(question);
+        throw err;
+      })
+    );
+  }
+  const { chunks, isRelevant, identifierMismatch, bestDistance } = await recent.get(question);
+  return { docResults: chunks, isRelevant, identifierMismatch, bestDistance };
 }
 
 // Always-retrieve RAG, same retrieval and same prompt wording as the
@@ -60,11 +69,20 @@ async function prepareCompanyDocs(question) {
     systemContent:
       "You are a helpful assistant. The company document excerpt below is relevant to the user's question. " +
       "Read it carefully and answer specifically using the facts it contains. Only if it truly does not " +
-      "address the question at all, say plainly that you don't know.\n\n" +
-      "Company document excerpt:\n" +
-      docResults.map((r) => `[${r.source}] ${r.content}`).join("\n---\n"),
+      "address the question at all, say plainly that you don't know. " +
+      CITE_INSTRUCTION +
+      "\n\nCompany document excerpts:\n" +
+      numberedExcerpts(docResults),
     meta,
+    // the numbered excerpts, so the cited ones can be listed (Phase 9.6)
+    chunks: docResults,
   };
+}
+
+// The excerpts a specialist's answer cited (Phase 9.6). Only company_docs
+// reads documents, so the other specialists never have any.
+export function sourcesFor(prep, answer) {
+  return prep.chunks ? citedSources(answer, prep.chunks) : [];
 }
 
 // Found in the chat UI (Phase 8c): with `general` picked manually, "what is
@@ -169,7 +187,7 @@ export function specialistMessages(systemContent, question, history, summary) {
 export async function runSpecialist(name, question, history = [], summary) {
   const prep = await specialists[name].prepare(question);
   if (prep.answer !== undefined) {
-    return { answer: prep.answer, llmCalls: 0, promptTokens: 0, completionTokens: 0, meta: prep.meta };
+    return { answer: prep.answer, llmCalls: 0, promptTokens: 0, completionTokens: 0, meta: prep.meta, sources: [] };
   }
   const res = await chat({
     model: SPECIALIST_MODEL,
@@ -182,5 +200,6 @@ export async function runSpecialist(name, question, history = [], summary) {
     promptTokens: res.promptTokens,
     completionTokens: res.completionTokens,
     meta: prep.meta,
+    sources: sourcesFor(prep, res.content),
   };
 }

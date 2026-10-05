@@ -59,13 +59,14 @@ export const ROUTER_PROMPT =
   "been asked alone - two parts of one message often need different agents.\n" +
   "- Never send the same question to two agents.\n" +
   "- How to use git, a programming language or a command-line tool is a coding question, even when the " +
-  "company documents mention related words.\n" +
+  "company documents mention related words - unless the excerpt directly answers it (see the next rule).\n" +
   "- Each task's question must be self-contained: keep the user's own wording, and only rewrite it when it " +
   "refers to earlier conversation (\"that\", \"it\") so it makes sense on its own.\n" +
   "- You may be shown an excerpt found in the company documents. It may answer one part of the message and " +
   "not another: judge each part separately. If the excerpt directly answers a part, send that part to " +
-  "company_docs even when the wording does not mention the company. If the excerpt is only loosely related " +
-  "to a part and does not answer it, ignore the excerpt for that part.\n" +
+  "company_docs even when the wording does not mention the company, and even when general knowledge or coding " +
+  "knowledge could also answer it: the company's own documents take priority over a general answer. If the " +
+  "excerpt is only loosely related to a part and does not answer it, ignore the excerpt for that part.\n" +
   "- A question about this company goes to company_docs even when no excerpt answers it.";
 
 // Found by the routing eval: "How are rollbacks done?" has no "our" in it, so
@@ -126,6 +127,27 @@ export function validateRoute(parsed, question) {
   return { reason, tasks, fallback };
 }
 
+// Phase 9.6, found by the citation eval: "Who is eligible for FMLA?" and
+// "Should git commits be cryptographically signed?" were sent to `general`
+// and `coding`, which answered from general knowledge - although the
+// retrieval step had judged handbook excerpts as answering them, and the
+// router was shown that excerpt. A stronger instruction ("the company's own
+// documents take priority") changed none of the three decisions.
+// So it is decided in code: for a one-part message, if the retrieval step
+// judged the documents as answering it, company_docs answers it. Messages
+// with several parts keep the router's split (the evidence was retrieved for
+// the whole message, so it cannot say which part it answers).
+// DOC_PRIORITY=0 turns this off, to compare.
+const DOC_PRIORITY = process.env.DOC_PRIORITY !== "0";
+
+export function applyDocPriority(decision, evidence) {
+  const [only] = decision.tasks;
+  if (!DOC_PRIORITY || decision.tasks.length !== 1 || !evidence?.isRelevant || only.agent === "company_docs") {
+    return decision;
+  }
+  return { ...decision, tasks: [{ ...only, agent: "company_docs" }], overriddenFrom: only.agent };
+}
+
 export function synthesizerMessages(question, steps) {
   return [
     {
@@ -134,7 +156,8 @@ export function synthesizerMessages(question, steps) {
         "You combine answers from specialist agents into one reply to the user. Cover each part of the user's " +
         "message in the order they asked it. Use only what the specialists said: do not add, correct or drop " +
         "facts. If a specialist said it does not have the information, say that plainly for that part. Answer " +
-        "the user directly, as one assistant: do not mention specialists, agents or that answers were combined.",
+        "the user directly, as one assistant: do not mention specialists, agents or that answers were combined. " +
+        "Keep citation markers such as [1] exactly as they appear, next to the facts they belong to.",
     },
     {
       role: "user",

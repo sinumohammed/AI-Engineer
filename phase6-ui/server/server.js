@@ -65,7 +65,7 @@ app.get("/api/chat/stream", async (req, res) => {
     // are identical for both modes - only the progress events differ: the
     // single agent reports tool calls, the supervisor reports its routing
     // decision and each specialist starting and finishing.
-    const { answer, usage, fromCompanyDocs } =
+    const { answer, usage, fromCompanyDocs, sources = [] } =
       mode === "multi"
         ? await runMultiAgent(question, history, {
             onRoute: (decision) => send("route", decision),
@@ -92,6 +92,8 @@ app.get("/api/chat/stream", async (req, res) => {
       send("answer_chunk", { text: word + " " });
       await new Promise((r) => setTimeout(r, 40));
     }
+    // Phase 9.6: the document excerpts the answer cited, shown under it.
+    if (sources.length) send("sources", sources);
     send("usage", usage);
 
     const [updatedHistory, updatedSummary] = await Promise.all([getHistory(sessionId), getSummary(sessionId)]);

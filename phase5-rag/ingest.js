@@ -19,16 +19,31 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { LLM_BASE_URL, EMBED_MODEL, authHeaders } from "./config.js";
+import { LLM_BASE_URL, EMBED_MODEL, EMBED_PREFIX, authHeaders } from "./config.js";
+import { cleanDocument } from "./cleanText.js";
+import { chunkFixed, chunkSections } from "./chunker.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOTS = [
   { dir: join(HERE, "docs"), prefix: "" },
   { dir: join(HERE, "docs-private"), prefix: "private/" },
 ];
-const CHUNK_SIZE = Number(process.env.CHUNK_SIZE ?? 800);
-const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP ?? 100);
+// Defaults are the settings Phase 9.3 measured best (see
+// phase9-real-docs/PHASE9_NOTES.md): cleaned text, cut at headings, each
+// chunk labelled "Page > Section", 500-character chunks, nomic task
+// prefixes. Phase 5's original pipeline is CLEAN=0 CHUNKING=fixed HEADER=0
+// CHUNK_SIZE=800 CHUNK_OVERLAP=100 EMBED_PREFIX=0.
+const CHUNK_SIZE = Number(process.env.CHUNK_SIZE ?? 500);
+const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP ?? 60);
 const TABLE = process.env.INGEST_TABLE ?? "doc_chunks";
+// Phase 9.2: strip front matter, template tags, link URLs and HTML before
+// chunking (see cleanText.js). CLEAN=0 turns it off.
+const CLEAN = process.env.CLEAN !== "0";
+// Phase 9.3: "sections" cuts at headings instead of every CHUNK_SIZE
+// characters, and each chunk starts with "Page title > Section" (see
+// chunker.js). CHUNKING=fixed / HEADER=0 bring back the old behaviour.
+const CHUNKING = process.env.CHUNKING ?? "sections";
+const HEADER = process.env.HEADER !== "0";
 if (!/^[a-z_][a-z0-9_]*$/.test(TABLE)) throw new Error(`Invalid INGEST_TABLE: ${TABLE}`);
 
 const db = new pg.Client({
@@ -39,23 +54,13 @@ const db = new pg.Client({
   database: "rag",
 });
 
-function chunkText(text) {
-  const chunks = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + CHUNK_SIZE, text.length);
-    chunks.push(text.slice(start, end));
-    if (end === text.length) break;
-    start = end - CHUNK_OVERLAP;
-  }
-  return chunks;
-}
-
 async function embed(text) {
   const res = await fetch(`${LLM_BASE_URL}/api/embeddings`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ model: EMBED_MODEL, prompt: text }),
+    // nomic-embed-text was trained with task prefixes: documents as
+    // "search_document: ...", questions as "search_query: ..." (config.js).
+    body: JSON.stringify({ model: EMBED_MODEL, prompt: EMBED_PREFIX ? `search_document: ${text}` : text }),
   });
   if (!res.ok) throw new Error(`Embedding request failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
@@ -90,13 +95,22 @@ if (!docs.length) {
   process.exit(0);
 }
 
-console.log(`Ingesting ${docs.length} files into ${TABLE} (chunk size ${CHUNK_SIZE}, overlap ${CHUNK_OVERLAP})...`);
+console.log(
+  `Ingesting ${docs.length} files into ${TABLE} (chunk size ${CHUNK_SIZE}, overlap ${CHUNK_OVERLAP}, ` +
+    `${CLEAN ? "cleaned" : "raw"} text, ${CHUNKING} chunking${HEADER ? " with headers" : ""}` +
+    `${EMBED_PREFIX ? ", embedding prefixes" : ""})...`
+);
 const startedAt = Date.now();
 let totalChunks = 0;
 
 for (const [n, doc] of docs.entries()) {
-  const text = readFileSync(doc.path, "utf-8");
-  const chunks = text.trim() ? chunkText(text) : [];
+  const raw = readFileSync(doc.path, "utf-8");
+  const { title, text } = CLEAN ? cleanDocument(raw) : { title: null, text: raw };
+  const chunks = !text.trim()
+    ? []
+    : CHUNKING === "sections"
+      ? chunkSections(text, { title, size: CHUNK_SIZE, overlap: CHUNK_OVERLAP, header: HEADER })
+      : chunkFixed(text, { size: CHUNK_SIZE, overlap: CHUNK_OVERLAP });
   const embeddings = [];
   for (const chunk of chunks) embeddings.push(await embed(chunk));
 

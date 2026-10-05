@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 import { withRetry } from "./retry.js";
-import { LLM_BASE_URL, EMBED_MODEL, RELEVANCE_THRESHOLD, authHeaders } from "./config.js";
+import { LLM_BASE_URL, EMBED_MODEL, EMBED_PREFIX, RELEVANCE_THRESHOLD, authHeaders } from "./config.js";
 
 const TOP_K = 4;
 
@@ -37,7 +37,9 @@ async function embed(text) {
       const res = await fetch(`${LLM_BASE_URL}/api/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ model: EMBED_MODEL, prompt: text }),
+        // Questions get the "search_query: " prefix when documents were
+        // ingested with "search_document: " (config.js, EMBED_PREFIX).
+        body: JSON.stringify({ model: EMBED_MODEL, prompt: EMBED_PREFIX ? `search_query: ${text}` : text }),
       });
       if (!res.ok) {
         const err = new Error(`Embedding request failed: ${res.status} ${await res.text()}`);
@@ -67,15 +69,19 @@ export async function vectorSearch(query, { k = 10, table = "doc_chunks" } = {})
   return rows;
 }
 
-// How many chunks of a table contain a piece of text, ignoring case and
-// line breaks. Lets the eval tell "search did not find it" apart from
-// "no single chunk holds it" (the text was cut in two by a chunk boundary).
+// How many chunks of a table contain a piece of text, compared the way a
+// reader sees it: link addresses and markdown emphasis characters dropped,
+// case and line breaks ignored (the same rules as the eval's normalize()).
+// Lets the eval tell "search did not find it" apart from "no single chunk
+// holds it" (the text was cut in two by a chunk boundary).
 export async function countChunksContaining(text, table = "doc_chunks") {
   if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
   await ensureDb();
+  const readable = (sql) =>
+    `regexp_replace(regexp_replace(regexp_replace(${sql}, '\\]\\((<[^>]*>|[^)]*)\\)', '', 'g'), '[\\[\\]_*\`]', '', 'g'), '\\s+', ' ', 'g')`;
   const { rows } = await db.query(
     `SELECT count(*)::int AS n FROM ${table}
-     WHERE position(lower($1) in lower(regexp_replace(content, '\\s+', ' ', 'g'))) > 0`,
+     WHERE position(lower(${readable("$1")}) in lower(${readable("content")})) > 0`,
     [text]
   );
   return rows[0].n;
@@ -155,7 +161,9 @@ export const toolImpls = {
     }
   },
   get_current_time: () => new Date().toString(),
-  search_company_docs: async ({ query }) => {
+  // `k`: how many candidates to return. The agents get 4; the Phase 9.4
+  // reranker asks for more and picks the best of them (see retrieve.js).
+  search_company_docs: async ({ query, k = TOP_K }) => {
     try {
       await ensureDb();
       const queryEmbedding = await embed(query);
@@ -166,7 +174,7 @@ export const toolImpls = {
            FROM doc_chunks
            ORDER BY distance ASC
            LIMIT $2`,
-          [`[${queryEmbedding.join(",")}]`, TOP_K]
+          [`[${queryEmbedding.join(",")}]`, k]
         ),
         // websearch_to_tsquery lexes a hyphenated code like "XJ-2200" as a
         // phrase ('xj' <-> '-2200'), ANDed with the query's other terms - so
@@ -179,7 +187,7 @@ export const toolImpls = {
            WHERE content_tsv @@ websearch_to_tsquery('english', $1)
            ORDER BY rank DESC
            LIMIT $2`,
-          [query, TOP_K]
+          [query, k]
         ),
       ]);
 
@@ -202,7 +210,7 @@ export const toolImpls = {
       });
       const merged = [...scored.entries()]
         .sort((a, b) => b[1] - a[1])
-        .slice(0, TOP_K)
+        .slice(0, k)
         .map(([k]) => byKey.get(k))
         .map((r) => ({ source: r.source, distance: r.distance, content: r.content }));
 

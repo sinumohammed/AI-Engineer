@@ -10,6 +10,11 @@ export const EMBED_MODEL = process.env.EMBED_MODEL ?? "nomic-embed-text";
 export const NUM_CTX = Number(process.env.NUM_CTX ?? 8192);
 export const TEMPERATURE = Number(process.env.TEMPERATURE ?? 0);
 export const RELEVANCE_THRESHOLD = Number(process.env.RELEVANCE_THRESHOLD ?? 0.5);
+// Phase 9.3: nomic-embed-text expects a task prefix on every input -
+// "search_document: " when storing, "search_query: " when searching. Must
+// match how the table being searched was ingested. On by default since 9.3;
+// EMBED_PREFIX=0 only for tables ingested without it.
+export const EMBED_PREFIX = process.env.EMBED_PREFIX !== "0";
 
 // Set only when pointing at a hosted provider that requires auth (Ollama
 // itself needs none - this stays unset for the default local setup). When

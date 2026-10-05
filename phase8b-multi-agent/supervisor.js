@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 import { logTrace } from "../phase5-rag/tracer.js";
 import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
-import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, synthesizerMessages } from "./routing.js";
+import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, synthesizerMessages } from "./routing.js";
 
 export async function route(question, history = []) {
   const startedAt = Date.now();
@@ -30,7 +30,7 @@ export async function route(question, history = []) {
   }
 
   return {
-    ...validateRoute(parsed, question),
+    ...applyDocPriority(validateRoute(parsed, question), evidence),
     evidence,
     latencyMs: Date.now() - startedAt,
     promptTokens: res.promptTokens,
@@ -87,7 +87,14 @@ export async function runAgent(
       count(result, result.llmCalls);
       const latencyMs = Date.now() - stepStartedAt;
       onAgentDone?.({ index, agent: task.agent, latencyMs });
-      return { agent: task.agent, question: task.question, answer: result.answer, meta: result.meta, latencyMs };
+      return {
+        agent: task.agent,
+        question: task.question,
+        answer: result.answer,
+        meta: result.meta,
+        sources: result.sources,
+        latencyMs,
+      };
     })
   );
 
@@ -118,6 +125,7 @@ export async function runAgent(
       reason: routing.reason,
       tasks: routing.tasks,
       fallback: routing.fallback,
+      overriddenFrom: routing.overriddenFrom,
       manual,
       evidence: routing.evidence,
       latencyMs: routing.latencyMs,
@@ -134,8 +142,12 @@ export async function runAgent(
   // The chat server stores this with the turn, so later a specialist that
   // cannot see documents is not shown this answer (see historyFor).
   const fromCompanyDocs = steps.some((s) => s.agent === "company_docs" && s.meta.isRelevant);
+  // Phase 9.6: the document excerpts the answer cited. Only company_docs
+  // cites; with two company_docs tasks their numbers can overlap - rare, and
+  // left as a known limitation.
+  const sources = steps.flatMap((s) => s.sources ?? []);
 
-  return { answer, usage, trace, fromCompanyDocs };
+  return { answer, usage, trace, fromCompanyDocs, sources };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
