@@ -1,7 +1,7 @@
 # AI Engineer project: learning guide
 
 A step-by-step walk through everything built in this project, from the first local model call to a
-multi-agent chat app. Written to be read top to bottom.
+multi-agent chat app working over a real 241-page handbook. Written to be read top to bottom.
 
 - **This guide** is the simple version: what each step is, how the flow works, what changed and why.
 - **`ROADMAP.md`** is the detailed log: every experiment, number and dead end.
@@ -40,6 +40,7 @@ time, and prove each one works before moving on.**
 | 11 | Phase 8a | A framework (LangChain) | Rebuild the agent with a framework and compare |
 | 12 | Phase 8b | Multi-agent | A router plus specialist agents |
 | 13 | Phase 8c | Multi-agent in the UI | Switch between single and multi-agent in the chat app |
+| 14 | Phase 9 | Real documents | A 241-page handbook instead of 2 sample files, and everything re-measured |
 
 The system as it stands today:
 
@@ -327,6 +328,46 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 
 - **Try it:** `cd phase6-ui && ./start.sh`, open http://localhost:5173, ask the same question in both modes.
 
+### Step 14 - Phase 9: real documents at real size
+
+- **Goal:** test search on a real corpus. Everything before used 2 made-up files (2 chunks), where
+  search cannot miss.
+- **Built:**
+  - The public TTS Handbook (241 pages, public domain) in `phase5-rag/docs/handbook/`, and a
+    git-ignored `phase5-rag/docs-private/` for confidential documents.
+  - `phase9-real-docs/retrieval-eval.js`: a test of search alone, with no model call. It checks
+    whether the passage that answers each question reaches the agent.
+- **Flow of retrieval now:**
+  ```
+  question
+     │
+  search (vector + keyword) ──> 12 candidates
+     │
+  model judges: which of these answer the question?
+     ├─ none ──> "the documents do not cover this"
+     └─ some ──> best 4, numbered [1]..[4] ──> model answers and cites [n]
+  ```
+- **What changed, each step measured:**
+
+| Step | Change | Effect |
+|---|---|---|
+| 9.1 | Load the handbook (2 → 2,340 chunks) | Paraphrased questions: answer in the top 4 only 3/10. The 0.5 distance threshold called 5/8 off-topic questions relevant. |
+| 9.2 | Clean the text: strip front matter, template tags, link addresses, HTML | Top result correct for 14/20 direct questions, was 7/20 |
+| 9.3 | Cut chunks at headings, label each "Page > Section", 500 characters, nomic task prefixes | Direct 17/20 top result; private docs 4/4, was 2/4 |
+| 9.4 | Let the model judge relevance instead of a distance threshold | Off-topic wrongly treated as relevant 0/8, was 7/8. Costs about 1.7s per question. |
+| 9.6 | Citations: answers say which document section each fact came from | 37/37 document answers cite a source |
+
+- **Learned:**
+  - At 2 chunks, search could not fail, so the earlier tests could not see search problems. A test
+    of search on its own found them.
+  - A threshold tuned on a tiny corpus breaks when the corpus grows: off-topic questions moved from
+    0.67 to as close as 0.30.
+  - Cleaning and structure (what goes into a chunk) mattered more than the chunk size.
+  - The prompt-versus-code lesson came back twice: a stronger router instruction did not stop it
+    sending "Who is eligible for FMLA?" to the general specialist, and a rule in code did.
+- **Try it:** `cd phase9-real-docs && npm run eval`, then `npm run eval:citations`. In the chat app,
+  ask "How much paid parental leave do I get?" and look at the Sources under the answer.
+
 ---
 
 ## 4. Iteration log: problem, change, result
@@ -356,6 +397,13 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 19 | 8c | Wrong specialist repeats company facts from history | Tag and hide document answers | 4/4 refuse |
 | 20 | 8c | Close-topic two-part questions not split | Router lists parts first | 20/24 to 24/24 |
 | 21 | 8c | That fix split a one-part question | Label the user's message and the excerpt | 24/24 |
+| 22 | 9.1 | Tests could not see search problems at 2 chunks | Real corpus + a retrieval-only eval | Baseline: paraphrased 3/10 |
+| 23 | 9.1 | A test assumed "the docs say nothing about backups" | Accept "not specified", forbid an invented schedule | 7/7 |
+| 24 | 9.2 | Markup inside chunks | Clean text before chunking | Top result 7/20 → 14/20 |
+| 25 | 9.3 | Chunks cut mid-topic, no context | Heading-based chunks with a "Page > Section" label, 500 characters | 17/20, private 4/4 |
+| 26 | 9.3 | Off-topic questions under the 0.5 threshold | Model judges relevance instead (9.4) | 0/8 false positives |
+| 27 | 9.6 | Answers did not say where facts came from | Numbered excerpts, cited sources in the UI | 37/37 cite |
+| 28 | 9.6 | Router sent document questions to the general specialist | Code rule: document-answerable goes to company_docs | 37/37 from docs |
 
 Where things stand:
 
@@ -367,6 +415,9 @@ Where things stand:
 | Supervisor two-part answers | 3/3 |
 | Supervisor history leak cases | 4/4 |
 | Supervisor on the 7 single-agent cases | 7/7 |
+| Retrieval, 37 cases: answer reaches the agent | 34/37 |
+| Retrieval, off-topic questions wrongly treated as relevant | 0/8 |
+| Citations: document answers that cite a source | 37/37 (single and multi-agent) |
 
 ---
 
@@ -387,7 +438,9 @@ Where things stand:
    then became permanent tests.
 8. **More agents means more places to fail.** Multi-agent added routing mistakes and memory leaks
    between agents, and doubled the model calls. Use it when one prompt can no longer do the job.
-9. **Bigger is not always needed.** For "read this text and answer", a 4 GB model matched a 21 GB
+9. **Test the parts, not only the final answer.** A retrieval eval with no model call found
+   problems that answer tests could not see, and showed which step to fix.
+10. **Bigger is not always needed.** For "read this text and answer", a 4 GB model matched a 21 GB
    one. Size mattered when the model had to choose and call tools.
 
 ---
@@ -439,5 +492,8 @@ To try another model, change `CHAT_MODEL` in `phase5-rag/.env` and restart the c
 | `44727c6` | Phase 8c: manual specialist pick |
 | `3a37379` | Phase 8c: fix answers leaking through history |
 | `94043a2` | Phase 8c: fix two-part questions not being split |
+| `787372f` | Phase 9.1: real corpus and retrieval baseline |
+| `0cc4cfd` | Phase 9: chip shows what the document search led to |
+| `53375cc` | Phase 9.2-9.6: cleaning, chunking, judged relevance, citations |
 
-Commits from `f82eae5` onward are on the `phase8b-multi-agent` branch.
+Commits up to `eb72eb0` are on `master`. Phase 9 commits are on the `phase9-real-docs` branch.

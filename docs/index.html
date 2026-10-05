@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Thirteen steps from a first local model call to a multi-agent chat app, with flow diagrams and a log of every problem, change and result.">
+<meta name="description" content="Fourteen steps from a first local model call to a multi-agent chat app over a real 241-page handbook, with flow diagrams and a log of every problem, change and result.">
 <style>
   :root { color-scheme: light; }
   body { margin: 0; }
@@ -164,14 +164,15 @@
       <li><a href="#s11"><span>11</span>A framework</a></li>
       <li><a href="#s12"><span>12</span>Multi-agent</a></li>
       <li><a href="#s13"><span>13</span>Multi-agent in the UI</a></li>
+      <li><a href="#s14"><span>14</span>Real documents</a></li>
     </ol>
   </nav>
 
   <main>
     <header class="top">
-      <span class="eyebrow">Phases 1 to 8c · local models with Ollama</span>
+      <span class="eyebrow">Phases 1 to 9 · local models with Ollama</span>
       <h1>AI Engineer Learning Guide</h1>
-      <p class="lede">Thirteen steps from the first local model call to a multi-agent chat app. Each step adds one capability, and each one was proved to work before the next began.</p>
+      <p class="lede">Fourteen steps from the first local model call to a multi-agent chat app working over a real 241-page handbook. Each step adds one capability, and each one was proved to work before the next began.</p>
       <p><a href="https://github.com/sinumohammed/AI-Engineer">Source code on GitHub</a></p>
     </header>
 
@@ -259,6 +260,7 @@
             <tr><td class="n">11</td><td class="n">8a</td><td>A framework</td><td>Rebuild the agent with LangChain and compare</td></tr>
             <tr><td class="n">12</td><td class="n">8b</td><td>Multi-agent</td><td>A router plus specialist agents</td></tr>
             <tr><td class="n">13</td><td class="n">8c</td><td>Multi-agent in the UI</td><td>Switch between the two in the chat app</td></tr>
+            <tr><td class="n">14</td><td class="n">9</td><td>Real documents</td><td>A 241-page handbook instead of 2 sample files, re-measured</td></tr>
           </tbody>
         </table>
       </div>
@@ -695,6 +697,67 @@ npm run ask -- "What is our rollback process, and how do I list git tags?"</pre>
 ./start.sh</pre><button type="button">Copy</button></div> Open <code>http://localhost:5173</code> and ask the same question in both modes.</dd>
           </dl>
         </article>
+        <article class="step" id="s14">
+          <div class="step-head"><span class="step-no">Step 14</span><h3>Real documents at real size</h3><span class="phase">Phase 9</span></div>
+          <p class="goal">Test search on a real corpus. Everything before used two made-up files, 2 chunks, where search cannot miss.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><ul>
+              <li>The public TTS Handbook (241 pages, public domain) in <code>phase5-rag/docs/handbook/</code>, and a git-ignored <code>docs-private/</code> folder for confidential documents.</li>
+              <li><code>phase9-real-docs/retrieval-eval.js</code>: a test of search alone, with no model call. It checks whether the passage that answers each question reaches the agent.</li>
+            </ul></dd>
+          </dl>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 320" role="img" aria-label="The question goes to vector and keyword search, which return 12 candidates. The model judges which candidates answer the question. If none do, the documents do not cover it. If some do, the best four are numbered and the model answers citing them.">
+                <defs><marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <rect class="b" x="290" y="14" width="140" height="36" rx="6"/>
+                <text x="360" y="37" text-anchor="middle">Question</text>
+                <line class="ln" x1="360" y1="50" x2="360" y2="81" marker-end="url(#a8)"/>
+                <rect class="b" x="220" y="82" width="280" height="46" rx="6"/>
+                <text class="t" x="360" y="102" text-anchor="middle">Search: vector + keyword</text>
+                <text class="s" x="360" y="119" text-anchor="middle">12 candidate chunks</text>
+                <line class="ln" x1="360" y1="128" x2="360" y2="161" marker-end="url(#a8)"/>
+                <rect class="ba" x="220" y="162" width="280" height="48" rx="6"/>
+                <text class="t" x="360" y="182" text-anchor="middle">Model judges relevance</text>
+                <text class="s" x="360" y="199" text-anchor="middle">which excerpts answer the question?</text>
+                <line class="ln" x1="290" y1="210" x2="182" y2="257" marker-end="url(#a8)"/>
+                <text class="s" x="226" y="236" text-anchor="end">none</text>
+                <line class="ln" x1="430" y1="210" x2="538" y2="257" marker-end="url(#a8)"/>
+                <text class="s" x="494" y="236">some</text>
+                <rect class="bw" x="60" y="258" width="240" height="50" rx="6"/>
+                <text x="180" y="279" text-anchor="middle">Documents don't cover it</text>
+                <text class="s" x="180" y="296" text-anchor="middle">no excerpt reaches the answer</text>
+                <rect class="b" x="420" y="258" width="240" height="50" rx="6"/>
+                <text x="540" y="279" text-anchor="middle">Best 4, numbered [1] to [4]</text>
+                <text class="s" x="540" y="296" text-anchor="middle">model answers and cites [n]</text>
+              </svg>
+            </div>
+            <figcaption>The model's judgement (blue) replaced a fixed distance threshold that stopped working once the corpus grew. It costs one extra model call, about 1.7 seconds per question.</figcaption>
+          </figure>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>Step</th><th>Change</th><th>Effect</th></tr></thead>
+              <tbody>
+                <tr><td class="n">9.1</td><td>Load the handbook: 2 chunks become 2,340</td><td>Paraphrased questions: answer in the top 4 only 3/10. The 0.5 threshold called 5/8 off-topic questions relevant.</td></tr>
+                <tr><td class="n">9.2</td><td>Clean the text: strip front matter, template tags, link addresses, HTML</td><td class="res">Top result correct for 14/20 direct questions, was 7/20</td></tr>
+                <tr><td class="n">9.3</td><td>Cut at headings, label each chunk "Page &gt; Section", 500 characters, nomic task prefixes</td><td class="res">17/20 top result; private docs 4/4, was 2/4</td></tr>
+                <tr><td class="n">9.4</td><td>The model judges relevance instead of a distance threshold</td><td class="res">Off-topic wrongly relevant 0/8, was 7/8</td></tr>
+                <tr><td class="n">9.6</td><td>Citations: answers name the document section each fact came from</td><td class="res">37/37 document answers cite a source</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="parts">
+            <dt>Learned</dt><dd><ul>
+              <li>At 2 chunks search could not fail, so the earlier tests could not see search problems. A test of search on its own found them.</li>
+              <li>A threshold tuned on a tiny corpus breaks when the corpus grows: off-topic questions moved from a distance of 0.67 to as close as 0.30.</li>
+              <li>What goes into a chunk, clean text and its section, mattered more than the chunk size.</li>
+              <li>The prompt-versus-code lesson came back: a stronger router instruction did not stop it sending "Who is eligible for FMLA?" to the general specialist, and a rule in code did.</li>
+            </ul></dd>
+            <dt>Try it</dt><dd><div class="cmd"><pre>cd phase9-real-docs
+npm run eval
+npm run eval:citations</pre><button type="button">Copy</button></div> In the chat app, ask "How much paid parental leave do I get?" and look at the Sources under the answer.</dd>
+          </dl>
+        </article>
       </div>
     </section>
 
@@ -726,6 +789,13 @@ npm run ask -- "What is our rollback process, and how do I list git tags?"</pre>
             <tr><td class="n">19</td><td class="n">8c</td><td>Wrong specialist repeats company facts from history</td><td>Tag and hide document answers</td><td class="res">4/4 refuse</td></tr>
             <tr><td class="n">20</td><td class="n">8c</td><td>Close-topic two-part questions not split</td><td>Router lists the parts first</td><td class="res">20/24 to 24/24</td></tr>
             <tr><td class="n">21</td><td class="n">8c</td><td>That fix split a one-part question</td><td>Label the user's message and the excerpt</td><td class="res">24/24</td></tr>
+            <tr><td class="n">22</td><td class="n">9.1</td><td>Tests could not see search problems at 2 chunks</td><td>Real corpus and a retrieval-only eval</td><td class="res">Baseline: paraphrased 3/10</td></tr>
+            <tr><td class="n">23</td><td class="n">9.1</td><td>A test assumed the docs say nothing about backups</td><td>Accept "not specified", forbid an invented schedule</td><td class="res">7/7</td></tr>
+            <tr><td class="n">24</td><td class="n">9.2</td><td>Markup inside chunks</td><td>Clean text before chunking</td><td class="res">Top result 7/20 to 14/20</td></tr>
+            <tr><td class="n">25</td><td class="n">9.3</td><td>Chunks cut mid-topic with no context</td><td>Heading-based chunks with a section label, 500 characters</td><td class="res">17/20, private 4/4</td></tr>
+            <tr><td class="n">26</td><td class="n">9.4</td><td>Off-topic questions under the 0.5 threshold</td><td>The model judges relevance</td><td class="res">0/8 false positives</td></tr>
+            <tr><td class="n">27</td><td class="n">9.6</td><td>Answers did not say where facts came from</td><td>Numbered excerpts, cited sources in the UI</td><td class="res">37/37 cite</td></tr>
+            <tr><td class="n">28</td><td class="n">9.6</td><td>Router sent document questions to the general specialist</td><td>Code rule: document-answerable goes to company_docs</td><td class="res">37/37 from docs</td></tr>
           </tbody>
         </table>
       </div>
@@ -740,6 +810,9 @@ npm run ask -- "What is our rollback process, and how do I list git tags?"</pre>
             <tr><td>Supervisor two-part answers</td><td class="n">3/3</td></tr>
             <tr><td>Supervisor history-leak cases</td><td class="n">4/4</td></tr>
             <tr><td>Supervisor on the 7 single-agent cases</td><td class="n">7/7</td></tr>
+            <tr><td>Retrieval, 37 cases: answer reaches the agent</td><td class="n">34/37</td></tr>
+            <tr><td>Retrieval, off-topic questions wrongly treated as relevant</td><td class="n">0/8</td></tr>
+            <tr><td>Document answers that cite a source (single and multi-agent)</td><td class="n">37/37</td></tr>
           </tbody>
         </table>
       </div>
@@ -756,6 +829,7 @@ npm run ask -- "What is our rollback process, and how do I list git tags?"</pre>
         <li><strong>Tests can be wrong too.</strong> Correct answers failed on wording, and a test set with only easy two-part questions hid a routing bug.</li>
         <li><strong>Using the app finds what tests miss.</strong> All three problems in step 13 came from clicking around, then became permanent tests.</li>
         <li><strong>More agents means more places to fail.</strong> Multi-agent added routing mistakes and memory leaking between agents, and doubled the model calls.</li>
+        <li><strong>Test the parts, not only the final answer.</strong> A retrieval eval with no model call found problems that answer tests could not see, and showed which step to fix.</li>
         <li><strong>Bigger is not always needed.</strong> For "read this text and answer", a 4 GB model matched a 21 GB one. Size mattered when the model had to choose and call tools.</li>
       </ol>
     </section>
