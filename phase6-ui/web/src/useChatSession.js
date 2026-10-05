@@ -51,7 +51,9 @@ function reducer(state, action) {
         ...state,
         messages: updateLast(state.messages, (m) => ({
           ...m,
-          tools: m.tools.map((t) => (t.name === action.name && t.status === "calling" ? { ...t, status: "done" } : t)),
+          tools: m.tools.map((t) =>
+            t.name === action.name && t.status === "calling" ? { ...t, status: "done", outcome: action.outcome } : t
+          ),
         })),
       };
     // Phase 8c (multi-agent mode): the supervisor's routing decision, then

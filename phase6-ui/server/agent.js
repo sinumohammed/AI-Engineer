@@ -158,7 +158,6 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // the same onToolCall/onToolResult callbacks so the UI shows it happened.
   trackedOnToolCall("search_company_docs", { query: question });
   const docResults = await toolImpls.search_company_docs({ query: question });
-  onToolResult?.("search_company_docs", docResults);
 
   // identifierMismatch (Phase 5.6): the question named a specific code/ID
   // but the exact-match keyword search (see tools.js) found no chunk
@@ -177,6 +176,14 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
     Array.isArray(docResults) &&
     (docResults.bestVectorDistance < RELEVANCE_THRESHOLD || docResults.keywordHit);
   const bestDistance = Array.isArray(docResults) ? docResults.bestVectorDistance : null;
+
+  // Phase 9: report what the search led to, not just that it ran. The search
+  // runs on every question, so "search_company_docs ✓" alone looked the same
+  // for a company question and for "capital of France". With the handbook
+  // loaded, the relevance check now gets general questions wrong, and the UI
+  // had no way to show it. Reported after the decision, so it is the real one.
+  const outcome = identifierMismatch ? "code not found" : isRelevant ? "used" : "not relevant";
+  onToolResult?.("search_company_docs", docResults, { outcome, bestDistance });
 
   let systemContent;
   if (identifierMismatch) {

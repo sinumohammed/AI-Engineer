@@ -69,9 +69,14 @@ export default function App() {
               <div style={styles.bubble(m.role)}>
                 {m.role === "assistant" && m.tools?.length > 0 && (
                   <div style={styles.toolLog}>
+                    {/* Phase 9: the document search runs on every question, so
+                        the chip also says what it led to. "not relevant" is
+                        grey: the search ran, but the answer came from the
+                        model's own knowledge. */}
                     {m.tools.map((t, j) => (
-                      <span key={j} style={styles.toolChip(t.status)}>
+                      <span key={j} style={styles.toolChip(t.outcome === "used" || !t.outcome ? t.status : "skipped")}>
                         {t.status === "calling" ? "⏳" : "✓"} {t.name}
+                        {t.outcome && ` · ${t.outcome}`}
                       </span>
                     ))}
                   </div>
@@ -266,8 +271,8 @@ const styles = {
     fontFamily: "monospace",
     padding: "3px 8px",
     borderRadius: 999,
-    background: status === "calling" ? "#fef3c7" : "#dcfce7",
-    color: status === "calling" ? "#92400e" : "#166534",
+    background: status === "calling" ? "#fef3c7" : status === "skipped" ? "#e2e8f0" : "#dcfce7",
+    color: status === "calling" ? "#92400e" : status === "skipped" ? "#475569" : "#166534",
   }),
   modeToggle: {
     display: "flex",

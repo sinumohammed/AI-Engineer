@@ -85,6 +85,22 @@ Off-topic questions (the documents do not answer them): **5 of 8 are treated as 
   handbook loaded that excerpt is about git, so the rollback half gets no evidence. Left failing on
   purpose; it is a retrieval-evidence problem to fix in this phase, not to patch around.
 
+### Making the problem visible in the UI
+
+In Single agent mode the chip always read `search_company_docs ✓`, because the search runs on every
+question. It looked the same whether the answer used the documents or not, so the threshold problem
+above could not be seen in the app. The chip now says what the search led to:
+
+| Chip | Meaning |
+|---|---|
+| `search_company_docs · used` (green) | An excerpt was judged relevant and put in front of the model |
+| `search_company_docs · not relevant` (grey) | The search ran; the model answered from its own knowledge |
+| `search_company_docs · code not found` (grey) | The question named a code that no document contains |
+
+Checked through the API: the rollback question shows `used`, "capital of France" shows
+`not relevant`, XJ-9999 shows `code not found`, and "How do I list all git tags from the command
+line?" shows `used` followed by a refusal - the threshold problem, now visible on screen.
+
 ## Next steps, in order
 
 Each one changes one thing and is measured with `npm run eval` against this baseline.

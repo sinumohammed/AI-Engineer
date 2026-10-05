@@ -78,7 +78,9 @@ app.get("/api/chat/stream", async (req, res) => {
           })
         : await runAgent(question, history, {
             onToolCall: (name, args) => send("tool_call", { name, args }),
-            onToolResult: (name, result) => send("tool_result", { name, result }),
+            // `outcome` (document search only): "used", "not relevant" or
+            // "code not found" - what the search led to, shown on the chip.
+            onToolResult: (name, result, { outcome } = {}) => send("tool_result", { name, result, outcome }),
             summary,
           });
 
