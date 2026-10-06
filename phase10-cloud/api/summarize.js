@@ -3,8 +3,7 @@
 // This is the improvement flagged back in Phase 6.5/6.9: windowing alone
 // makes the agent completely forget anything older than 10 turns, with no
 // trace at all. A short running summary at least preserves the gist.
-import { withRetry } from "./retry.js";
-import { LLM_BASE_URL, CHAT_MODEL, authHeaders } from "./config.js";
+import { chat } from "./llmClient.js";
 
 export async function summarizeTurns(existingSummary, evictedTurns) {
   const evictedText = evictedTurns.map((m) => `${m.role}: ${m.content}`).join("\n");
@@ -18,27 +17,11 @@ export async function summarizeTurns(existingSummary, evictedTurns) {
     "a later question might need. Be concise; this is a memory aid, not a transcript.";
 
   try {
-    return await withRetry(
-      async () => {
-        const res = await fetch(`${LLM_BASE_URL}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({
-            model: CHAT_MODEL,
-            stream: false,
-            options: { temperature: 0 },
-            messages: [{ role: "user", content: prompt }],
-          }),
-        });
-        if (!res.ok) {
-          const err = new Error(`Summarize request failed: ${res.status} ${await res.text()}`);
-          err.status = res.status;
-          throw err;
-        }
-        return (await res.json()).message.content.trim();
-      },
-      { label: "summarize request" }
-    );
+    // Phase 10: the shared client, so the summary runs on any provider. On
+    // Ollama this now also sends num_ctx and TEMPERATURE like every other
+    // call (before, it used Ollama's default context window and temperature 0).
+    const res = await chat({ label: "summarize", messages: [{ role: "user", content: prompt }] });
+    return res.content.trim();
   } catch (err) {
     // Summarization failing should never break the conversation - worst
     // case, fall back to keeping the old summary unchanged (still better

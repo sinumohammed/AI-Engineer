@@ -4,8 +4,7 @@
 // chunked afterwards to simulate token streaming - see server.js).
 import { toolDefs, toolImpls } from "./tools.js";
 import { logTrace } from "./tracer.js";
-import { withRetry } from "./retry.js";
-import { LLM_BASE_URL, CHAT_MODEL, TEMPERATURE, authHeaders } from "./config.js";
+import { chat } from "./llmClient.js";
 import { retrieve } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 
@@ -104,31 +103,6 @@ function extractToolCalls(msg) {
   return calls;
 }
 
-async function callModel(messages) {
-  return withRetry(
-    async () => {
-      const res = await fetch(`${LLM_BASE_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          model: CHAT_MODEL,
-          messages,
-          tools: AGENT_TOOL_DEFS,
-          stream: false,
-          options: { temperature: TEMPERATURE, num_ctx: NUM_CTX },
-        }),
-      });
-      if (!res.ok) {
-        const err = new Error(`Ollama request failed: ${res.status} ${await res.text()}`);
-        err.status = res.status;
-        throw err;
-      }
-      return res.json();
-    },
-    { label: "Ollama chat request" }
-  );
-}
-
 // `history` is prior conversation turns: [{role:"user"|"assistant", content}, ...]
 // Only canonical user/assistant turns are carried across requests - the
 // tool_call/tool messages below are scratch work for THIS turn only and are
@@ -216,16 +190,19 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   ];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const data = await callModel(messages);
-    const msg = data.message;
+    // Phase 10: the shared client (llmClient.js) instead of this file's own
+    // Ollama request, so the agent runs on any provider. AGENT_TOOL_DEFS is
+    // empty, and the client leaves `tools` out when it is.
+    const res = await chat({ messages, tools: AGENT_TOOL_DEFS, label: "agent" });
+    const msg = { role: "assistant", content: res.content, tool_calls: res.toolCalls };
     messages.push(msg);
 
-    // prompt_eval_count = tokens Ollama had to read for this call's context
-    // (system + history + tool results + question so far); eval_count = tokens
-    // it generated. Their sum is the actual context-window usage for this call.
+    // promptTokens = tokens the model had to read for this call's context
+    // (system + history + tool results + question so far); completionTokens =
+    // tokens it generated. Their sum is the actual context-window usage for this call.
     const usage = {
-      promptTokens: data.prompt_eval_count ?? 0,
-      completionTokens: data.eval_count ?? 0,
+      promptTokens: res.promptTokens,
+      completionTokens: res.completionTokens,
       contextWindow: NUM_CTX,
     };
     usage.totalTokens = usage.promptTokens + usage.completionTokens;

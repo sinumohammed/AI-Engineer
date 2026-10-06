@@ -82,3 +82,63 @@ exactly the Phase 9 end-state numbers, so the copy is faithful.
 | Citations, multi-agent | 37/37, 31/37, 0 | 37/37, 31/37, 0 |
 
 All six evals together took about 8 minutes.
+
+### 10a.2 Model provider setting
+
+`LLM_PROVIDER` in `.env` picks where chat calls go: `ollama` (default),
+`groq`, or `openai` for any other OpenAI-compatible API. Set `CHAT_MODEL` to a
+model that provider has. Settings given on the command line win over `.env`,
+so one run can switch without editing it:
+
+```bash
+LLM_PROVIDER=groq CHAT_MODEL=openai/gpt-oss-120b npm run eval
+```
+
+What changed:
+
+- **One client for every model call** (`api/llmClient.js`). The single agent
+  (`agent.js`) and the conversation summary (`summarize.js`) each had their
+  own Ollama request; they now use the shared client like the reranker and
+  the supervisor already did. The client speaks two formats, Ollama's
+  `/api/chat` and OpenAI's `/chat/completions`, and returns the same shape
+  from both. JSON schemas are sent in strict mode, with
+  `additionalProperties: false` added by the client, so the router and
+  relevance schemas are still written once. `tools` is sent only when the
+  list is not empty (the agent's is).
+- **Embeddings have their own URL** (`EMBED_BASE_URL`), still local Ollama:
+  Groq has no embedding model. The chat key is never sent with them.
+- **Rate limits** (`api/retry.js`): when a provider answers 429 with a
+  `Retry-After` time, the request waits that long and tries again, up to 2
+  minutes of waiting in total.
+- **Plain characters** (`plainText` in `llmClient.js`): gpt-oss writes a narrow
+  no-break space in "90 days", a non-breaking hyphen in "XJ-2200", and
+  sometimes cites as 【1】. They look right on screen, but the citation parser
+  found no sources in those answers and the evals failed correct answers.
+  The client turns them into plain characters.
+- **Eval phrasings** (`eval/single-agent-eval.js`): four new ways gpt-oss says
+  a correct answer ("10 a.m.", "don't have any information", "don't have
+  access to", "not aware of") are accepted. The "must not contain" checks are
+  unchanged.
+- **Summary call:** on Ollama it now sends `num_ctx` and `TEMPERATURE` like
+  every other call; before, it used Ollama's default context window.
+
+Groq, as checked on 2026-10-06 with this account: the chat models are
+`openai/gpt-oss-120b`, `openai/gpt-oss-20b` and `qwen/qwen3.8-27b` (the Llama
+models in the original plan are gone). All three accept strict JSON schemas.
+Free limits per model: 1,000 requests a day and 8,000 tokens a minute
+(`qwen/qwen3.8-27b` also only 1,000 output tokens a minute). One handbook
+question costs about 3,500 tokens, so the evals spend much of their time
+waiting for the per-minute limit.
+
+Results:
+
+| Run | Single agent | Supervisor regression | Routing / two-part / history | Citations |
+|---|---|---|---|---|
+| `ollama`, all six evals | 7/7 | 7/7 | 24/24, 3/3, 4/4 | same as step 1 (retrieval too) |
+| `openai` format against Ollama's own `/v1` (same model) | 7/7 | 7/7 | 24/24, 3/3, 4/4 | - |
+| `groq`, `openai/gpt-oss-120b`, first run | 3/7 | - | - | - |
+| `groq`, after plain characters and eval phrasings | 7/7, 7/7 (two runs) | 7/7 | not run yet (step 5) | not run yet (step 5) |
+
+The four first-run failures on Groq were all correct answers: 3 in words
+the eval did not accept, 1 with a no-break space inside "90 days".
+The full eval set on Groq is step 5.

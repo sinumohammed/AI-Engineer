@@ -19,7 +19,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { LLM_BASE_URL, EMBED_MODEL, EMBED_PREFIX, authHeaders } from "../api/config.js";
+import { EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX } from "../api/config.js";
 import { cleanDocument } from "./cleanText.js";
 import { chunkFixed, chunkSections } from "./chunker.js";
 
@@ -55,9 +55,9 @@ const db = new pg.Client({
 });
 
 async function embed(text) {
-  const res = await fetch(`${LLM_BASE_URL}/api/embeddings`, {
+  const res = await fetch(`${EMBED_BASE_URL}/api/embeddings`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     // nomic-embed-text was trained with task prefixes: documents as
     // "search_document: ...", questions as "search_query: ..." (config.js).
     body: JSON.stringify({ model: EMBED_MODEL, prompt: EMBED_PREFIX ? `search_document: ${text}` : text }),

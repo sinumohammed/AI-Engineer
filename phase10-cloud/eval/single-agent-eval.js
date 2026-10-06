@@ -14,6 +14,9 @@ const { runAgent } = await import(AGENT_MODULE);
 // have information", "10 AM" vs "10am", a curly apostrophe in "don’t". So a
 // mustContain entry may be an array of acceptable phrasings (any one passes),
 // and check() normalizes apostrophes before comparing.
+// Phase 10: Groq's gpt-oss-120b added "10 a.m.", "don't have any information",
+// "don't have access to" and "not aware of" - checked by reading each answer:
+// all correct. gpt-oss words the same answer differently from run to run.
 const REFUSAL = [
   "don't know",
   "do not know",
@@ -23,6 +26,11 @@ const REFUSAL = [
   "do not contain information",
   "doesn't contain information",
   "does not contain information",
+  "don't have any information",
+  "do not have any information",
+  "don't have access",
+  "do not have access",
+  "not aware of",
 ];
 
 const cases = [
@@ -34,7 +42,7 @@ const cases = [
   {
     name: "on-call handoff - regression test for the Phase 6.8 hallucination bug (model once answered '10 PM UTC', real answer is Monday 10am)",
     question: "When does the on-call rotation hand off?",
-    mustContain: ["monday", ["10am", "10 am", "10:00 am"]],
+    mustContain: ["monday", ["10am", "10 am", "10:00 am", "10 a.m."]],
   },
   {
     name: "general knowledge - must NOT be derailed by always-on retrieval",

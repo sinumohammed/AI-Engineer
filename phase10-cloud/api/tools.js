@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 import { withRetry } from "./retry.js";
-import { LLM_BASE_URL, EMBED_MODEL, EMBED_PREFIX, RELEVANCE_THRESHOLD, authHeaders } from "./config.js";
+import { EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX, RELEVANCE_THRESHOLD } from "./config.js";
 
 const TOP_K = 4;
 
@@ -34,9 +34,9 @@ async function ensureDb() {
 async function embed(text) {
   return withRetry(
     async () => {
-      const res = await fetch(`${LLM_BASE_URL}/api/embeddings`, {
+      const res = await fetch(`${EMBED_BASE_URL}/api/embeddings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         // Questions get the "search_query: " prefix when documents were
         // ingested with "search_document: " (config.js, EMBED_PREFIX).
         body: JSON.stringify({ model: EMBED_MODEL, prompt: EMBED_PREFIX ? `search_query: ${text}` : text }),

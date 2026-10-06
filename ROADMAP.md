@@ -227,7 +227,7 @@ Original picks (Windows laptop):
     - **Found by the citation eval:** the supervisor sent "Who is eligible for FMLA?" and "Should git commits be cryptographically signed?" to `general`/`coding`, which answered from general knowledge - plausible and wrong for this employer. A stronger router instruction changed nothing (the Phase 6.8 lesson again); a code rule did: a one-part message the retrieval step judges answerable goes to `company_docs` (`applyDocPriority`).
   - **End state:** answer reaches the agent - direct 20/20, paraphrased 7/10, original 3/3, private 4/4; off-topic false positives 0/8; single agent 7/7; supervisor routing 24/24, two-part 3/3, history 4/4, regression 7/7. Details: `phase9-real-docs/PHASE9_NOTES.md`.
 
-- **Phase 10 — Deploy on free hosted services** 🚧 in progress (planned 2026-10-05; step 1 done 2026-10-06)
+- **Phase 10 — Deploy on free hosted services** 🚧 in progress (planned 2026-10-05; steps 1-2 done 2026-10-06)
   Run the chat app on the internet instead of only on this Mac. Free tiers checked on 2026-10-05:
   | Part | Local today | Hosted on | Free limits (as checked) |
   |---|---|---|---|
@@ -254,7 +254,8 @@ Original picks (Windows laptop):
     - **10a - hosted services, app still on this Mac**
       1. ✅ **Copy without changing behaviour.** Run it on ports 3002/5174 next to the original (3001/5173), against the same local Ollama and Docker, and run every eval on it. Passing proves the copy is faithful before anything changes. Needs no accounts.
          - **Done 2026-10-06** (branch `phase10-cloud`): the copy differs from the originals only in import paths, ports and the folders `scripts/ingest.js` reads. Every eval gives exactly the Phase 9 end-state numbers - retrieval 20/20, 7/10, 3/3, 4/4, off-topic 0/8; single agent 7/7; supervisor regression 7/7; routing 24/24, two-part 3/3, history 4/4; citations 37/37 (32 and 31 on the expected passage, single and multi). Postgres and Redis are still the frozen app's local containers, started from their own folders by `phase10-cloud/start.sh`. Details: `phase10-cloud/README.md`.
-      2. **Model provider setting** in the copy's shared client: `LLM_PROVIDER=ollama | openai` (the OpenAI-compatible format Groq uses). Test on Ollama first, then Groq.
+      2. ✅ **Model provider setting** in the copy's shared client: `LLM_PROVIDER=ollama | openai` (the OpenAI-compatible format Groq uses). Test on Ollama first, then Groq.
+         - **Done 2026-10-06:** `LLM_PROVIDER=ollama | groq | openai`. Every model call (the agent and the summary had their own Ollama requests) now goes through `api/llmClient.js`, which speaks both formats; embeddings got their own `EMBED_BASE_URL` (still Ollama); 429s wait for `Retry-After`. Ollama path: all evals unchanged. OpenAI format against Ollama's `/v1`: same results. Groq `openai/gpt-oss-120b`: first 3/7, then 7/7 twice and supervisor regression 7/7 after two fixes - gpt-oss writes no-break spaces/hyphens and 【1】 citations (normalized in the client; the citation parser had found no sources) and words correct answers in ways the eval did not accept (4 phrasings added). **Groq changed since the plan:** the Llama models are gone; chat models are `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, all with strict JSON schemas; free limits per model are 1,000 requests/day and 8,000 tokens/minute. Details: `phase10-cloud/README.md`.
       3. **Settings instead of localhost:** `DATABASE_URL`, `REDIS_URL`, `VITE_API_BASE`; traces to the console.
       4. **Gemini embeddings:** load the public handbook only into Neon; compare the retrieval eval with the Phase 9 end state.
       5. **Upstash and Neon from the Mac,** then all evals; retune prompts if Groq's models need it.
