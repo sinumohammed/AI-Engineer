@@ -22,7 +22,7 @@
 // document" is a fact a substring test decides better than a model.
 import { toolImpls } from "./tools.js";
 import { chat } from "./llmClient.js";
-import { RELEVANCE_THRESHOLD } from "./config.js";
+import { RELEVANCE_THRESHOLD, JUDGE_MODEL } from "./config.js";
 
 const CANDIDATES = 12;
 const KEEP = 4;
@@ -45,6 +45,7 @@ const RERANK_PROMPT =
 async function selectRelevant(question, candidates) {
   const excerpts = candidates.map((c, i) => `[${i + 1}] ${c.content.replace(/\s+/g, " ").trim()}`).join("\n\n");
   const res = await chat({
+    model: JUDGE_MODEL,
     label: "rerank",
     format: RERANK_SCHEMA,
     messages: [
@@ -93,6 +94,7 @@ export async function standaloneQuestion(question, history = []) {
   if (!recent.length || !POINTS_BACK.test(question)) return question;
   const conversation = recent.map((m) => `${m.role}: ${m.content}`).join("\n");
   const res = await chat({
+    model: JUDGE_MODEL,
     label: "standalone",
     format: STANDALONE_SCHEMA,
     messages: [

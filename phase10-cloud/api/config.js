@@ -24,6 +24,12 @@ if (!provider.baseUrl) throw new Error(`LLM_PROVIDER=${LLM_PROVIDER} needs LLM_B
 export const LLM_FORMAT = provider.format;
 export const LLM_BASE_URL = provider.baseUrl;
 export const CHAT_MODEL = process.env.CHAT_MODEL ?? "qwen3-coder:30b";
+// Phase 10: the model for the small decisions around search - judging which
+// excerpts answer the question, and rewriting a follow-up into a
+// self-contained question (retrieve.js). Separate so a hosted setup can give
+// them a smaller model with its own free quota (Groq limits each model to
+// 200,000 tokens a day) and keep the bigger one for answers.
+export const JUDGE_MODEL = process.env.JUDGE_MODEL ?? CHAT_MODEL;
 // gpt-oss models think before answering; "low" | "medium" | "high". Unset
 // sends nothing (the provider's default). OpenAI format only.
 export const REASONING_EFFORT = process.env.REASONING_EFFORT || null;

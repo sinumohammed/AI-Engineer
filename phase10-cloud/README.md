@@ -290,3 +290,20 @@ first by search but rejected by gpt-oss's judging; paraphrased 7/10;
 original 3/3; off-topic 0/8) and the remaining evals stopped on the limit.
 At ~3,500 tokens per handbook question, the free hosted app answers about
 55 questions a day per model.
+
+**Splitting the work between two models** (`JUDGE_MODEL`, default
+`CHAT_MODEL`): relevance judging and follow-up rewriting are small decisions
+that can use a smaller model with its own daily quota. Hosted setup:
+answers on `openai/gpt-oss-120b`, `JUDGE_MODEL` and `ROUTER_MODEL` on
+`openai/gpt-oss-20b`.
+
+| Relevance judged by (documents in Neon) | Direct | Paraphrased | Original | Off-topic wrongly relevant |
+|---|---|---|---|---|
+| qwen3-coder:30b (Ollama) | 20/20 | 7/10 | 3/3 | 0/8 |
+| openai/gpt-oss-120b | 19/20 | 7/10 | 3/3 | 0/8 |
+| openai/gpt-oss-20b | 19/20 | 6/10 | 3/3 | 0/8 |
+
+The direct miss is the same case for both gpt-oss models, and it is
+variation, not a weaker judge: run again, 20b kept the expected excerpt.
+The case itself is weak - "Where is the program run?" expects "GSA
+administers a Bug Bounty Program", which says who rather than where.
