@@ -18,7 +18,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { vectorSearch, countChunksContaining } from "../api/tools.js";
 import { retrieve, RERANK } from "../api/retrieve.js";
-import { RELEVANCE_THRESHOLD, DOCS_TABLE, EMBED_PROVIDER } from "../api/config.js";
+import { RELEVANCE_THRESHOLD, DOCS_TABLE, EMBED_PROVIDER, DATABASE_IS_LOCAL } from "../api/config.js";
 import { direct, paraphrased, original, offTopic } from "./cases.js";
 
 // Phase 10: defaults to the table the app searches (DOCS_TABLE), and the full
@@ -92,8 +92,8 @@ const all = [
   ...(await runGroup("Original sample docs", original)),
 ];
 // Phase 10: private documents are only in tables embedded by local Ollama.
-if (EMBED_PROVIDER === "gemini") {
-  console.log(`\nPrivate docs: not in ${EMBED_PROVIDER}-embedded tables (scripts/ingest.js), skipped.`);
+if (EMBED_PROVIDER === "gemini" || !DATABASE_IS_LOCAL) {
+  console.log(`\nPrivate docs: only in tables on this machine embedded here (scripts/ingest.js), skipped.`);
 } else if (existsSync(PRIVATE_CASES)) {
   await runGroup("Private docs (not in git)", JSON.parse(readFileSync(PRIVATE_CASES, "utf-8")));
 } else {

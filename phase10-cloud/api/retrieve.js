@@ -65,6 +65,49 @@ async function selectRelevant(question, candidates) {
   return { picked, usage: { promptTokens: res.promptTokens, completionTokens: res.completionTokens } };
 }
 
+// Phase 10: the question to search with, for a message that may only make
+// sense in its conversation. Search and relevance judging see one message;
+// "And who is eligible for it?" names nothing, and gpt-oss-120b, judging
+// strictly, kept the wrong excerpt (qwen had kept the right one by luck,
+// among four loose matches). The supervisor's router already rewrites such
+// messages (routing.js); this gives the single agent the same.
+// Only a message with a word that can point back is rewritten - decided in
+// code: asked to rewrite everything, qwen turned "What is our rollback
+// process?" into "...rollback process for the 12 unpaid weeks of leave
+// entitled by FMLA?", tying a new question to the old topic.
+const STANDALONE_HISTORY_MESSAGES = 4;
+const POINTS_BACK = /\b(it|its|that|this|these|those|they|them|their|he|she|him|her|his|there|same|above|previous)\b/i;
+const STANDALONE_SCHEMA = {
+  type: "object",
+  properties: { question: { type: "string" } },
+  required: ["question"],
+};
+const STANDALONE_PROMPT =
+  "You prepare a search query. Rewrite the user's latest message as one self-contained question, using the " +
+  "earlier conversation only to replace words that point back to it (\"it\", \"that\", \"they\", \"the same\") " +
+  "with what they refer to. Keep the user's own wording otherwise. If the message already makes sense on its own, " +
+  "return it unchanged. Never answer it.";
+
+export async function standaloneQuestion(question, history = []) {
+  const recent = history.slice(-STANDALONE_HISTORY_MESSAGES);
+  if (!recent.length || !POINTS_BACK.test(question)) return question;
+  const conversation = recent.map((m) => `${m.role}: ${m.content}`).join("\n");
+  const res = await chat({
+    label: "standalone",
+    format: STANDALONE_SCHEMA,
+    messages: [
+      { role: "system", content: STANDALONE_PROMPT },
+      { role: "user", content: `Earlier conversation:\n${conversation}\n\nLatest message: ${question}` },
+    ],
+  });
+  try {
+    const rewritten = JSON.parse(res.content).question?.trim();
+    return rewritten || question;
+  } catch {
+    return question; // unparseable: search with the message as written, as before
+  }
+}
+
 // Returns the chunks the agent should read (at most 4) and the decision
 // about them, in the shape the agents already use.
 export async function retrieve(question, { rerank = RERANK } = {}) {

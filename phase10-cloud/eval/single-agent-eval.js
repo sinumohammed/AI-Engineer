@@ -79,6 +79,19 @@ const cases = [
     mustContain: [REFUSAL],
     mustNotContain: ["2200", "90 days"],
   },
+  {
+    // Phase 10: found by hand on Groq. Search sees only the latest message,
+    // and "it" names nothing: qwen's relevance judging kept the FMLA
+    // eligibility excerpt among four loose matches; gpt-oss-120b, judging
+    // strictly, kept only the transit benefit and the agent said "I don't know".
+    name: "follow-up question - search must understand 'it' from the conversation (Phase 10)",
+    question: "And who is eligible for it?",
+    history: [
+      { role: "user", content: "How many weeks of unpaid leave does FMLA entitle me to?" },
+      { role: "assistant", content: "FMLA entitles you to 12 unpaid weeks every 52 weeks [1]." },
+    ],
+    mustContain: [["one year of federal service", "1 year of federal service", "a year of federal service"]],
+  },
 ];
 
 function check(answer, mustContain = [], mustNotContain = []) {
@@ -98,7 +111,7 @@ console.log(`Running ${cases.length} eval cases against ${AGENT_MODULE}...\n`);
 
 for (const c of cases) {
   const start = Date.now();
-  const { answer } = await runAgent(c.question, []);
+  const { answer } = await runAgent(c.question, c.history ?? []);
   const elapsedMs = Date.now() - start;
   const result = check(answer, c.mustContain, c.mustNotContain);
   console.log(c.name,answer)

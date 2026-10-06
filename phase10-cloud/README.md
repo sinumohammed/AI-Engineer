@@ -243,3 +243,50 @@ Hugging Face into `/tmp`, and the native ONNX runtime has to be included in
 the function.
 
 Ollama path after the refactor: retrieval and single agent unchanged.
+
+### 10a.5 Neon and Upstash from the Mac (in progress)
+
+**Neon** (Frankfurt, pooled connection): the public handbook only - 4,284
+chunks, 0 private, 46 MB - in `chunks_local_q8`, loaded with:
+
+```bash
+cd scripts && DATABASE_URL="$(grep '^NEON_DATABASE_URL=' ../.env | cut -d= -f2-)" \
+  EMBED_PROVIDER=local INGEST_TABLE=chunks_local_q8 npm run ingest
+```
+
+5 min 22 s. `scripts/ingest.js` now creates its table itself (a new database
+has no `doc_chunks` to copy) and inserts one batch per file instead of one
+row per chunk (each query is a ~120 ms round trip from Dubai). Private
+documents are skipped because the database is not on this machine; the
+evals skip their private cases in the same situation.
+
+With documents from Neon and qwen on Ollama answering, every eval matches
+the local q8 table: retrieval 20/20, 7/10, 3/3, off-topic 0/8; single agent
+7/7; supervisor regression 7/7; routing 24/24, 3/3, 4/4; citations 33/33
+cite a source (28 and 27 the expected passage, single and multi).
+
+**Upstash:** the first database was created in Mumbai (`ap-south-1`) by
+mistake and recreated in Frankfurt. Chat history is stored and read back.
+A round trip from the Mac is ~245 ms for either database: both hostnames
+resolve to the same Upstash entry points, so timing from here cannot show
+the region - step 6 measures from Vercel.
+
+**Found by hand on Groq: follow-up questions.** "And who is eligible for it?"
+after an FMLA question got "I don't know". Search and relevance judging see
+only the latest message, and "it" names nothing. qwen's judging had kept the
+FMLA eligibility excerpt among four loose matches - right by luck; gpt-oss,
+judging strictly, kept only the transit benefit. Now (`standaloneQuestion`
+in `api/retrieve.js`) a message with a word that points back ("it", "that",
+"they"...) is rewritten into a self-contained question before the search;
+the model still answers the message as written. The pointing-word check is
+in code: asked to rewrite every message, qwen turned "What is our rollback
+process?" into a question about FMLA leave. New eval case; single agent
+8/8 on Ollama (both tables) and on Groq, twice.
+
+**Groq's third limit: 200,000 tokens a day per model.** On top of 1,000
+requests a day and 8,000 tokens a minute. The retrieval eval on Groq used
+most of it (direct 19/20 - "Where is the GSA bug bounty program run?" ranked
+first by search but rejected by gpt-oss's judging; paraphrased 7/10;
+original 3/3; off-topic 0/8) and the remaining evals stopped on the limit.
+At ~3,500 tokens per handbook question, the free hosted app answers about
+55 questions a day per model.

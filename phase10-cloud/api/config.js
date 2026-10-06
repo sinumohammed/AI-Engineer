@@ -32,6 +32,9 @@ export const REASONING_EFFORT = process.env.REASONING_EFFORT || null;
 // nothing changes until they are set (Neon and Upstash give URLs like these).
 export const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://rag:rag@localhost:5432/rag";
 export const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
+// Private documents are only ever stored in a database on this machine
+// (scripts/ingest.js); the evals skip their cases elsewhere.
+export const DATABASE_IS_LOCAL = ["localhost", "127.0.0.1", "::1"].includes(new URL(DATABASE_URL).hostname);
 // Where traces go: "file" (logs/traces.jsonl) or "console". Hosted functions
 // cannot keep files, so on Vercel (which sets VERCEL=1) the default is console.
 export const TRACE_TO = process.env.TRACE_TO ?? (process.env.VERCEL ? "console" : "file");

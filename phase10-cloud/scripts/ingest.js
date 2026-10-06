@@ -19,7 +19,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { DATABASE_URL, DOCS_TABLE, EMBED_PROVIDER, EMBED_PREFIX } from "../api/config.js";
+import { DATABASE_URL, DATABASE_IS_LOCAL, DOCS_TABLE, EMBED_PROVIDER, EMBED_PREFIX } from "../api/config.js";
 import { embedDocuments, EMBED_LABEL, UNLABELLED_TABLE } from "../api/embed.js";
 import { cleanDocument } from "./cleanText.js";
 import { chunkFixed, chunkSections } from "./chunker.js";
@@ -30,9 +30,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // in-process model - a hosted provider like Gemini receives every text it
 // embeds) and stored here (a hosted database like Neon holds the text itself).
 // Decided in code from the settings, not by a setting of its own.
-const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1"];
-const databaseIsLocal = LOCAL_HOSTS.includes(new URL(DATABASE_URL).hostname);
-const PRIVATE_ALLOWED = EMBED_PROVIDER !== "gemini" && databaseIsLocal;
+const PRIVATE_ALLOWED = EMBED_PROVIDER !== "gemini" && DATABASE_IS_LOCAL;
 const ROOTS = [
   { dir: join(HERE, "../../phase5-rag/docs"), prefix: "" },
   ...(PRIVATE_ALLOWED ? [{ dir: join(HERE, "../../phase5-rag/docs-private"), prefix: "private/" }] : []),
@@ -71,11 +69,21 @@ function listDocs(dir) {
 
 await db.connect();
 
-// An experiment table is a copy of doc_chunks' structure (columns, the
-// generated tsvector column and both indexes).
-if (TABLE !== "doc_chunks") {
-  await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (LIKE doc_chunks INCLUDING ALL)`);
-}
+// Phase 10: the table is created here, from schema.sql's definition, instead
+// of copying doc_chunks (LIKE doc_chunks) - a new database such as Neon has
+// no doc_chunks to copy. Index names match what LIKE produced, so existing
+// tables get no duplicate indexes. Does nothing for a table that exists.
+await db.query("CREATE EXTENSION IF NOT EXISTS vector");
+await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
+  id SERIAL PRIMARY KEY,
+  source TEXT NOT NULL,
+  chunk_index INT NOT NULL,
+  content TEXT NOT NULL,
+  embedding vector(768),
+  content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED
+)`);
+await db.query(`CREATE INDEX IF NOT EXISTS ${TABLE}_embedding_idx ON ${TABLE} USING hnsw (embedding vector_cosine_ops)`);
+await db.query(`CREATE INDEX IF NOT EXISTS ${TABLE}_content_tsv_idx ON ${TABLE} USING gin (content_tsv)`);
 
 // Phase 10: one embedding model per table (see embed.js). Refuse to add
 // vectors from another model to a table that already has some.
@@ -90,7 +98,7 @@ if (existingLabel && existingLabel !== EMBED_LABEL) {
 }
 await db.query(`COMMENT ON TABLE ${TABLE} IS '${EMBED_LABEL}'`);
 if (!PRIVATE_ALLOWED) {
-  console.log(`Skipping docs-private: ${databaseIsLocal ? `${EMBED_PROVIDER} is a hosted embedding provider` : "the database is not on this machine"}.`);
+  console.log(`Skipping docs-private: ${DATABASE_IS_LOCAL ? `${EMBED_PROVIDER} is a hosted embedding provider` : "the database is not on this machine"}.`);
 }
 
 const docs = ROOTS.flatMap(({ dir, prefix }) =>
@@ -133,13 +141,12 @@ for (const [n, doc] of docs.entries()) {
 
   await db.query("BEGIN");
   await db.query(`DELETE FROM ${TABLE} WHERE source = $1`, [doc.source]);
-  for (let i = 0; i < chunks.length; i++) {
-    await db.query(`INSERT INTO ${TABLE} (source, chunk_index, content, embedding) VALUES ($1, $2, $3, $4)`, [
-      doc.source,
-      i,
-      chunks[i],
-      `[${embeddings[i].join(",")}]`,
-    ]);
+  // Phase 10: one INSERT per file instead of one per chunk - over the
+  // network to a hosted database every query costs a round trip.
+  if (chunks.length) {
+    const values = chunks.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(", ");
+    const params = chunks.flatMap((chunk, i) => [doc.source, i, chunk, `[${embeddings[i].join(",")}]`]);
+    await db.query(`INSERT INTO ${TABLE} (source, chunk_index, content, embedding) VALUES ${values}`, params);
   }
   await db.query("COMMIT");
 

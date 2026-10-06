@@ -5,7 +5,7 @@
 import { toolDefs, toolImpls } from "./tools.js";
 import { logTrace } from "./tracer.js";
 import { chat } from "./llmClient.js";
-import { retrieve } from "./retrieve.js";
+import { retrieve, standaloneQuestion } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
@@ -132,7 +132,11 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // Retrieval runs unconditionally, before the model sees the question -
   // see the AGENT_TOOL_DEFS comment above for why. Still reported through
   // the same onToolCall/onToolResult callbacks so the UI shows it happened.
-  trackedOnToolCall("search_company_docs", { query: question });
+  // Phase 10: a follow-up is searched as a self-contained question
+  // (retrieve.js, standaloneQuestion); the model still answers the message
+  // as written, with the conversation.
+  const searchQuery = await standaloneQuestion(question, history);
+  trackedOnToolCall("search_company_docs", { query: searchQuery });
   // Phase 9.4: search plus the relevance decision, in one shared step
   // (retrieve.js). The model now judges which candidates answer the
   // question; that replaced the fixed distance threshold, which stopped
@@ -142,7 +146,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // search alone would call a similar chunk "relevant". Kept as its own flat
   // branch below rather than nested inside another - per the Phase 7 lesson
   // that this model blends nested conditions into nonsense.
-  const retrieval = await retrieve(question);
+  const retrieval = await retrieve(searchQuery);
   const { identifierMismatch, isRelevant, bestDistance } = retrieval;
   const docResults = retrieval.chunks;
 
