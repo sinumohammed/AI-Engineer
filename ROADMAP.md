@@ -227,7 +227,7 @@ Original picks (Windows laptop):
     - **Found by the citation eval:** the supervisor sent "Who is eligible for FMLA?" and "Should git commits be cryptographically signed?" to `general`/`coding`, which answered from general knowledge - plausible and wrong for this employer. A stronger router instruction changed nothing (the Phase 6.8 lesson again); a code rule did: a one-part message the retrieval step judges answerable goes to `company_docs` (`applyDocPriority`).
   - **End state:** answer reaches the agent - direct 20/20, paraphrased 7/10, original 3/3, private 4/4; off-topic false positives 0/8; single agent 7/7; supervisor routing 24/24, two-part 3/3, history 4/4, regression 7/7. Details: `phase9-real-docs/PHASE9_NOTES.md`.
 
-- **Phase 10 — Deploy on free hosted services** (planned 2026-10-05, after Phase 9)
+- **Phase 10 — Deploy on free hosted services** ⏭️ next (planned 2026-10-05; Phase 9 is done)
   Run the chat app on the internet instead of only on this Mac. Free tiers checked on 2026-10-05:
   | Part | Local today | Hosted on | Free limits (as checked) |
   |---|---|---|---|
@@ -237,7 +237,30 @@ Original picks (Windows laptop):
   | Chat history | Redis in Docker | Upstash | 1 DB, 256 MB, 500K commands/month, works with the existing `redis` client over TCP |
   | Chat model | Ollama `qwen3-coder:30b` | Groq | production models: llama-3.3-70b-versatile, llama-3.1-8b-instant, gpt-oss-120b, gpt-oss-20b; strict JSON-schema output only on gpt-oss (needed by the router); free daily request/token caps - check the console |
   | Embeddings | Ollama `nomic-embed-text` | Gemini `gemini-embedding-001` at 768 dimensions | Groq has no embedding model; Gemini free tier is rate limited (about 1,000 requests/day per Google's forum) |
-  - **Code changes needed:** one shared model client supporting both Ollama and OpenAI-compatible APIs (`LLM_PROVIDER`), since four places call Ollama's own API format; `DATABASE_URL` / `REDIS_URL` / `VITE_API_BASE` instead of hard-coded localhost; repo-level packaging so Vercel installs `pg` for the code the server imports from other folders; traces to the console instead of a file; re-ingest with the new embedding model and re-run the retrieval eval.
+  - **Agreed plan (2026-10-05): two parts, each ending in something that works.**
+    - **10a - hosted services, app still on this Mac.** All code changes and eval re-runs happen here, where problems are easy to debug. Done when the app on the Mac answers through Groq + Gemini embeddings + Neon + Upstash and the evals pass.
+    - **10b - deploy to Vercel.** Packaging and deployment only: repo-level setup, the API as an Express function, the UI as a static site, access code, smoke tests against the public URL.
+    - **First step of 10a:** extend the shared model client (`phase5-rag/llmClient.js`) with an `LLM_PROVIDER` setting (`ollama` | `openai`, the OpenAI-compatible format Groq uses). This needs no accounts, so it can be written and tested against local Ollama first.
+  - **Where the code is tied to Ollama or localhost today** (checked 2026-10-06):
+    | File | What | Change |
+    |---|---|---|
+    | `phase5-rag/llmClient.js` | `/api/chat` (reranker, supervisor) | add the OpenAI-compatible path |
+    | `phase6-ui/server/agent.js` | its own `callModel`, `/api/chat` with `tools` | move onto the shared client; send no `tools` when the list is empty |
+    | `phase5-rag/summarize.js` | `/api/chat` | move onto the shared client |
+    | `phase5-rag/tools.js`, `ingest.js` | `/api/embeddings`, Postgres at `localhost` | embedding provider setting (`EMBED_PROVIDER`); `DATABASE_URL` |
+    | `phase6-ui/server/sessionStore.js` | Redis at `redis://localhost:6379` | `REDIS_URL` |
+    | `phase6-ui/web/src/useChatSession.js` | API at `http://localhost:3001` | `VITE_API_BASE` |
+    | `phase5-rag/tracer.js` | writes `logs/traces.jsonl` | console when hosted (Vercel functions cannot keep files) |
+    | `phase8b-multi-agent/supervisor-graph.js` | LangChain `ChatOllama` | not part of the deployed app; leave on Ollama |
+    | `phase5-rag/agent.js`, `query.js` | older Phase 5 scripts | not deployed; leave |
+    Groq specifics to handle: OpenAI response shape (`choices[0].message.content`, `usage.prompt_tokens`), JSON schema via `response_format: { type: "json_schema", ... strict: true }` which needs `additionalProperties: false` and every field required (the router and rerank schemas need that), and no `num_ctx`.
+  - **Risks to watch:**
+    - **Changing the embedding model changes search.** All Phase 9 tuning used `nomic-embed-text`. Re-ingest with Gemini embeddings, then re-run the retrieval eval (`phase9-real-docs`) and compare with the Phase 9 end state before going further. The Gemini free tier may make loading 4,288 chunks slow.
+    - **Prompts were tuned on qwen3-coder:30b.** Groq's models may need prompt fixes (router, relevance judging), as gemma3:4b did. Re-run every eval.
+    - **Groq free daily caps.** A full eval run makes a few hundred model calls; spread test runs out or use a smaller model for some of them.
+  - **Accounts the user creates before 10a needs them:** Vercel, Neon, Upstash, Groq, Google AI Studio (Gemini API key). Keys go in `phase5-rag/.env` locally and in Vercel's settings - never in git or in chat.
+  - **Expected size:** about the same as Phase 9. The code changes are straightforward; the uncertain parts are the embedding re-ingest and any prompt retuning.
+  - **Code changes needed (summary):** the shared model client with `LLM_PROVIDER`, settings instead of localhost, repo-level packaging so Vercel installs `pg` for code the server imports from other folders, traces to the console, re-ingest with the new embedding model.
   - **Rules:** only the public handbook goes into the hosted database - private documents stay with the local Ollama setup, because a hosted app is public and every question sends document text to the model provider. Add an access code so strangers cannot use up the free Groq quota. Keys live in `.env` and Vercel settings, never in git.
   - Ollama itself has no practical free host for a 30B model; Groq replaces it for chat.
 
