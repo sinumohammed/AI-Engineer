@@ -3,8 +3,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
-import { withRetry } from "./retry.js";
-import { DATABASE_URL, EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX, RELEVANCE_THRESHOLD } from "./config.js";
+import { embedQuery, EMBED_LABEL, UNLABELLED_TABLE } from "./embed.js";
+import { DATABASE_URL, DOCS_TABLE, RELEVANCE_THRESHOLD } from "./config.js";
 
 const TOP_K = 4;
 
@@ -29,33 +29,28 @@ const db = new pg.Pool({ connectionString: DATABASE_URL });
 // treats it as an unhandled error and the process exits.
 db.on("error", (err) => console.error(`[db] idle connection error: ${err.message}`));
 
-async function embed(text) {
-  return withRetry(
-    async () => {
-      const res = await fetch(`${EMBED_BASE_URL}/api/embeddings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Questions get the "search_query: " prefix when documents were
-        // ingested with "search_document: " (config.js, EMBED_PREFIX).
-        body: JSON.stringify({ model: EMBED_MODEL, prompt: EMBED_PREFIX ? `search_query: ${text}` : text }),
-      });
-      if (!res.ok) {
-        const err = new Error(`Embedding request failed: ${res.status} ${await res.text()}`);
-        err.status = res.status;
-        throw err;
-      }
-      return (await res.json()).embedding;
-    },
-    { label: "embedding request" }
-  );
+// Phase 10 step 4: refuse to search a table whose vectors come from a
+// different embedding model than the questions' (labels: embed.js). Checked
+// once per table; the error says which settings to change.
+const checkedTables = new Set();
+async function checkTable(table) {
+  if (checkedTables.has(table)) return;
+  const { rows } = await db.query("SELECT obj_description(to_regclass($1), 'pg_class') AS label, to_regclass($1) AS t", [table]);
+  if (!rows[0].t) throw new Error(`Table ${table} does not exist - run scripts/ingest.js, or set DOCS_TABLE`);
+  const label = rows[0].label ?? UNLABELLED_TABLE;
+  if (label !== EMBED_LABEL) {
+    throw new Error(`Table ${table} holds "${label}" but questions are embedded with "${EMBED_LABEL}" - set EMBED_PROVIDER/DOCS_TABLE to match`);
+  }
+  checkedTables.add(table);
 }
 
 // Diagnostics for the Phase 9 retrieval eval: plain vector search, more
 // results than the agent ever sees, against any chunk table (experiment
 // tables are created by ingest.js with INGEST_TABLE). Not used by the agents.
-export async function vectorSearch(query, { k = 10, table = "doc_chunks" } = {}) {
+export async function vectorSearch(query, { k = 10, table = DOCS_TABLE } = {}) {
   if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
-  const queryEmbedding = await embed(query);
+  await checkTable(table);
+  const queryEmbedding = await embedQuery(query);
   const { rows } = await db.query(
     `SELECT source, chunk_index, content, embedding <=> $1 AS distance
      FROM ${table}
@@ -71,7 +66,7 @@ export async function vectorSearch(query, { k = 10, table = "doc_chunks" } = {})
 // case and line breaks ignored (the same rules as the eval's normalize()).
 // Lets the eval tell "search did not find it" apart from "no single chunk
 // holds it" (the text was cut in two by a chunk boundary).
-export async function countChunksContaining(text, table = "doc_chunks") {
+export async function countChunksContaining(text, table = DOCS_TABLE) {
   if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
   const readable = (sql) =>
     `regexp_replace(regexp_replace(regexp_replace(${sql}, '\\]\\((<[^>]*>|[^)]*)\\)', '', 'g'), '[\\[\\]_*\`]', '', 'g'), '\\s+', ' ', 'g')`;
@@ -161,12 +156,13 @@ export const toolImpls = {
   // reranker asks for more and picks the best of them (see retrieve.js).
   search_company_docs: async ({ query, k = TOP_K }) => {
     try {
-      const queryEmbedding = await embed(query);
+      await checkTable(DOCS_TABLE);
+      const queryEmbedding = await embedQuery(query);
 
       const [{ rows: vectorRows }, { rows: keywordRows }] = await Promise.all([
         db.query(
           `SELECT source, chunk_index, content, embedding <=> $1 AS distance
-           FROM doc_chunks
+           FROM ${DOCS_TABLE}
            ORDER BY distance ASC
            LIMIT $2`,
           [`[${queryEmbedding.join(",")}]`, k]
@@ -178,7 +174,7 @@ export const toolImpls = {
         db.query(
           `SELECT source, chunk_index, content,
                   ts_rank(content_tsv, websearch_to_tsquery('english', $1)) AS rank
-           FROM doc_chunks
+           FROM ${DOCS_TABLE}
            WHERE content_tsv @@ websearch_to_tsquery('english', $1)
            ORDER BY rank DESC
            LIMIT $2`,

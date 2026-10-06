@@ -185,3 +185,61 @@ Results on Ollama after this step: unchanged on all six evals (retrieval
 20/20, 7/10, 3/3, 4/4, off-topic 0/8; single agent 7/7; supervisor
 regression 7/7; routing 24/24, 3/3, 4/4; citations 37/37 with 32 and 31 on
 the expected passage). The evals still exit by themselves with the pool.
+
+### 10a.4 Embeddings without Ollama
+
+Planned: Gemini embeddings. Done instead: the same nomic model running
+inside the Node process (`EMBED_PROVIDER=local`), because Gemini's free tier
+turned out too small.
+
+**Shared code first.** `api/embed.js` is now the one place that embeds text,
+for search and for `scripts/ingest.js` (each had its own copy). Settings:
+`EMBED_PROVIDER=ollama | local | gemini`, `DOCS_TABLE` (the table search
+reads). Also new:
+
+- **Each table is labelled with its embedding model** (a Postgres table
+  comment, written by ingest). Search and ingest refuse a mismatch: vectors
+  from two models cannot be compared, and mixing them gives no error, only
+  plausible wrong results. Tables from before Phase 10 count as Ollama's.
+- **Private documents are ingested only when the text stays on this machine
+  twice over:** embedded here (not by a hosted API) and stored here (not in
+  Neon). Decided in code from the settings.
+- **Ingest resumes:** a file whose chunks are already stored unchanged is
+  not embedded again.
+
+**Gemini (measured 2026-10-06).** `gemini-embedding-001` at 768 numbers
+works, but the free tier counts every text, batched or not: **100 a minute
+and 1,000 a day**. The handbook is 4,284 chunks, so about 4 days of quota,
+shared with every question the hosted app embeds. The ingest stopped at 842
+chunks on the daily limit (table `chunks_gemini`, incomplete; `EMBED_PROVIDER=gemini`
+still works and the ingest continues where it stopped).
+
+**The nomic model inside Node** (`@huggingface/transformers`,
+`nomic-ai/nomic-embed-text-v1.5`):
+
+| Precision | Model file | Same vectors as Ollama (cosine) | Fits a Vercel function (250 MB)? |
+|---|---|---|---|
+| fp32 | 547 MB | 1.0000 | no |
+| fp16 | 274 MB | 1.0000 | no |
+| **q8 (used)** | 137 MB | 0.96-0.97 | yes, with the 44 MB Linux runtime |
+
+q8's vectors differ a little from Ollama's, so the documents were
+re-embedded with q8 too: all 4,288 chunks in 2 min 17 s on the Mac, no
+network, no quota (table `chunks_local_q8`). Loading the model takes 0.6 s,
+each question 7 ms; the process uses about 340 MB.
+
+| Eval | Phase 9 (Ollama nomic) | q8 in Node |
+|---|---|---|
+| Retrieval, agent sees the answer: direct / paraphrased / original / private | 20/20, 7/10, 3/3, 4/4 | 20/20, 7/10, 3/3, 4/4 |
+| Retrieval top-1: direct / paraphrased | 17/20, 4/10 | 17/20, 3/10 |
+| Off-topic wrongly relevant | 0/8 | 0/8 |
+| Single agent | 7/7 | 7/7 |
+| Citations: cites a source / the expected passage | 37/37, 32/37 | 37/37, 32/37 |
+
+The agent reads the same excerpts in every group; one paraphrased answer
+moved from first place to lower in the top 4. Not yet known, for step 6: the
+first request on a new Vercel instance downloads the 137 MB model from
+Hugging Face into `/tmp`, and the native ONNX runtime has to be included in
+the function.
+
+Ollama path after the refactor: retrieval and single agent unchanged.

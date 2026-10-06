@@ -18,10 +18,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { vectorSearch, countChunksContaining } from "../api/tools.js";
 import { retrieve, RERANK } from "../api/retrieve.js";
-import { RELEVANCE_THRESHOLD } from "../api/config.js";
+import { RELEVANCE_THRESHOLD, DOCS_TABLE, EMBED_PROVIDER } from "../api/config.js";
 import { direct, paraphrased, original, offTopic } from "./cases.js";
 
-const TABLE = process.env.EVAL_TABLE ?? "doc_chunks";
+// Phase 10: defaults to the table the app searches (DOCS_TABLE), and the full
+// "agent sees it" measurement runs whenever the eval table is that table.
+const TABLE = process.env.EVAL_TABLE ?? DOCS_TABLE;
 const K = 10;
 const AGENT_K = 4;
 // Private cases live next to the private documents, outside git. The public
@@ -50,7 +52,7 @@ async function runGroup(name, cases) {
 
     // Only meaningful on the live table - retrieval always reads doc_chunks.
     let agentSees = null;
-    if (TABLE === "doc_chunks") {
+    if (TABLE === DOCS_TABLE) {
       const startedAt = Date.now();
       const r = await retrieve(c.question);
       retrieveMs.push(Date.now() - startedAt);
@@ -78,18 +80,21 @@ async function runGroup(name, cases) {
   const agentHits = results.filter((r) => r.agentSees).length;
   console.log(
     `  => hit@1 ${hitAt(1)}/${n}   hit@${AGENT_K} ${hitAt(AGENT_K)}/${n}   hit@${K} ${hitAt(K)}/${n}   MRR ${mrr.toFixed(2)}` +
-      (TABLE === "doc_chunks" ? `   agent sees it ${agentHits}/${n}` : "")
+      (TABLE === DOCS_TABLE ? `   agent sees it ${agentHits}/${n}` : "")
   );
   return results;
 }
 
-console.log(`Retrieval eval on table "${TABLE}"${TABLE === "doc_chunks" ? `, ${RERANK ? "with" : "without"} model reranking` : ""}`);
+console.log(`Retrieval eval on table "${TABLE}"${TABLE === DOCS_TABLE ? `, ${RERANK ? "with" : "without"} model reranking` : ""}`);
 const all = [
   ...(await runGroup("Direct wording", direct)),
   ...(await runGroup("Paraphrased", paraphrased)),
   ...(await runGroup("Original sample docs", original)),
 ];
-if (existsSync(PRIVATE_CASES)) {
+// Phase 10: private documents are only in tables embedded by local Ollama.
+if (EMBED_PROVIDER === "gemini") {
+  console.log(`\nPrivate docs: not in ${EMBED_PROVIDER}-embedded tables (scripts/ingest.js), skipped.`);
+} else if (existsSync(PRIVATE_CASES)) {
   await runGroup("Private docs (not in git)", JSON.parse(readFileSync(PRIVATE_CASES, "utf-8")));
 } else {
   console.log("\nPrivate docs: no docs-private/eval-cases.json on this machine, skipped.");
@@ -105,12 +110,12 @@ for (const q of offTopic) {
   const distance = rows[0].distance;
   offTop.push(distance);
   let flagged = distance < RELEVANCE_THRESHOLD;
-  if (TABLE === "doc_chunks") flagged = (await retrieve(q)).isRelevant;
+  if (TABLE === DOCS_TABLE) flagged = (await retrieve(q)).isRelevant;
   if (flagged) falsePositives++;
   console.log(`  ${flagged ? "❌ treated as relevant" : "✅ not relevant       "}  ${distance.toFixed(3)}  ${q}`);
 }
 const range = (xs) => (xs.length ? `${Math.min(...xs).toFixed(3)} - ${Math.max(...xs).toFixed(3)}` : "n/a");
-const gate = TABLE !== "doc_chunks" || !RERANK ? `threshold ${RELEVANCE_THRESHOLD}` : "model-judged relevance";
+const gate = TABLE !== DOCS_TABLE || !RERANK ? `threshold ${RELEVANCE_THRESHOLD}` : "model-judged relevance";
 console.log(`  => ${falsePositives}/${offTopic.length} wrongly treated as relevant (${gate})`);
 if (retrieveMs.length) {
   const avg = Math.round(retrieveMs.reduce((a, b) => a + b, 0) / retrieveMs.length);

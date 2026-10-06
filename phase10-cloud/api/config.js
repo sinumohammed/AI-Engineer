@@ -49,7 +49,32 @@ export function describeUrl(url) {
 // Embeddings have their own URL so chat can move to a provider without an
 // embedding model (Groq has none) while search keeps working.
 export const EMBED_BASE_URL = process.env.EMBED_BASE_URL ?? "http://localhost:11434";
-export const EMBED_MODEL = process.env.EMBED_MODEL ?? "nomic-embed-text";
+// Phase 10 step 4: EMBED_PROVIDER picks who turns text into vectors.
+// - "ollama" (default): Ollama's nomic-embed-text, at EMBED_BASE_URL.
+// - "local": the same nomic model run inside this Node process (transformers.js),
+//   no embedding service at all. EMBED_LOCAL_DTYPE: q8 (default, 137 MB - fits
+//   a Vercel function), fp16 or fp32 (identical to Ollama's vectors, too big
+//   for Vercel). The model is downloaded once, then cached.
+// - "gemini": Google's Gemini API (GEMINI_API_KEY). Free tier: 100 texts a
+//   minute and 1,000 a day - too few to embed the 4,284-chunk handbook in a day.
+// All give 768 numbers, the size of the tables' vector column.
+export const EMBED_PROVIDER = process.env.EMBED_PROVIDER ?? "ollama";
+if (!["ollama", "local", "gemini"].includes(EMBED_PROVIDER)) {
+  throw new Error(`Unknown EMBED_PROVIDER "${EMBED_PROVIDER}" - use ollama, local or gemini`);
+}
+export const EMBED_LOCAL_DTYPE = process.env.EMBED_LOCAL_DTYPE ?? "q8";
+export const EMBED_MODEL = {
+  ollama: process.env.EMBED_MODEL ?? "nomic-embed-text",
+  local: `nomic-ai/nomic-embed-text-v1.5 ${EMBED_LOCAL_DTYPE}`,
+  gemini: process.env.GEMINI_EMBED_MODEL ?? "gemini-embedding-001",
+}[EMBED_PROVIDER];
+export const EMBED_DIMENSIONS = 768;
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || null;
+// The chunk table search reads. Each table holds one embedding model's
+// vectors; ingest.js labels it, and search refuses a table embedded with a
+// different model than the one embedding the questions (embed.js).
+export const DOCS_TABLE = process.env.DOCS_TABLE ?? "doc_chunks";
+if (!/^[a-z_][a-z0-9_]*$/.test(DOCS_TABLE)) throw new Error(`Invalid DOCS_TABLE: ${DOCS_TABLE}`);
 export const NUM_CTX = Number(process.env.NUM_CTX ?? 8192);
 export const TEMPERATURE = Number(process.env.TEMPERATURE ?? 0);
 export const RELEVANCE_THRESHOLD = Number(process.env.RELEVANCE_THRESHOLD ?? 0.5);
