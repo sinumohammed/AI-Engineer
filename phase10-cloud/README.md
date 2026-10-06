@@ -307,3 +307,28 @@ The direct miss is the same case for both gpt-oss models, and it is
 variation, not a weaker judge: run again, 20b kept the expected excerpt.
 The case itself is weak - "Where is the program run?" expects "GSA
 administers a Bug Bounty Program", which says who rather than where.
+
+**Next, in this order** (decided 2026-10-06):
+
+1. Fewer tokens per question: `REASONING_EFFORT=low` and fewer judged
+   candidates (12 → 8), measured with the retrieval eval before changing
+   any default. gpt-oss's hidden reasoning counts against the daily quota.
+2. When 120b's daily quota is used up, answer with 20b and say so in the UI.
+3. When both are used up, a clear "try again in N minutes" message.
+4. The remaining evals on Groq, spread over a day: single agent,
+   supervisor regression, routing (20b), both citation evals.
+
+How to run the hosted setup from the Mac (answers 120b, judging and routing
+20b, documents in Neon, history in Upstash):
+
+```bash
+cd api && DATABASE_URL="$(grep '^NEON_DATABASE_URL=' ../.env | cut -d= -f2-)" \
+  REDIS_URL="$(grep '^UPSTASH_REDIS_URL=' ../.env | cut -d= -f2-)" \
+  EMBED_PROVIDER=local DOCS_TABLE=chunks_local_q8 \
+  LLM_PROVIDER=groq CHAT_MODEL=openai/gpt-oss-120b \
+  JUDGE_MODEL=openai/gpt-oss-20b ROUTER_MODEL=openai/gpt-oss-20b \
+  NUM_CTX=131072 npm start
+```
+
+and `npm run dev` in `web/`. (`source .env` does not work: the Neon URL
+contains `&`.)
