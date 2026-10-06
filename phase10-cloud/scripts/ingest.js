@@ -19,7 +19,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX } from "../api/config.js";
+import { DATABASE_URL, EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX } from "../api/config.js";
 import { cleanDocument } from "./cleanText.js";
 import { chunkFixed, chunkSections } from "./chunker.js";
 
@@ -46,13 +46,7 @@ const CHUNKING = process.env.CHUNKING ?? "sections";
 const HEADER = process.env.HEADER !== "0";
 if (!/^[a-z_][a-z0-9_]*$/.test(TABLE)) throw new Error(`Invalid INGEST_TABLE: ${TABLE}`);
 
-const db = new pg.Client({
-  host: "localhost",
-  port: 5432,
-  user: "rag",
-  password: "rag",
-  database: "rag",
-});
+const db = new pg.Client({ connectionString: DATABASE_URL });
 
 async function embed(text) {
   const res = await fetch(`${EMBED_BASE_URL}/api/embeddings`, {

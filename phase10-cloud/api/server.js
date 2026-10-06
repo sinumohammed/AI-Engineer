@@ -5,6 +5,8 @@ import express from "express";
 import cors from "cors";
 import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, EMBED_MODEL, EMBED_BASE_URL, DATABASE_URL, REDIS_URL, TRACE_TO, describeUrl } from "./config.js";
+import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
 
 const app = express();
@@ -112,4 +114,14 @@ app.delete("/api/chat/session/:sessionId", async (req, res) => {
 });
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3002;
-app.listen(PORT, () => console.log(`Phase 10 API listening on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Phase 10 API listening on http://localhost:${PORT}`);
+  // Phase 10: which services this server is using, so a glance at the
+  // terminal answers "local or cloud?". Hosts only, never keys or passwords.
+  const roles = ROUTER_MODEL === CHAT_MODEL && SPECIALIST_MODEL === CHAT_MODEL ? "" : ` (router ${ROUTER_MODEL}, specialists ${SPECIALIST_MODEL})`;
+  console.log(`  chat:       ${LLM_PROVIDER} ${CHAT_MODEL}${roles} at ${describeUrl(LLM_BASE_URL)}`);
+  console.log(`  embeddings: ${EMBED_MODEL} at ${describeUrl(EMBED_BASE_URL)}`);
+  console.log(`  documents:  ${describeUrl(DATABASE_URL)}`);
+  console.log(`  sessions:   ${describeUrl(REDIS_URL)}`);
+  console.log(`  traces:     ${TRACE_TO === "console" ? "console" : "logs/traces.jsonl"}`);
+});

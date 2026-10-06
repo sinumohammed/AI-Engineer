@@ -1,6 +1,10 @@
 import { useEffect, useReducer, useRef } from "react";
 
-const API_BASE = "http://localhost:3002";
+// Phase 10: where the API is, from VITE_API_BASE in phase10-cloud/.env (see
+// vite.config.js) or the host's build settings. Read at build time, so a
+// change needs a restart of `npm run dev` or a new build. An empty value
+// means the same site as the page, for when one host serves both.
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3002";
 
 function getOrCreateSessionId() {
   let id = localStorage.getItem("sessionId");
@@ -168,7 +172,7 @@ export function useChatSession() {
     });
     es.addEventListener("error", () => {
       es.close();
-      dispatch({ type: "ERROR", message: "(connection error - is the backend running on :3002?)" });
+      dispatch({ type: "ERROR", message: `(connection error - is the backend running at ${API_BASE || "this site"}?)` });
     });
   }
 

@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 import { withRetry } from "./retry.js";
-import { EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX, RELEVANCE_THRESHOLD } from "./config.js";
+import { DATABASE_URL, EMBED_BASE_URL, EMBED_MODEL, EMBED_PREFIX, RELEVANCE_THRESHOLD } from "./config.js";
 
 const TOP_K = 4;
 
@@ -16,20 +16,18 @@ function extractIdentifiers(text) {
   return [...new Set(text.match(IDENTIFIER_RE) ?? [])];
 }
 
-const db = new pg.Client({
-  host: "localhost",
-  port: 5432,
-  user: "rag",
-  password: "rag",
-  database: "rag",
-});
-let dbConnected = false;
-async function ensureDb() {
-  if (!dbConnected) {
-    await db.connect();
-    dbConnected = true;
-  }
-}
+// Phase 10: a pool instead of one pg.Client. A Client that fails to connect
+// once can never connect again ("Client has already been connected. You
+// cannot reuse a client.") - found in step 3 with a wrong password: every
+// later search failed until the server restarted. And when the database
+// closed the connection (Postgres restarted), the Client's unhandled error
+// crashed the whole server. A pool opens connections as queries need them
+// and drops broken ones, so either only fails the query it happens during -
+// including when Neon closes connections as it suspends after 5 idle minutes.
+const db = new pg.Pool({ connectionString: DATABASE_URL });
+// The pool reports a broken idle connection here; without a listener Node
+// treats it as an unhandled error and the process exits.
+db.on("error", (err) => console.error(`[db] idle connection error: ${err.message}`));
 
 async function embed(text) {
   return withRetry(
@@ -57,7 +55,6 @@ async function embed(text) {
 // tables are created by ingest.js with INGEST_TABLE). Not used by the agents.
 export async function vectorSearch(query, { k = 10, table = "doc_chunks" } = {}) {
   if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
-  await ensureDb();
   const queryEmbedding = await embed(query);
   const { rows } = await db.query(
     `SELECT source, chunk_index, content, embedding <=> $1 AS distance
@@ -76,7 +73,6 @@ export async function vectorSearch(query, { k = 10, table = "doc_chunks" } = {})
 // holds it" (the text was cut in two by a chunk boundary).
 export async function countChunksContaining(text, table = "doc_chunks") {
   if (!/^[a-z_][a-z0-9_]*$/.test(table)) throw new Error(`Invalid table: ${table}`);
-  await ensureDb();
   const readable = (sql) =>
     `regexp_replace(regexp_replace(regexp_replace(${sql}, '\\]\\((<[^>]*>|[^)]*)\\)', '', 'g'), '[\\[\\]_*\`]', '', 'g'), '\\s+', ' ', 'g')`;
   const { rows } = await db.query(
@@ -165,7 +161,6 @@ export const toolImpls = {
   // reranker asks for more and picks the best of them (see retrieve.js).
   search_company_docs: async ({ query, k = TOP_K }) => {
     try {
-      await ensureDb();
       const queryEmbedding = await embed(query);
 
       const [{ rows: vectorRows }, { rows: keywordRows }] = await Promise.all([
@@ -244,6 +239,10 @@ export const toolImpls = {
       merged.identifierMismatch = identifierMismatch;
       return merged;
     } catch (err) {
+      // Phase 10: logged, because nothing downstream does - a wrong
+      // DATABASE_URL looked exactly like "no relevant documents" (found
+      // testing step 3 with a wrong password: empty search, no log line).
+      console.error(`[search] document search failed: ${err.message}`);
       return { error: err.message };
     }
   },

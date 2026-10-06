@@ -4,8 +4,9 @@
 // shared data instead of separate in-process memory.
 import { createClient } from "redis";
 import { summarizeTurns } from "./summarize.js";
+import { REDIS_URL } from "./config.js";
 
-const client = createClient({ url: "redis://localhost:6379" });
+const client = createClient({ url: REDIS_URL });
 
 // The redis client emits its own 'error' events on connection problems
 // (Redis down, network blip, etc). Node's default behavior for an

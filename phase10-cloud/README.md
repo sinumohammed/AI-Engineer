@@ -142,3 +142,46 @@ Results:
 The four first-run failures on Groq were all correct answers: 3 in words
 the eval did not accept, 1 with a no-break space inside "90 days".
 The full eval set on Groq is step 5.
+
+### 10a.3 Settings instead of localhost
+
+| Setting | Used by | Default |
+|---|---|---|
+| `DATABASE_URL` | search (`api/tools.js`), `scripts/ingest.js` | `postgres://rag:rag@localhost:5432/rag` |
+| `REDIS_URL` | chat history (`api/sessionStore.js`) | `redis://localhost:6379` |
+| `VITE_API_BASE` | the web app (`web/src/useChatSession.js`) | `http://localhost:3002`; empty = same site as the page |
+| `TRACE_TO` | `api/tracer.js` | `console` on Vercel, `file` elsewhere |
+
+- **One settings file.** The web app reads `phase10-cloud/.env` too
+  (`envDir` in `web/vite.config.js`). Vite only passes `VITE_*` values to the
+  browser: a production build was searched and contains no key.
+- **The server says what it is using** when it starts - provider, model and
+  hosts, never passwords:
+  ```
+  Phase 10 API listening on http://localhost:3002
+    chat:       groq openai/gpt-oss-120b at https://api.groq.com/openai/v1
+    embeddings: nomic-embed-text at http://localhost:11434
+    documents:  postgres://localhost:5432/rag
+    sessions:   redis://localhost:6379
+    traces:     logs/traces.jsonl
+  ```
+- **Traces to the console** (`TRACE_TO=console`): the same JSON line, prefixed
+  `[trace]`. A hosted function's files are gone after the request; its
+  console output stays in the host's logs.
+
+Found by testing the new settings with wrong values, fixed here because
+Neon will cause the same failures:
+
+| Test | Before | After |
+|---|---|---|
+| Wrong password in `DATABASE_URL` | search silently empty, the UI said "not relevant", nothing logged | `[search] document search failed: password authentication failed...` |
+| The next question after a failed connection | failed too, until a restart: one `pg.Client` cannot connect twice | tries again (a `pg.Pool` opens connections as needed) |
+| Postgres restarted while the server runs | **the server crashed** (unhandled error from the dropped connection) | logged as `[db] idle connection error`, the next questions use the documents again |
+
+Neon suspends after 5 idle minutes and closes open connections - the
+restart test is that situation.
+
+Results on Ollama after this step: unchanged on all six evals (retrieval
+20/20, 7/10, 3/3, 4/4, off-topic 0/8; single agent 7/7; supervisor
+regression 7/7; routing 24/24, 3/3, 4/4; citations 37/37 with 32 and 31 on
+the expected passage). The evals still exit by themselves with the pool.

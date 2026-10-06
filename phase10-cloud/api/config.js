@@ -27,6 +27,25 @@ export const CHAT_MODEL = process.env.CHAT_MODEL ?? "qwen3-coder:30b";
 // gpt-oss models think before answering; "low" | "medium" | "high". Unset
 // sends nothing (the provider's default). OpenAI format only.
 export const REASONING_EFFORT = process.env.REASONING_EFFORT || null;
+// Phase 10 step 3: where the data lives, as connection URLs instead of
+// localhost in the code. The defaults are the local Docker containers, so
+// nothing changes until they are set (Neon and Upstash give URLs like these).
+export const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://rag:rag@localhost:5432/rag";
+export const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
+// Where traces go: "file" (logs/traces.jsonl) or "console". Hosted functions
+// cannot keep files, so on Vercel (which sets VERCEL=1) the default is console.
+export const TRACE_TO = process.env.TRACE_TO ?? (process.env.VERCEL ? "console" : "file");
+
+// For startup logs: host, port and path of a connection URL, never the password.
+export function describeUrl(url) {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}${u.pathname === "/" ? "" : u.pathname}`;
+  } catch {
+    return "(invalid URL)";
+  }
+}
+
 // Embeddings have their own URL so chat can move to a provider without an
 // embedding model (Groq has none) while search keeps working.
 export const EMBED_BASE_URL = process.env.EMBED_BASE_URL ?? "http://localhost:11434";
