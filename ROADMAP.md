@@ -237,30 +237,45 @@ Original picks (Windows laptop):
   | Chat history | Redis in Docker | Upstash | 1 DB, 256 MB, 500K commands/month, works with the existing `redis` client over TCP |
   | Chat model | Ollama `qwen3-coder:30b` | Groq | production models: llama-3.3-70b-versatile, llama-3.1-8b-instant, gpt-oss-120b, gpt-oss-20b; strict JSON-schema output only on gpt-oss (needed by the router); free daily request/token caps - check the console |
   | Embeddings | Ollama `nomic-embed-text` | Gemini `gemini-embedding-001` at 768 dimensions | Groq has no embedding model; Gemini free tier is rate limited (about 1,000 requests/day per Google's forum) |
-  - **Agreed plan (2026-10-05): two parts, each ending in something that works.**
-    - **10a - hosted services, app still on this Mac.** All code changes and eval re-runs happen here, where problems are easy to debug. Done when the app on the Mac answers through Groq + Gemini embeddings + Neon + Upstash and the evals pass.
-    - **10b - deploy to Vercel.** Packaging and deployment only: repo-level setup, the API as an Express function, the UI as a static site, access code, smoke tests against the public URL.
-    - **First step of 10a:** extend the shared model client (`phase5-rag/llmClient.js`) with an `LLM_PROVIDER` setting (`ollama` | `openai`, the OpenAI-compatible format Groq uses). This needs no accounts, so it can be written and tested against local Ollama first.
-  - **Where the code is tied to Ollama or localhost today** (checked 2026-10-06):
-    | File | What | Change |
+  - **Approach (decided 2026-10-06): a self-contained copy, `phase10-cloud/`.** Phases 1-9 are **frozen** as the working local reference and are not edited for Phase 10. The chat app's code is copied into one new folder and only the copy is changed. From Phase 10 on, the copy is the only code being developed, so the two never need the same fix twice; it keeps an `ollama` setting so it still runs fully on this Mac.
+    - **Why copy instead of switches in the existing code:** the local app stays untouched; Vercel needs the server in one self-contained folder (today it imports from 3 other folders, and only the server's own packages would be installed); the diff between local and cloud becomes the lesson; and it matches the one-folder-per-phase pattern.
+    - **The cost, and how it is avoided:** two copies drift apart if both keep changing. Freezing phases 1-9 removes that.
+  - **Layout of the copy:**
+    ```
+    phase10-cloud/
+    ├── api/      server.js, both agents, the supervisor, retrieval, citations, sessions
+    │             (from phase6-ui/server, phase5-rag, phase8b-multi-agent), one package.json
+    ├── web/      the React app (from phase6-ui/web)
+    ├── scripts/  ingest.js - reads the handbook in place from phase5-rag/docs (2 MB, not duplicated)
+    └── eval/     single-agent, supervisor, retrieval and citation evals, pointed at the copy
+    ```
+    Not copied: the LangGraph supervisor, the Phase 8a LangChain agents and the Phase 2-5 scripts - the chat app does not use them.
+  - **Plan**
+    - **10a - hosted services, app still on this Mac**
+      1. **Copy without changing behaviour.** Run it on ports 3002/5174 next to the original (3001/5173), against the same local Ollama and Docker, and run every eval on it. Passing proves the copy is faithful before anything changes. Needs no accounts.
+      2. **Model provider setting** in the copy's shared client: `LLM_PROVIDER=ollama | openai` (the OpenAI-compatible format Groq uses). Test on Ollama first, then Groq.
+      3. **Settings instead of localhost:** `DATABASE_URL`, `REDIS_URL`, `VITE_API_BASE`; traces to the console.
+      4. **Gemini embeddings:** load the public handbook only into Neon; compare the retrieval eval with the Phase 9 end state.
+      5. **Upstash and Neon from the Mac,** then all evals; retune prompts if Groq's models need it.
+    - **10b - deploy**
+      6. `api/` and `web/` on Vercel, add the access code, test against the public URL.
+  - **What the copy changes, file by file** (the originals, checked 2026-10-06, stay as they are):
+    | Copied from | Tied to | Change in the copy |
     |---|---|---|
     | `phase5-rag/llmClient.js` | `/api/chat` (reranker, supervisor) | add the OpenAI-compatible path |
-    | `phase6-ui/server/agent.js` | its own `callModel`, `/api/chat` with `tools` | move onto the shared client; send no `tools` when the list is empty |
-    | `phase5-rag/summarize.js` | `/api/chat` | move onto the shared client |
-    | `phase5-rag/tools.js`, `ingest.js` | `/api/embeddings`, Postgres at `localhost` | embedding provider setting (`EMBED_PROVIDER`); `DATABASE_URL` |
-    | `phase6-ui/server/sessionStore.js` | Redis at `redis://localhost:6379` | `REDIS_URL` |
-    | `phase6-ui/web/src/useChatSession.js` | API at `http://localhost:3001` | `VITE_API_BASE` |
+    | `phase6-ui/server/agent.js` | its own `callModel`, `/api/chat` with `tools` | use the shared client; send no `tools` when the list is empty |
+    | `phase5-rag/summarize.js` | `/api/chat` | use the shared client |
+    | `phase5-rag/tools.js`, `ingest.js` | `/api/embeddings`, Postgres at `localhost` | `EMBED_PROVIDER` setting; `DATABASE_URL` |
+    | `phase6-ui/server/sessionStore.js` | `redis://localhost:6379` | `REDIS_URL` |
+    | `phase6-ui/web/src/useChatSession.js` | `http://localhost:3001` | `VITE_API_BASE` |
     | `phase5-rag/tracer.js` | writes `logs/traces.jsonl` | console when hosted (Vercel functions cannot keep files) |
-    | `phase8b-multi-agent/supervisor-graph.js` | LangChain `ChatOllama` | not part of the deployed app; leave on Ollama |
-    | `phase5-rag/agent.js`, `query.js` | older Phase 5 scripts | not deployed; leave |
-    Groq specifics to handle: OpenAI response shape (`choices[0].message.content`, `usage.prompt_tokens`), JSON schema via `response_format: { type: "json_schema", ... strict: true }` which needs `additionalProperties: false` and every field required (the router and rerank schemas need that), and no `num_ctx`.
+    Groq specifics to handle: OpenAI response shape (`choices[0].message.content`, `usage.prompt_tokens`), JSON schema via `response_format: { type: "json_schema", ... strict: true }` which needs `additionalProperties: false` and every field required (the router and relevance schemas), and no `num_ctx`.
   - **Risks to watch:**
-    - **Changing the embedding model changes search.** All Phase 9 tuning used `nomic-embed-text`. Re-ingest with Gemini embeddings, then re-run the retrieval eval (`phase9-real-docs`) and compare with the Phase 9 end state before going further. The Gemini free tier may make loading 4,288 chunks slow.
-    - **Prompts were tuned on qwen3-coder:30b.** Groq's models may need prompt fixes (router, relevance judging), as gemma3:4b did. Re-run every eval.
-    - **Groq free daily caps.** A full eval run makes a few hundred model calls; spread test runs out or use a smaller model for some of them.
-  - **Accounts the user creates before 10a needs them:** Vercel, Neon, Upstash, Groq, Google AI Studio (Gemini API key). Keys go in `phase5-rag/.env` locally and in Vercel's settings - never in git or in chat.
-  - **Expected size:** about the same as Phase 9. The code changes are straightforward; the uncertain parts are the embedding re-ingest and any prompt retuning.
-  - **Code changes needed (summary):** the shared model client with `LLM_PROVIDER`, settings instead of localhost, repo-level packaging so Vercel installs `pg` for code the server imports from other folders, traces to the console, re-ingest with the new embedding model.
+    - **Changing the embedding model changes search.** All Phase 9 tuning used `nomic-embed-text`. Re-ingest with Gemini embeddings and compare the retrieval eval before going further. The Gemini free tier may make loading 4,288 chunks slow.
+    - **Prompts were tuned on qwen3-coder:30b.** Groq's models may need prompt fixes (router, relevance judging), as gemma3:4b did.
+    - **Groq free daily caps.** A full eval run makes a few hundred model calls; spread runs out or use a smaller model for some.
+  - **Accounts the user creates before step 2:** Vercel, Neon, Upstash, Groq, Google AI Studio (Gemini API key). Keys go in the copy's `.env` locally and in Vercel's settings - never in git or in chat.
+  - **Expected size:** about the same as Phase 9. The uncertain parts are the embedding re-ingest and any prompt retuning.
   - **Rules:** only the public handbook goes into the hosted database - private documents stay with the local Ollama setup, because a hosted app is public and every question sends document text to the model provider. Add an access code so strangers cannot use up the free Groq quota. Keys live in `.env` and Vercel settings, never in git.
   - Ollama itself has no practical free host for a 30B model; Groq replaces it for chat.
 
