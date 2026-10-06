@@ -1,0 +1,13 @@
+{
+  "name": "phase10-cloud-eval",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "eval": "node --env-file=../.env single-agent-eval.js",
+    "eval:regression:multi": "AGENT_MODULE=../api/supervisor.js node --env-file=../.env single-agent-eval.js",
+    "eval:supervisor": "node --env-file=../.env supervisor-eval.js",
+    "eval:retrieval": "node --env-file=../.env retrieval-eval.js",
+    "eval:citations": "node --env-file=../.env citation-eval.js",
+    "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js"
+  }
+}

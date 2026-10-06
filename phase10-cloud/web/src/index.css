@@ -1,0 +1,30 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+@keyframes aiengineer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aiengineer-blink {
+  0%, 80%, 100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
