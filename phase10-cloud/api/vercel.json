@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
+  "functions": {
+    "server.js": {
+      "maxDuration": 120,
+      "excludeFiles": "node_modules/onnxruntime-node/bin/napi-v6/{win32,darwin}/**"
+    }
+  }
+}

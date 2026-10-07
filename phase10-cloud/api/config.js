@@ -52,6 +52,12 @@ export const DATABASE_IS_LOCAL = ["localhost", "127.0.0.1", "::1"].includes(new 
 // Where traces go: "file" (logs/traces.jsonl) or "console". Hosted functions
 // cannot keep files, so on Vercel (which sets VERCEL=1) the default is console.
 export const TRACE_TO = process.env.TRACE_TO ?? (process.env.VERCEL ? "console" : "file");
+// Phase 10 step 6: a hosted app is public, and every question spends free
+// model quota. ACCESS_CODE, when set, is required on every /api request
+// (server.js). ALLOWED_ORIGIN, when set, is the only website whose pages may
+// call the API from a browser (CORS). Both unset = open, as on the Mac.
+export const ACCESS_CODE = process.env.ACCESS_CODE || null;
+export const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null;
 
 // For startup logs: host, port and path of a connection URL, never the password.
 export function describeUrl(url) {

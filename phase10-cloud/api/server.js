@@ -1,17 +1,34 @@
 // API in front of the Phase 5.5 agent, with per-session multi-turn memory
 // backed by Redis (see sessionStore.js) instead of an in-process Map - this
 // is what lets multiple server instances share the same conversation state.
+import { timingSafeEqual, createHash } from "node:crypto";
 import express from "express";
 import cors from "cors";
 import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODEL, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, describeUrl } from "./config.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODEL, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
 
 const app = express();
-app.use(cors());
+app.use(cors(ALLOWED_ORIGIN ? { origin: ALLOWED_ORIGIN } : undefined));
+
+// Phase 10 step 6: the access code. Sent as the x-access-code header, or as
+// ?code= on the answer stream - the browser's EventSource cannot send
+// headers. Compared through hashes with timingSafeEqual, so the time a check
+// takes says nothing about how much of a guess was right.
+const digest = (s) => createHash("sha256").update(String(s)).digest();
+function hasAccess(req) {
+  if (!ACCESS_CODE) return true;
+  const given = req.get("x-access-code") ?? req.query.code;
+  return typeof given === "string" && given.length > 0 && timingSafeEqual(digest(given), digest(ACCESS_CODE));
+}
+// Lets the web app ask, before opening the stream, whether a code is needed
+// and whether the one it has is right - so a wrong code shows a prompt, not
+// a dropped connection.
+app.get("/api/access", (req, res) => res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req) }));
+app.use("/api", (req, res, next) => (hasAccess(req) ? next() : res.status(401).json({ error: "Access code required" })));
 
 // How many turns are stored, and whether older ones have been folded into a
 // summary yet (see summarize.js) - this is what the UI shows near the token
@@ -119,11 +136,21 @@ app.delete("/api/chat/session/:sessionId", async (req, res) => {
   res.json({ ok: true });
 });
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3002;
-app.listen(PORT, () => {
-  console.log(`Phase 10 API listening on http://localhost:${PORT}`);
-  // Phase 10: which services this server is using, so a glance at the
-  // terminal answers "local or cloud?". Hosts only, never keys or passwords.
+// Phase 10 step 6: on Vercel the app is exported and Vercel runs it as one
+// function; on the Mac it listens on a port as before.
+export default app;
+
+if (process.env.VERCEL) {
+  logServices("Phase 10 API on Vercel");
+} else {
+  const PORT = process.env.PORT ? Number(process.env.PORT) : 3002;
+  app.listen(PORT, () => logServices(`Phase 10 API listening on http://localhost:${PORT}`));
+}
+
+// Which services this server is using, so a glance at the terminal (or the
+// Vercel logs) answers "local or cloud?". Hosts only, never keys or passwords.
+function logServices(firstLine) {
+  console.log(firstLine);
   const roles =
     ROUTER_MODEL === CHAT_MODEL && SPECIALIST_MODEL === CHAT_MODEL && JUDGE_MODEL === CHAT_MODEL
       ? ""
@@ -135,4 +162,5 @@ app.listen(PORT, () => {
   console.log(`  documents:  ${describeUrl(DATABASE_URL)}`);
   console.log(`  sessions:   ${describeUrl(REDIS_URL)}`);
   console.log(`  traces:     ${TRACE_TO === "console" ? "console" : "logs/traces.jsonl"}`);
-});
+  console.log(`  access:     ${ACCESS_CODE ? "code required" : "open (no ACCESS_CODE)"}${ALLOWED_ORIGIN ? `, browser calls only from ${ALLOWED_ORIGIN}` : ""}`);
+}

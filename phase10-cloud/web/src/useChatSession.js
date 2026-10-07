@@ -1,10 +1,22 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 // Phase 10: where the API is, from VITE_API_BASE in phase10-cloud/.env (see
 // vite.config.js) or the host's build settings. Read at build time, so a
 // change needs a restart of `npm run dev` or a new build. An empty value
 // means the same site as the page, for when one host serves both.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3002";
+
+// Phase 10 step 6: the access code a hosted API asks for (ACCESS_CODE on the
+// server), remembered in this browser once entered. Sent as a header, and as
+// ?code= on the answer stream, which cannot send headers.
+function storedCode() {
+  try {
+    return localStorage.getItem("accessCode") ?? "";
+  } catch {
+    return "";
+  }
+}
+const codeHeaders = () => (storedCode() ? { "x-access-code": storedCode() } : {});
 
 function getOrCreateSessionId() {
   let id = localStorage.getItem("sessionId");
@@ -142,21 +154,58 @@ export function useChatSession() {
     agent: "auto",
   });
   const esRef = useRef(null);
+  // { needed, wrong }: whether to show the access-code form, and whether the
+  // last code entered was rejected.
+  const [access, setAccess] = useState({ needed: false, wrong: false });
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/chat/session/${state.sessionId}`)
+  function loadSession() {
+    fetch(`${API_BASE}/api/chat/session/${state.sessionId}`, { headers: codeHeaders() })
       .then((r) => r.json())
       .then(({ history, usage, memory }) => dispatch({ type: "LOAD", messages: historyToMessages(history, usage), usage, memory }))
       .catch(() => dispatch({ type: "LOAD", messages: [], usage: null }));
+  }
+
+  // Ask the API whether a code is needed and whether ours is right, before
+  // loading the conversation. An API without ACCESS_CODE answers ok.
+  async function checkAccess() {
+    try {
+      const r = await fetch(`${API_BASE}/api/access`, { headers: codeHeaders() });
+      const { ok } = await r.json();
+      return ok;
+    } catch {
+      return true; // unreachable API: let the normal connection error show
+    }
+  }
+
+  useEffect(() => {
+    checkAccess().then((ok) => {
+      if (ok) loadSession();
+      else setAccess({ needed: true, wrong: Boolean(storedCode()) });
+    });
     // sessionId is stable for the lifetime of this hook instance (new instance after newChat)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function submitCode(code) {
+    try {
+      localStorage.setItem("accessCode", code.trim());
+    } catch {
+      // storage blocked: the code cannot be remembered, so it cannot be sent
+    }
+    if (await checkAccess()) {
+      setAccess({ needed: false, wrong: false });
+      loadSession();
+    } else {
+      setAccess({ needed: true, wrong: true });
+    }
+  }
 
   function ask(question) {
     dispatch({ type: "ASK_START", question });
 
     const override = state.mode === "multi" && state.agent !== "auto" ? `&agent=${state.agent}` : "";
-    const url = `${API_BASE}/api/chat/stream?sessionId=${state.sessionId}&mode=${state.mode}${override}&q=${encodeURIComponent(question)}`;
+    const code = storedCode() ? `&code=${encodeURIComponent(storedCode())}` : "";
+    const url = `${API_BASE}/api/chat/stream?sessionId=${state.sessionId}&mode=${state.mode}${override}${code}&q=${encodeURIComponent(question)}`;
     const es = new EventSource(url);
     esRef.current = es;
 
@@ -191,7 +240,7 @@ export function useChatSession() {
   }
 
   async function newChat() {
-    await fetch(`${API_BASE}/api/chat/session/${state.sessionId}`, { method: "DELETE" });
+    await fetch(`${API_BASE}/api/chat/session/${state.sessionId}`, { method: "DELETE", headers: codeHeaders() });
     const freshId = crypto.randomUUID();
     localStorage.setItem("sessionId", freshId);
     dispatch({ type: "RESET", sessionId: freshId });
@@ -206,5 +255,5 @@ export function useChatSession() {
     dispatch({ type: "SET_AGENT", agent });
   }
 
-  return { state, ask, newChat, setMode, setAgent };
+  return { state, ask, newChat, setMode, setAgent, access, submitCode };
 }

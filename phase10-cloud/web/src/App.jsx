@@ -3,7 +3,7 @@ import { useChatSession } from "./useChatSession.js";
 import TokenRing from "./TokenRing.jsx";
 
 export default function App() {
-  const { state, ask, newChat, setMode, setAgent } = useChatSession();
+  const { state, ask, newChat, setMode, setAgent, access, submitCode } = useChatSession();
   const [input, setInput] = useState("");
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -25,6 +25,9 @@ export default function App() {
     ask(input.trim());
     setInput("");
   }
+
+  // Phase 10 step 6: the hosted API needs an access code before anything else.
+  if (access.needed) return <AccessCodeForm wrong={access.wrong} onSubmit={submitCode} />;
 
   return (
     <div style={styles.page}>
@@ -199,6 +202,36 @@ function UsageFooter({ usage }) {
           ⚠️ {usage.warningMessage}
         </div>
       )}
+    </div>
+  );
+}
+
+function AccessCodeForm({ wrong, onSubmit }) {
+  const [code, setCode] = useState("");
+  return (
+    <div style={styles.page}>
+      <form
+        style={{ ...styles.card, maxWidth: 360, padding: 24, gap: 12, height: "auto", alignSelf: "center" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (code.trim()) onSubmit(code);
+        }}
+      >
+        <div style={{ fontWeight: 600 }}>Access code</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>This demo runs on free model quotas, so it is not open to everyone.</div>
+        <input
+          autoFocus
+          type="password"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Enter the access code"
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 14 }}
+        />
+        {wrong && <div style={{ fontSize: 12.5, color: "#b91c1c" }}>That code was not accepted.</div>}
+        <button type="submit" style={{ padding: "8px 10px", borderRadius: 8, border: "none", background: "#0f172a", color: "white", fontSize: 14, cursor: "pointer" }}>
+          Continue
+        </button>
+      </form>
     </div>
   );
 }
