@@ -332,3 +332,47 @@ cd api && DATABASE_URL="$(grep '^NEON_DATABASE_URL=' ../.env | cut -d= -f2-)" \
 
 and `npm run dev` in `web/`. (`source .env` does not work: the Neon URL
 contains `&`.)
+
+**2026-10-07: items 1-3 done, item 4 partly.**
+
+1. **Cheaper judging** (`eval/judge-cost.js`: score and tokens per question,
+   all 41 public cases, `gpt-oss-20b` judging, documents in Neon):
+
+   | Judging setting | Agent sees it (direct / paraphrased / original) | Off-topic wrongly relevant | Tokens per question |
+   |---|---|---|---|
+   | default effort, 12 candidates | 19/20, 6/10, 3/3 | 0/8 | 1,654 |
+   | low effort, 12 candidates | 20/20, 8/10, 3/3 | 0/8 | 1,371 |
+   | low effort, 8 candidates | 20/20, 8/10, 3/3 | 0/8 | 1,009 |
+
+   `JUDGE_REASONING_EFFORT` (judging and follow-up rewrites only; answers
+   keep their reasoning, not measured at low). Candidates: 8 scored the same
+   on the q8 table for both models, but on the Ollama table one paraphrased
+   answer is at rank 9, so the default is **10** - everything the retrieval
+   eval counts as found.
+   - The new follow-up case caught a trap: qwen's rewrite ("it" → "12 unpaid
+     weeks of leave every 52 weeks under FMLA") moved the right section to
+     rank 9. Now the model only names the referent and the code substitutes it.
+   - The same case found an old router bug (also in Phase 9): it re-added the
+     earlier question as a second part and sent both to `general`. Tasks
+     repeating an earlier user message are dropped, the evidence search and
+     the specialist use the resolved question.
+2. **`FALLBACK_MODEL`**: when a model's daily quota is used up, the answer
+   comes from the fallback and the UI shows a note.
+3. **Clear limit message**: "Today's free limit for the AI model is used up
+   - try again in about N minutes." Daily limits are not retried in place.
+   The UI showed every server error as "connection error"; now the message.
+   Items 2-3 were tested against a mock Groq server, directly and through
+   the real server.
+
+| Eval | Ollama (final code) | Groq: answers 120b, judging (low) and routing 20b, Neon |
+|---|---|---|
+| Retrieval: direct / paraphrased / original / private, off-topic | 20/20, 7/10, 3/3, 4/4, 0/8 | (judge-cost above) |
+| Single agent | 8/8 | 8/8 |
+| Supervisor regression | 8/8 | 8/8 |
+| Routing / two-part / history | 24/24, 3/3, 4/4 | not run yet (daily limit) |
+| Citations: cites a source / expected passage | 37/37, 32/37 | 13/13 run cases, then the daily limit |
+| Citations, multi-agent | 37/37, 31/37 | not run yet |
+
+On Groq the eval stopped with the new message, "Today's free limit for the
+AI model is used up - try again in about 8 minutes" - item 3 on the real
+service.
