@@ -5,7 +5,8 @@ import express from "express";
 import cors from "cors";
 import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, describeUrl } from "./config.js";
+import { collectNotices } from "./llmClient.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODEL, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, describeUrl } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
 
@@ -67,9 +68,11 @@ app.get("/api/chat/stream", async (req, res) => {
     // are identical for both modes - only the progress events differ: the
     // single agent reports tool calls, the supervisor reports its routing
     // decision and each specialist starting and finishing.
-    const { answer, usage, fromCompanyDocs, sources = [] } =
+    // Phase 10: notices (e.g. "answered by the fallback model") are collected
+    // for this request by the model client and sent before the answer.
+    const { result, notices } = await collectNotices(() =>
       mode === "multi"
-        ? await runMultiAgent(question, history, {
+        ? runMultiAgent(question, history, {
             onRoute: (decision) => send("route", decision),
             onAgentStart: (step) => send("agent_start", step),
             onAgentDone: (step) => send("agent_done", step),
@@ -78,13 +81,16 @@ app.get("/api/chat/stream", async (req, res) => {
             // unrecognized means the router decides (validated in supervisor.js).
             forceAgent: req.query.agent,
           })
-        : await runAgent(question, history, {
+        : runAgent(question, history, {
             onToolCall: (name, args) => send("tool_call", { name, args }),
             // `outcome` (document search only): "used", "not relevant" or
             // "code not found" - what the search led to, shown on the chip.
             onToolResult: (name, result, { outcome } = {}) => send("tool_result", { name, result, outcome }),
             summary,
-          });
+          })
+    );
+    const { answer, usage, fromCompanyDocs, sources = [] } = result;
+    for (const text of notices) send("notice", { text });
 
     await appendTurn(sessionId, question, answer, { fromCompanyDocs });
     await saveUsage(sessionId, usage);
@@ -122,7 +128,8 @@ app.listen(PORT, () => {
     ROUTER_MODEL === CHAT_MODEL && SPECIALIST_MODEL === CHAT_MODEL && JUDGE_MODEL === CHAT_MODEL
       ? ""
       : ` (judging ${JUDGE_MODEL}, router ${ROUTER_MODEL}, specialists ${SPECIALIST_MODEL})`;
-  console.log(`  chat:       ${LLM_PROVIDER} ${CHAT_MODEL}${roles} at ${describeUrl(LLM_BASE_URL)}`);
+  const fallback = FALLBACK_MODEL ? `, falls back to ${FALLBACK_MODEL} when a daily limit is reached` : "";
+  console.log(`  chat:       ${LLM_PROVIDER} ${CHAT_MODEL}${roles} at ${describeUrl(LLM_BASE_URL)}${fallback}`);
   const embedWhere = { ollama: `at ${describeUrl(EMBED_BASE_URL)}`, local: "in this process", gemini: "at Google's Gemini API" }[EMBED_PROVIDER];
   console.log(`  embeddings: ${EMBED_PROVIDER} ${EMBED_MODEL} ${embedWhere}, table ${DOCS_TABLE}`);
   console.log(`  documents:  ${describeUrl(DATABASE_URL)}`);

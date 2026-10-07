@@ -30,9 +30,17 @@ export const CHAT_MODEL = process.env.CHAT_MODEL ?? "qwen3-coder:30b";
 // them a smaller model with its own free quota (Groq limits each model to
 // 200,000 tokens a day) and keep the bigger one for answers.
 export const JUDGE_MODEL = process.env.JUDGE_MODEL ?? CHAT_MODEL;
+// Phase 10: when a model's daily quota is used up, answer with this one
+// instead of failing (llmClient.js); the UI says so. Unset = no fallback.
+export const FALLBACK_MODEL = process.env.FALLBACK_MODEL || null;
 // gpt-oss models think before answering; "low" | "medium" | "high". Unset
 // sends nothing (the provider's default). OpenAI format only.
 export const REASONING_EFFORT = process.env.REASONING_EFFORT || null;
+// Phase 10: relevance judging and follow-up rewrites are short decisions;
+// "low" cut gpt-oss-20b's hidden reasoning ~80% (288 -> 61 tokens per
+// question) with the same or better retrieval scores. Answers keep
+// REASONING_EFFORT - low effort there is not measured.
+export const JUDGE_REASONING_EFFORT = process.env.JUDGE_REASONING_EFFORT || REASONING_EFFORT;
 // Phase 10 step 3: where the data lives, as connection URLs instead of
 // localhost in the code. The defaults are the local Docker containers, so
 // nothing changes until they are set (Neon and Upstash give URLs like these).

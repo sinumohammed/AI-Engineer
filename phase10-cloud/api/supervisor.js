@@ -15,11 +15,13 @@ import { pathToFileURL } from "node:url";
 import { logTrace } from "./tracer.js";
 import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
+import { standaloneQuestion } from "./retrieve.js";
 import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, synthesizerMessages } from "./routing.js";
 
 export async function route(question, history = []) {
   const startedAt = Date.now();
-  const { messages, evidence } = await routerMessages(question, history);
+  const searchQuestion = await standaloneQuestion(question, history);
+  const { messages, evidence } = await routerMessages(question, history, searchQuestion);
   const res = await chat({ model: ROUTER_MODEL, label: "router", format: ROUTE_SCHEMA, messages });
 
   let parsed = null;
@@ -29,8 +31,15 @@ export async function route(question, history = []) {
     // validateRoute falls back to a safe default
   }
 
+  // Phase 10: a task that is the user's follow-up word for word ("And who is
+  // eligible for it?") gets the resolved wording, so the specialist's own
+  // document search can find what "it" is.
+  const decision = applyDocPriority(validateRoute(parsed, question, history), evidence);
+  if (searchQuestion !== question) {
+    decision.tasks = decision.tasks.map((t) => (t.question.trim() === question.trim() ? { ...t, question: searchQuestion } : t));
+  }
   return {
-    ...applyDocPriority(validateRoute(parsed, question), evidence),
+    ...decision,
     evidence,
     latencyMs: Date.now() - startedAt,
     promptTokens: res.promptTokens,

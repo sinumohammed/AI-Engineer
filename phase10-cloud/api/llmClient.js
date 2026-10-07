@@ -11,13 +11,55 @@
 // `format` is an optional JSON schema the reply is constrained to, so a
 // decision comes back as JSON that always parses.
 // `tools` is sent only when the list is not empty.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { withRetry } from "./retry.js";
-import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
+import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, FALLBACK_MODEL, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
 
-export async function chat({ model = CHAT_MODEL, messages, format, tools, label = "chat" }) {
+export async function chat({ model = CHAT_MODEL, messages, format, tools, label = "chat", reasoningEffort = REASONING_EFFORT }) {
   const send = LLM_FORMAT === "openai" ? sendOpenAI : sendOllama;
-  const res = await withRetry(() => send({ model, messages, format, tools, label }), { label: `${LLM_PROVIDER} ${label} request` });
+  const call = (m) => withRetry(() => send({ model: m, messages, format, tools, label, reasoningEffort }), { label: `${LLM_PROVIDER} ${label} request` });
+  let res;
+  try {
+    res = await call(model);
+  } catch (err) {
+    if (!err.dailyLimit) throw err;
+    // Phase 10: a free tier's daily quota is used up for this model. Answer
+    // with FALLBACK_MODEL (its own quota) and tell the user; or, with no
+    // other model left, say plainly when to try again instead of a raw 429.
+    if (!FALLBACK_MODEL || model === FALLBACK_MODEL) throw limitReached(err);
+    notice(`Answered by ${FALLBACK_MODEL}: today's free limit for ${model} is used up.`);
+    try {
+      res = await call(FALLBACK_MODEL);
+    } catch (err2) {
+      throw err2.dailyLimit ? limitReached(err2) : err2;
+    }
+  }
   return { ...res, content: plainText(res.content) };
+}
+
+// Notices for the person asking, collected per request without passing
+// anything through the ~8 places that call chat(): the server runs each
+// request inside collectNotices (server.js) and sends what was noted.
+const requestNotices = new AsyncLocalStorage();
+export async function collectNotices(fn) {
+  const notices = [];
+  const result = await requestNotices.run(notices, fn);
+  return { result, notices };
+}
+function notice(text) {
+  const notices = requestNotices.getStore();
+  if (notices && !notices.includes(text)) notices.push(text);
+}
+
+function limitReached(err) {
+  const wait = err.message.match(/try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/);
+  const minutes = wait ? Math.max(1, Math.ceil((Number(wait[1] ?? 0) * 3600 + Number(wait[2] ?? 0) * 60 + Number(wait[3] ?? 0)) / 60)) : null;
+  const e = new Error(
+    `Today's free limit for the AI model is used up${minutes ? ` - try again in about ${minutes} minute${minutes === 1 ? "" : "s"}` : " - try again later"}.`
+  );
+  e.status = 429;
+  e.dailyLimit = true;
+  return e;
 }
 
 // Found on Groq's gpt-oss models (Phase 10 step 2): they write a narrow
@@ -46,6 +88,8 @@ async function post(url, body) {
     // Hosted providers say how long to wait when rate-limited (retry.js).
     const retryAfter = Number(res.headers.get("retry-after"));
     if (retryAfter > 0) err.retryAfterMs = retryAfter * 1000;
+    // Groq says which limit: "tokens per day (TPD)" or "requests per day (RPD)".
+    if (res.status === 429 && /per day/i.test(err.message)) err.dailyLimit = true;
     throw err;
   }
   return res.json();
@@ -72,7 +116,7 @@ async function sendOllama({ model, messages, format, tools }) {
 // the provider guarantees it), there is no num_ctx (the provider sets the
 // context window), the reply is in choices[0], token counts are named
 // prompt_tokens/completion_tokens, and tool-call arguments are a JSON string.
-async function sendOpenAI({ model, messages, format, tools, label }) {
+async function sendOpenAI({ model, messages, format, tools, label, reasoningEffort }) {
   const data = await post(`${LLM_BASE_URL}/chat/completions`, {
     model,
     messages,
@@ -81,7 +125,7 @@ async function sendOpenAI({ model, messages, format, tools, label }) {
       ? { response_format: { type: "json_schema", json_schema: { name: label, strict: true, schema: strictSchema(format) } } }
       : {}),
     ...(tools?.length ? { tools } : {}),
-    ...(REASONING_EFFORT ? { reasoning_effort: REASONING_EFFORT } : {}),
+    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
   });
   const msg = data.choices?.[0]?.message ?? {};
   return {

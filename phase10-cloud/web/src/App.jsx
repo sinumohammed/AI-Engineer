@@ -114,6 +114,11 @@ export default function App() {
                     ))}
                   </div>
                 )}
+                {/* Phase 10: e.g. "Answered by openai/gpt-oss-20b: today's
+                    free limit for openai/gpt-oss-120b is used up." */}
+                {m.role === "assistant" && m.notices?.map((text) => (
+                  <div key={text} style={styles.notice}>{text}</div>
+                ))}
                 {m.role === "assistant" && m.usage && (
                   <UsageFooter usage={m.usage} />
                 )}
@@ -318,6 +323,7 @@ const styles = {
     cursor: "pointer",
   }),
   sources: { marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", gap: 3 },
+  notice: { marginTop: 8, padding: "5px 8px", borderRadius: 6, background: "#fef3c7", color: "#92400e", fontSize: 11.5 },
   sourcesLabel: { fontSize: 10.5, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" },
   sourceRow: { fontSize: 12, color: "#334155", lineHeight: 1.4, overflowWrap: "anywhere" },
   sourceNumber: { fontFamily: "monospace", color: "#2563eb", fontWeight: 600 },

@@ -90,6 +90,9 @@ function reducer(state, action) {
     // Phase 9.6: which document sections the answer cited
     case "SOURCES":
       return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, sources: action.sources })) };
+    // Phase 10: notes from the server about how this answer was made
+    case "NOTICE":
+      return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, notices: [...(m.notices ?? []), action.text] })) };
     case "SET_MODE":
       return { ...state, mode: action.mode };
     case "SET_AGENT":
@@ -166,13 +169,24 @@ export function useChatSession() {
     es.addEventListener("sources", (e) => dispatch({ type: "SOURCES", sources: JSON.parse(e.data) }));
     es.addEventListener("usage", (e) => dispatch({ type: "USAGE", usage: JSON.parse(e.data) }));
     es.addEventListener("memory", (e) => dispatch({ type: "MEMORY", memory: JSON.parse(e.data) }));
+    es.addEventListener("notice", (e) => dispatch({ type: "NOTICE", ...JSON.parse(e.data) }));
     es.addEventListener("done", () => {
       es.close();
       dispatch({ type: "DONE" });
     });
-    es.addEventListener("error", () => {
+    // Two different things arrive as "error": the server's own error event,
+    // which carries a message (e.g. a daily model limit - Phase 10), and the
+    // browser's lost-connection error, which carries none. Before, both
+    // showed "connection error", so a rate limit looked like a server crash.
+    es.addEventListener("error", (e) => {
       es.close();
-      dispatch({ type: "ERROR", message: `(connection error - is the backend running at ${API_BASE || "this site"}?)` });
+      let message = null;
+      try {
+        message = e.data ? JSON.parse(e.data).message : null;
+      } catch {
+        // not JSON: treat as a lost connection
+      }
+      dispatch({ type: "ERROR", message: message ? `(${message})` : `(connection error - is the backend running at ${API_BASE || "this site"}?)` });
     });
   }
 

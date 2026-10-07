@@ -94,9 +94,12 @@ async function docEvidence(question) {
 
 // The messages to send to the router model, plus the evidence metadata for
 // the trace.
-export async function routerMessages(question, history = []) {
+// `searchQuestion`: the message with a follow-up's "it"/"that" resolved
+// (retrieve.js, standaloneQuestion) - Phase 10: the evidence for "And who is
+// eligible for it?" has to be searched as "...eligible for FMLA?".
+export async function routerMessages(question, history = [], searchQuestion = question) {
   const recent = history.slice(-ROUTER_HISTORY_MESSAGES);
-  const evidence = await docEvidence(question);
+  const evidence = await docEvidence(searchQuestion);
   // The user's message is always labelled, so the router can tell it apart
   // from the excerpt below it. Without the label, a one-question message
   // ("How do I set up a CI build with GitHub Actions?") was split in two: the
@@ -117,14 +120,29 @@ export async function routerMessages(question, history = []) {
 // The schema guarantees the shape, not the sense: still validate in code,
 // and fall back to something safe rather than crash on a bad decision.
 // `parsed` is the router's decoded JSON (or null/undefined if it failed to parse).
-export function validateRoute(parsed, question) {
+//
+// Phase 10, found by the follow-up eval case (and already in Phase 9): for
+// "And who is eligible for it?" after an FMLA question, the router made two
+// parts - the earlier "How many weeks of unpaid leave does FMLA entitle me
+// to?" again, and "Who is eligible for FMLA?" - against its own rule that
+// parts come only from the user's message. Two parts also kept the
+// document-priority rule below from applying, so `general` answered the old
+// question from general knowledge. A task that only repeats an earlier user
+// message is dropped here, in code.
+const sameQuestion = (a, b) => a.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === b.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function validateRoute(parsed, question, history = []) {
   const reason = parsed?.reason ?? "";
   let tasks = (parsed?.tasks ?? [])
     .filter((t) => AGENT_NAMES.includes(t?.agent) && typeof t.question === "string" && t.question.trim())
     .slice(0, MAX_TASKS);
+  const earlier = history.filter((m) => m.role === "user").map((m) => m.content);
+  const fresh = tasks.filter((t) => sameQuestion(t.question, question) || !earlier.some((e) => sameQuestion(t.question, e)));
+  const repeatsDropped = fresh.length > 0 && fresh.length < tasks.length ? tasks.length - fresh.length : 0;
+  if (repeatsDropped) tasks = fresh;
   const fallback = tasks.length === 0;
   if (fallback) tasks = [{ agent: "general", question }];
-  return { reason, tasks, fallback };
+  return { reason, tasks, fallback, ...(repeatsDropped ? { repeatsDropped } : {}) };
 }
 
 // Phase 9.6, found by the citation eval: "Who is eligible for FMLA?" and
