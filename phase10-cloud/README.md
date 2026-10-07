@@ -376,3 +376,47 @@ contains `&`.)
 On Groq the eval stopped with the new message, "Today's free limit for the
 AI model is used up - try again in about 8 minutes" - item 3 on the real
 service.
+
+### 10b.6 Deployed on Vercel
+
+| | URL | Vercel project |
+|---|---|---|
+| Web app | https://ai-engineer-web-seven.vercel.app | `ai-engineer-web` (`web/`, Vite) |
+| API | https://ai-engineer-api-jet.vercel.app | `ai-engineer-api` (`api/`, Express as one function, Frankfurt) |
+
+The access code is `HOSTED_ACCESS_CODE` in `.env` (the API's `ACCESS_CODE`
+setting on Vercel); the web app asks for it once and remembers it.
+
+**API settings on Vercel** (Production): `LLM_PROVIDER=groq`, `GROQ_API_KEY`,
+`CHAT_MODEL=openai/gpt-oss-120b`, `JUDGE_MODEL`, `ROUTER_MODEL` and
+`FALLBACK_MODEL` = `openai/gpt-oss-20b`, `JUDGE_REASONING_EFFORT=low`,
+`EMBED_PROVIDER=local`, `DOCS_TABLE=chunks_local_q8`, `DATABASE_URL` (Neon,
+`sslmode=verify-full`), `REDIS_URL` (Upstash), `ACCESS_CODE`,
+`ALLOWED_ORIGIN` (the web app), `NUM_CTX=131072`, `TEMPERATURE=0`. Web:
+`VITE_API_BASE` (the API). Deploy from each folder with
+`npx vercel deploy --prod`.
+
+**What deploying taught:**
+- A project created with `vercel project add` has framework "Other": the
+  first deploy built nothing and every route was Vercel's 404.
+  `"framework": "express"` / `"vite"` in each `vercel.json` fixes it.
+- `functions` in `vercel.json` only applies to files in an `api/` folder, not
+  to an Express app; the deploy was rejected. Only `regions` is kept.
+- The traced bundle is 188 MB (162 MB of it ONNX runtime binaries for five
+  platforms), under the 250 MB limit. The 137 MB model is not in it: the
+  first request on a new instance downloads it into `/tmp`.
+- `x-vercel-id: bom1::fra1::...` - requests enter in Mumbai, the function
+  runs in Frankfurt. A request that reads Redis three times takes no longer
+  than one that does not (276 vs 278 ms from Dubai): Upstash really is in
+  Frankfurt; the 245 ms measured from the Mac was the trip from Dubai.
+- Postgres' "sslmode=require is treated as verify-full" warning appeared on
+  every cold start; Vercel's `DATABASE_URL` says `verify-full` explicitly.
+- The deployed bundle points at the API and contains no keys or hostnames.
+
+**Measured through the public URL** (`npm run eval:public`, new: HTTP,
+access code, answer stream, conversation in Upstash, a follow-up):
+**12/12**, both modes. First question after a deploy (cold start, model
+download included): 6-9 s. Single agent: 1-3 s per answer. Multi-agent:
+2-19 s - three or four model calls per question meet Groq's 8,000 tokens a
+minute. Access code: no code / wrong code → 401, right code → 200; CORS
+names only the web app.

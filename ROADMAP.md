@@ -227,7 +227,7 @@ Original picks (Windows laptop):
     - **Found by the citation eval:** the supervisor sent "Who is eligible for FMLA?" and "Should git commits be cryptographically signed?" to `general`/`coding`, which answered from general knowledge - plausible and wrong for this employer. A stronger router instruction changed nothing (the Phase 6.8 lesson again); a code rule did: a one-part message the retrieval step judges answerable goes to `company_docs` (`applyDocPriority`).
   - **End state:** answer reaches the agent - direct 20/20, paraphrased 7/10, original 3/3, private 4/4; off-topic false positives 0/8; single agent 7/7; supervisor routing 24/24, two-part 3/3, history 4/4, regression 7/7. Details: `phase9-real-docs/PHASE9_NOTES.md`.
 
-- **Phase 10 — Deploy on free hosted services** 🚧 in progress (planned 2026-10-05; steps 1-4 done, step 5 in progress 2026-10-06)
+- **Phase 10 — Deploy on free hosted services** 🚧 in progress (planned 2026-10-05; deployed 2026-10-07; step 5 item 4 - the last Groq evals - still open)
   Run the chat app on the internet instead of only on this Mac. Free tiers checked on 2026-10-05:
   | Part | Local today | Hosted on | Free limits (as checked) |
   |---|---|---|---|
@@ -271,7 +271,8 @@ Original picks (Windows laptop):
            4. The remaining evals on Groq, spread over a day: single agent, regression on the supervisor, routing (on 20b), both citation evals. Prompt work on local Ollama; Groq for confirmation runs.
          - **2026-10-07: items 1-3 done.** Judging 30-40% cheaper: `JUDGE_REASONING_EFFORT=low` (gpt-oss-20b's hidden reasoning 288 → ~65 tokens, scores the same or better) and 10 judged candidates (8 lost a rank-9 answer on the Ollama table); new `eval/judge-cost.js`. The new follow-up case caught qwen's rewrite stuffing facts into the query (now the model only names the referent, the code substitutes it) and an old router bug (also in Phase 9: it re-added the earlier question and sent both parts to `general`; repeated tasks are dropped in code, evidence and specialist search use the resolved question). `FALLBACK_MODEL` with a UI note; "try again in about N minutes" when no model is left; the UI no longer shows server errors as "connection error". Ollama: all six evals at the Phase 9 end state (single and supervisor regression now 8/8 with the follow-up case). Groq (120b answers, 20b judging and routing, Neon): single 8/8, supervisor regression 8/8, citations 13/13 before the daily limit. **Left for item 4:** rest of citations, routing, multi-agent citations on Groq.
     - **10b - deploy**
-      6. `api/` and `web/` on Vercel, add the access code, test against the public URL.
+      6. ✅ `api/` and `web/` on Vercel, add the access code, test against the public URL.
+         - **Done 2026-10-07:** web https://ai-engineer-web-seven.vercel.app, API https://ai-engineer-api-jet.vercel.app (Express as one function in Frankfurt). Access code (header, or `?code=` on the stream - EventSource cannot send headers; timing-safe compare; `/api/access` for the web app's prompt) and `ALLOWED_ORIGIN`. Deploy lessons: CLI-created projects default to framework "Other" (nothing built, all 404) - set `framework` in `vercel.json`; `functions` config does not apply to an Express app. Bundle 188 MB (< 250 MB); model downloads into `/tmp` at a cold start. Upstash confirmed in Frankfurt (Redis reads add ~0 ms from the function). New `eval:public` through the public URL: 12/12, both modes; cold start 6-9 s, single agent 1-3 s, multi-agent up to 19 s (Groq's per-minute limit).
   - **What the copy changes, file by file** (the originals, checked 2026-10-06, stay as they are):
     | Copied from | Tied to | Change in the copy |
     |---|---|---|

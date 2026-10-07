@@ -8,6 +8,7 @@
     "eval:supervisor": "node --env-file=../.env supervisor-eval.js",
     "eval:retrieval": "node --env-file=../.env retrieval-eval.js",
     "eval:judge": "node --env-file=../.env judge-cost.js",
+    "eval:public": "node --env-file=../.env public-url.js",
     "eval:citations": "node --env-file=../.env citation-eval.js",
     "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js"
   }
