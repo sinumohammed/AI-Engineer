@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Fourteen steps from a first local model call to a multi-agent chat app over a real 241-page handbook, with flow diagrams and a log of every problem, change and result.">
+<meta name="description" content="Fifteen steps from a first local model call to a multi-agent chat app over a real 241-page handbook, deployed on free cloud services, with flow diagrams and a log of every problem, change and result.">
 <style>
   :root { color-scheme: light; }
   body { margin: 0; }
@@ -165,20 +165,21 @@
       <li><a href="#s12"><span>12</span>Multi-agent</a></li>
       <li><a href="#s13"><span>13</span>Multi-agent in the UI</a></li>
       <li><a href="#s14"><span>14</span>Real documents</a></li>
+      <li><a href="#s15"><span>15</span>On the internet</a></li>
     </ol>
   </nav>
 
   <main>
     <header class="top">
-      <span class="eyebrow">Phases 1 to 9 · local models with Ollama</span>
+      <span class="eyebrow">Phases 1 to 10 · local models with Ollama, then free cloud services</span>
       <h1>AI Engineer Learning Guide</h1>
-      <p class="lede">Fourteen steps from the first local model call to a multi-agent chat app working over a real 241-page handbook. Each step adds one capability, and each one was proved to work before the next began.</p>
+      <p class="lede">Fifteen steps from the first local model call to a multi-agent chat app working over a real 241-page handbook, then running on the internet on free services. Each step adds one capability, and each one was proved to work before the next began.</p>
       <p><a href="https://github.com/sinumohammed/AI-Engineer">Source code on GitHub</a></p>
     </header>
 
     <section id="picture">
       <h2>The big picture</h2>
-      <p>This is the system as it stands after the last step. Everything below explains how each box got there.</p>
+      <p>This is the system on the Mac after step 14, kept unchanged as the reference. Step 15 runs a copy of it on free cloud services; its diagram is in that step.</p>
       <figure>
         <div class="scroll">
           <svg class="dg" viewBox="0 0 720 500" role="img" aria-label="The browser sends a question to the API server, which keeps chat history in Redis and hands the question either to the single agent or to the supervisor. The supervisor picks one of three specialists. The single agent and the company docs specialist search the documents, and every agent calls the model in Ollama.">
@@ -261,6 +262,7 @@
             <tr><td class="n">12</td><td class="n">8b</td><td>Multi-agent</td><td>A router plus specialist agents</td></tr>
             <tr><td class="n">13</td><td class="n">8c</td><td>Multi-agent in the UI</td><td>Switch between the two in the chat app</td></tr>
             <tr><td class="n">14</td><td class="n">9</td><td>Real documents</td><td>A 241-page handbook instead of 2 sample files, re-measured</td></tr>
+            <tr><td class="n">15</td><td class="n">10</td><td>On the internet</td><td>The same app on Vercel, Neon, Upstash and Groq, free tiers</td></tr>
           </tbody>
         </table>
       </div>
@@ -285,6 +287,16 @@
         <div><dt>Structured output</dt><dd>Forcing the model's reply to match a JSON schema.</dd></div>
         <div><dt>Router (supervisor)</dt><dd>An agent whose only job is deciding which other agent answers.</dd></div>
         <div><dt>Specialist</dt><dd>An agent with one narrow job and its own prompt.</dd></div>
+        <div><dt>Chunk</dt><dd>A small piece of a document, about 500 characters, embedded and searched on its own.</dd></div>
+        <div><dt>Relevance judging</dt><dd>A model reads the search results and keeps only the ones that really answer the question. Also called reranking.</dd></div>
+        <div><dt>Citation</dt><dd>The answer marks where each fact came from, "12 weeks [1]", and lists section [1] under it, so you can check it.</dd></div>
+        <div><dt>hit@k, MRR</dt><dd>Search scores. hit@10: the right chunk is in the top 10. MRR: the average of 1 / its rank; 1.0 means always first.</dd></div>
+        <div><dt>Groq</dt><dd>A hosted service that runs open models very fast, with a free tier.</dd></div>
+        <div><dt>Free tier limits</dt><dd>Caps per minute and per day, on requests, tokens or texts, that a free plan allows.</dd></div>
+        <div><dt>Quantization (q8)</dt><dd>Storing a model's numbers with fewer bits: smaller and faster, slightly less exact.</dd></div>
+        <div><dt>Serverless function</dt><dd>Code the host starts when a request arrives and stops when idle. The first request after a stop is slower: a cold start.</dd></div>
+        <div><dt>Fallback</dt><dd>A second option used automatically when the first fails, like a smaller model when the bigger one's daily limit is used up.</dd></div>
+        <div><dt>Access code, CORS</dt><dd>A shared code the API requires, and the browser rule that only the app's own website may call the API.</dd></div>
       </dl>
     </section>
 
@@ -758,6 +770,101 @@ npm run eval
 npm run eval:citations</pre><button type="button">Copy</button></div> In the chat app, ask "How much paid parental leave do I get?" and look at the Sources under the answer.</dd>
           </dl>
         </article>
+        <article class="step" id="s15">
+          <div class="step-head"><span class="step-no">Step 15</span><h3>On the internet, on free services</h3><span class="phase">Phase 10</span></div>
+          <p class="goal">Run the chat app on the internet instead of only on the Mac, on free tiers, without disturbing the working local app.</p>
+          <dl class="parts">
+            <dt>Built</dt><dd><ul>
+              <li><code>phase10-cloud/</code>: a self-contained copy of the chat app. Phases 1 to 9 are frozen as the local reference; only the copy changes.</li>
+              <li>A setting for every outside service, so the same code runs on the Mac or in the cloud.</li>
+              <li>Deployed at <a href="https://ai-engineer-web-seven.vercel.app">ai-engineer-web-seven.vercel.app</a>, protected by an access code.</li>
+            </ul></dd>
+          </dl>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 370" role="img" aria-label="The browser loads the web app from Vercel and sends each question with the access code to the API, one Vercel function in Frankfurt. The function rewrites follow-ups, embeds the question itself, searches the handbook in Neon, keeps chat history in Upstash, and calls Groq: gpt-oss-20b judges search results and routes, gpt-oss-120b writes the answer. If 120b's daily limit is used up, 20b answers with a note.">
+                <defs><marker id="a9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <rect class="b" x="30" y="16" width="190" height="46" rx="6"/>
+                <text class="t" x="125" y="36" text-anchor="middle">Web app on Vercel</text>
+                <text class="s" x="125" y="53" text-anchor="middle">static files</text>
+                <line class="dash" x1="221" y1="39" x2="279" y2="39"/>
+                <text class="s" x="250" y="31" text-anchor="middle">page</text>
+                <rect class="b" x="280" y="16" width="160" height="46" rx="6"/>
+                <text class="t" x="360" y="44" text-anchor="middle">Browser</text>
+                <line class="ln" x1="360" y1="62" x2="360" y2="105" marker-end="url(#a9)"/>
+                <text class="s" x="370" y="88">question + access code</text>
+
+                <rect class="ba" x="180" y="106" width="360" height="62" rx="6"/>
+                <text class="t" x="360" y="127" text-anchor="middle">API server: one Vercel function, Frankfurt</text>
+                <text class="s" x="360" y="144" text-anchor="middle">replaces "it" in a follow-up, embeds the question itself</text>
+                <text class="s" x="360" y="159" text-anchor="middle">(the nomic model, q8, runs inside the function)</text>
+
+                <line class="ln" x1="240" y1="168" x2="135" y2="223" marker-end="url(#a9)"/>
+                <line class="ln" x1="360" y1="168" x2="360" y2="223" marker-end="url(#a9)"/>
+                <line class="ln" x1="480" y1="168" x2="585" y2="223" marker-end="url(#a9)"/>
+
+                <rect class="b" x="40" y="224" width="190" height="50" rx="6"/>
+                <text class="t" x="135" y="245" text-anchor="middle">Neon · Frankfurt</text>
+                <text class="s" x="135" y="262" text-anchor="middle">Postgres + pgvector: handbook</text>
+                <rect class="b" x="265" y="224" width="190" height="50" rx="6"/>
+                <text class="t" x="360" y="245" text-anchor="middle">Upstash · Frankfurt</text>
+                <text class="s" x="360" y="262" text-anchor="middle">Redis: chat history</text>
+                <rect class="b" x="490" y="224" width="200" height="50" rx="6"/>
+                <text class="t" x="590" y="245" text-anchor="middle">Groq</text>
+                <text class="s" x="590" y="262" text-anchor="middle">20b judges, routes · 120b answers</text>
+
+                <line class="ln" x1="590" y1="274" x2="590" y2="305" marker-end="url(#a9)"/>
+                <text class="s" x="600" y="294">120b's daily limit used up</text>
+                <rect class="bw" x="490" y="306" width="200" height="50" rx="6"/>
+                <text x="590" y="327" text-anchor="middle">20b answers instead</text>
+                <text class="s" x="590" y="344" text-anchor="middle">and the UI shows a note</text>
+              </svg>
+            </div>
+            <figcaption>Everything the local app did on the Mac now happens in Frankfurt, close together. The two models split the work so each one's free daily limit covers part of every question.</figcaption>
+          </figure>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>Step</th><th>Change</th><th>Effect</th></tr></thead>
+              <tbody>
+                <tr><td class="n">10a.1</td><td>Copy the app into one folder</td><td class="res">Every eval exactly as in Phase 9</td></tr>
+                <tr><td class="n">10a.2</td><td>One model client for Ollama and Groq</td><td class="res">Groq first 3/7; 7/7 after fixing invisible characters and accepting new wordings</td></tr>
+                <tr><td class="n">10a.3</td><td>Connection settings instead of localhost</td><td class="res">Testing wrong values found 3 silent failures, all fixed</td></tr>
+                <tr><td class="n">10a.4</td><td>Embeddings without Ollama</td><td class="res">Gemini's free tier was too small; the nomic model inside Node gave the same search results</td></tr>
+                <tr><td class="n">10a.5</td><td>Neon, Upstash and Groq together</td><td class="res">Follow-ups fixed, two-model split, judging 30% cheaper, fallback when a daily limit runs out</td></tr>
+                <tr><td class="n">10b.6</td><td>Deploy on Vercel with an access code</td><td class="res">Through the public URL: 12/12, both modes</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="scroll wide">
+            <table>
+              <thead><tr><th>Challenge</th><th>What happened</th><th>Fix</th></tr></thead>
+              <tbody>
+                <tr><td>Different API format</td><td>Ollama and Groq expect and return different shapes</td><td class="res">One shared client that speaks both</td></tr>
+                <tr><td>Invisible characters</td><td>gpt-oss writes a no-break space in "90 days" and cites as 【1】: fine on screen, but citations broke and correct answers failed tests</td><td class="res">The client turns them into plain characters</td></tr>
+                <tr><td>Different wording</td><td>"10 a.m.", "I'm not aware of": correct, but new words, different on every run</td><td class="res">Tests accept more phrasings, never wrong facts</td></tr>
+                <tr><td>Stricter judging</td><td>qwen kept four loose matches, so a vague follow-up worked by luck; strict gpt-oss failed it</td><td class="res">Replace "it" with what it refers to before searching</td></tr>
+                <tr><td>The model rewrites too much</td><td>Asked to rewrite the follow-up, qwen stuffed in facts and moved the right section from rank 1 to 9</td><td class="res">The model only names "it"; code puts the name in</td></tr>
+                <tr><td>An old router bug</td><td>For a follow-up the router re-added the earlier question, as Phase 9 did too</td><td class="res">Repeated questions dropped in code</td></tr>
+                <tr><td>Free limits</td><td>Groq: 8,000 tokens a minute and 200,000 a day per model. Gemini: 1,000 embedded texts a day</td><td class="res">120b answers, 20b judges; embeddings inside the server</td></tr>
+                <tr><td>Hidden thinking</td><td>gpt-oss's reasoning cost about 288 tokens per judgement</td><td class="res">Low reasoning effort for judging: about 60, same scores</td></tr>
+                <tr><td>Silent failures</td><td>A wrong database password looked like "no relevant documents"; a database restart crashed the server</td><td class="res">Errors logged; a connection pool that recovers</td></tr>
+                <tr><td>Deploying</td><td>The first deploy built nothing: framework "Other", every page a 404</td><td class="res">Framework set in <code>vercel.json</code></td></tr>
+                <tr><td>A public app</td><td>Anyone with the URL could spend the free quota</td><td class="res">An access code on every request</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="parts">
+            <dt>Learned</dt><dd><ul>
+              <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
+              <li>A stricter model exposed weaknesses a lenient one had hidden. qwen passed the follow-up by luck.</li>
+              <li>Free tiers decide the design: the per-day token limit split the work across two models and made judging cheaper.</li>
+              <li>The prompt-versus-code lesson again: "use the short name" was ignored; a smaller job for the model, name the thing, plus code to substitute it, worked on both models.</li>
+              <li>Make silent failures loud: a wrong password, mixed embedding models and a dropped connection all looked normal until checks were added.</li>
+            </ul></dd>
+            <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
+npm run eval:public</pre><button type="button">Copy</button></div></dd>
+          </dl>
+        </article>
       </div>
     </section>
 
@@ -796,23 +903,39 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             <tr><td class="n">26</td><td class="n">9.4</td><td>Off-topic questions under the 0.5 threshold</td><td>The model judges relevance</td><td class="res">0/8 false positives</td></tr>
             <tr><td class="n">27</td><td class="n">9.6</td><td>Answers did not say where facts came from</td><td>Numbered excerpts, cited sources in the UI</td><td class="res">37/37 cite</td></tr>
             <tr><td class="n">28</td><td class="n">9.6</td><td>Router sent document questions to the general specialist</td><td>Code rule: document-answerable goes to company_docs</td><td class="res">37/37 from docs</td></tr>
+            <tr><td class="n">29</td><td class="n">10.1</td><td>Cloud changes would disturb the working local app</td><td>Self-contained copy, phases 1 to 9 frozen</td><td class="res">Every eval identical</td></tr>
+            <tr><td class="n">30</td><td class="n">10.2</td><td>Groq speaks a different API format</td><td>One client for Ollama and OpenAI-style APIs</td><td class="res">Ollama unchanged, Groq works</td></tr>
+            <tr><td class="n">31</td><td class="n">10.2</td><td>gpt-oss writes no-break spaces and 【1】 citations</td><td>Turn them into plain characters in the client</td><td class="res">Citations parsed again</td></tr>
+            <tr><td class="n">32</td><td class="n">10.2</td><td>Correct answers in new wording</td><td>Four more phrasings accepted</td><td class="res">Groq 3/7 to 7/7</td></tr>
+            <tr><td class="n">33</td><td class="n">10.3</td><td>Wrong database password was silent</td><td>Log every failed search</td><td class="res">Visible in the server log</td></tr>
+            <tr><td class="n">34</td><td class="n">10.3</td><td>One failed connection broke search; a database restart crashed the server</td><td>Connection pool with an error listener</td><td class="res">Survives and recovers</td></tr>
+            <tr><td class="n">35</td><td class="n">10.4</td><td>Gemini's free tier: 1,000 embedded texts a day</td><td>The nomic model inside Node (q8)</td><td class="res">Same search results, 2 minutes to embed</td></tr>
+            <tr><td class="n">36</td><td class="n">10.4</td><td>Mixing embedding models fails silently</td><td>Tables labelled with their model, mismatches refused</td><td class="res">Clear error</td></tr>
+            <tr><td class="n">37</td><td class="n">10.5</td><td>"Who is eligible for it?" failed on gpt-oss</td><td>Replace "it" before searching</td><td class="res">8/8</td></tr>
+            <tr><td class="n">38</td><td class="n">10.5</td><td>The rewrite stuffed in facts, rank 1 to 9</td><td>The model names "it", code substitutes</td><td class="res">Clean rewrites on both models</td></tr>
+            <tr><td class="n">39</td><td class="n">10.5</td><td>Router re-added the earlier question, also in Phase 9</td><td>Drop repeated questions in code</td><td class="res">Supervisor 8/8</td></tr>
+            <tr><td class="n">40</td><td class="n">10.5</td><td>Groq allows 200,000 tokens a day per model</td><td>120b answers, 20b judges and routes</td><td class="res">About 80 questions a day instead of 55</td></tr>
+            <tr><td class="n">41</td><td class="n">10.5</td><td>Judging spent tokens on hidden reasoning</td><td>Low effort for judging, 10 candidates</td><td class="res">30% fewer tokens, same or better scores</td></tr>
+            <tr><td class="n">42</td><td class="n">10.5</td><td>A used-up daily limit showed as "connection error"</td><td>Fallback model, clear "try again in N minutes"</td><td class="res">Tested on a mock and on Groq</td></tr>
+            <tr><td class="n">43</td><td class="n">10.6</td><td>The first deploy built nothing</td><td>Framework set in <code>vercel.json</code></td><td class="res">Live</td></tr>
+            <tr><td class="n">44</td><td class="n">10.6</td><td>A public app spends the free quota</td><td>Access code and allowed origin</td><td class="res">No code: refused</td></tr>
           </tbody>
         </table>
       </div>
       <h3>Where the tests stand</h3>
-      <div class="scroll">
+      <div class="scroll wide">
         <table>
-          <thead><tr><th>Test</th><th>Result</th></tr></thead>
+          <thead><tr><th>Test</th><th>On the Mac (Ollama)</th><th>In the cloud (Groq, Neon)</th></tr></thead>
           <tbody>
-            <tr><td>Single agent, 7 cases</td><td class="n">7/7</td></tr>
-            <tr><td>LangChain Version A and B, 7 cases</td><td class="n">7/7 each</td></tr>
-            <tr><td>Supervisor routing, 24 cases (hand-written and LangGraph)</td><td class="n">24/24</td></tr>
-            <tr><td>Supervisor two-part answers</td><td class="n">3/3</td></tr>
-            <tr><td>Supervisor history-leak cases</td><td class="n">4/4</td></tr>
-            <tr><td>Supervisor on the 7 single-agent cases</td><td class="n">7/7</td></tr>
-            <tr><td>Retrieval, 37 cases: answer reaches the agent</td><td class="n">34/37</td></tr>
-            <tr><td>Retrieval, off-topic questions wrongly treated as relevant</td><td class="n">0/8</td></tr>
-            <tr><td>Document answers that cite a source (single and multi-agent)</td><td class="n">37/37</td></tr>
+            <tr><td>Single agent, 8 cases (a follow-up added in Phase 10)</td><td class="n">8/8</td><td class="n">8/8</td></tr>
+            <tr><td>LangChain Version A and B, 7 cases (Phase 8a)</td><td class="n">7/7 each</td><td class="n">-</td></tr>
+            <tr><td>Supervisor routing, 24 cases (hand-written and LangGraph)</td><td class="n">24/24</td><td class="n">not run yet</td></tr>
+            <tr><td>Supervisor two-part answers, history-leak cases</td><td class="n">3/3, 4/4</td><td class="n">not run yet</td></tr>
+            <tr><td>Supervisor on the 8 single-agent cases</td><td class="n">8/8</td><td class="n">8/8</td></tr>
+            <tr><td>Retrieval: answer reaches the agent</td><td class="n">34/37</td><td class="n">31/33 public</td></tr>
+            <tr><td>Retrieval, off-topic questions wrongly treated as relevant</td><td class="n">0/8</td><td class="n">0/8</td></tr>
+            <tr><td>Document answers that cite a source</td><td class="n">37/37</td><td class="n">13/13 so far</td></tr>
+            <tr><td>Through the public URL, both modes</td><td class="n">-</td><td class="n">12/12</td></tr>
           </tbody>
         </table>
       </div>
@@ -822,7 +945,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
       <h2>The lessons that keep repeating</h2>
       <p>Several of these were first learned on 2 sample documents and had to be qualified once Phase 9 loaded a real handbook. The wording below is the current version; the table after the list shows what changed.</p>
       <ol class="lessons">
-        <li><strong>A prompt is advice when it asks the model to follow a rule.</strong> A stricter prompt failed where a change in code worked: always-search (6.8), hiding tagged answers (8c), and in Phase 9 a router instruction that did not stop "Who is eligible for FMLA?" going to the general specialist. Exception found in 9.4: a focused question with a structured answer ("which of these excerpts answer the question?") did respond to better wording, from 1 to 0 false positives out of 8. Asking a model to obey a policy against its own preference failed; asking it to judge one specific thing worked. Measure either way.</li>
+        <li><strong>A prompt is advice when it asks the model to follow a rule.</strong> A stricter prompt failed where a change in code worked: always-search (6.8), hiding tagged answers (8c), and in Phase 9 a router instruction that did not stop "Who is eligible for FMLA?" going to the general specialist. Exception found in 9.4: a focused question with a structured answer ("which of these excerpts answer the question?") did respond to better wording, from 1 to 0 false positives out of 8. Asking a model to obey a policy against its own preference failed; asking it to judge one specific thing worked. Measure either way. In Phase 10, "use the short name" was ignored; giving the model a smaller job and doing the rest in code worked.</li>
         <li><strong>Let code decide when it has a reliable signal, and re-check the signal when the data changes.</strong> Relevance by vector distance (Phase 7) was a reliable code rule at 2 chunks and failed at 4,288. It was replaced by the model's judgement (9.4), which in turn feeds a code rule (9.6).</li>
         <li><strong>Remove the wrong option instead of forbidding it.</strong> Unused tools were deleted, not discouraged.</li>
         <li><strong>Prove the bug before fixing it.</strong> Each fix started by reproducing the failure, so the fix could be measured.</li>
@@ -832,7 +955,10 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
         <li><strong>More agents means more places to fail.</strong> Multi-agent added routing mistakes and memory leaking between agents, and doubled the model calls.</li>
         <li><strong>Test the parts, not only the final answer.</strong> A retrieval eval with no model call found problems that answer tests could not see, and showed which step to fix.</li>
         <li><strong>A result measured on toy data is a guess about real data.</strong> The 0.5 threshold, fixed 800-character chunks and "the keyword search rarely helps" were all right for 2 chunks and wrong for 4,288.</li>
-        <li><strong>Bigger is not always needed, so far.</strong> For "read this text and answer", a 4 GB model matched a 21 GB one, and size mattered when the model had to choose and call tools. That was measured on the 2-document corpus and has not been re-tested on the handbook.</li>
+        <li><strong>Bigger is not always needed, so far.</strong> For "read this text and answer", a 4 GB model matched a 21 GB one, and size mattered when the model had to choose and call tools. On the handbook, in Phase 10, gpt-oss-20b judged search results as well as gpt-oss-120b.</li>
+        <li><strong>Different models fail differently.</strong> A lenient model can pass by luck: qwen kept a vague follow-up working with four loose matches; strict gpt-oss exposed the weakness, and an old router bug with it.</li>
+        <li><strong>Free tiers have limits you only find by hitting them.</strong> Per minute, per day, per request or per text, different for every service: Gemini counts each embedded text, 1,000 a day; Groq counts tokens per day per model. The limits shaped the design.</li>
+        <li><strong>Make silent failures loud.</strong> A wrong database password looked like "no documents found", a framework ignored a misspelt option, and mixed embedding models would give plausible wrong results. Each now fails with a clear message.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -868,7 +994,21 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
           </tbody>
         </table>
       </div>
-      <p>To try another model, change <code>CHAT_MODEL</code> in <code>phase5-rag/.env</code> and restart the chat app. The full detail for every phase is in <code>ROADMAP.md</code>, and <code>LEARNING_GUIDE.md</code> lists the commit for each step.</p>
+      <p>To try another model, change <code>CHAT_MODEL</code> in <code>phase5-rag/.env</code> and restart the chat app.</p>
+      <p>Phase 10 lives in <code>phase10-cloud/</code> with its own <code>.env</code>; <code>phase10-cloud/README.md</code> has every setting.</p>
+      <div class="scroll wide">
+        <table>
+          <thead><tr><th>What</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>The copy on the Mac</td><td><code>cd phase10-cloud &amp;&amp; ./start.sh</code>, then open localhost:5174</td></tr>
+            <tr><td>Evals</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:retrieval</code> (also <code>eval</code>, <code>eval:supervisor</code>, <code>eval:citations</code>)</td></tr>
+            <tr><td>Judging cost and quality</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:judge</code></td></tr>
+            <tr><td>Test the deployed app</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:public</code></td></tr>
+            <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The full detail for every phase is in <code>ROADMAP.md</code>, and <code>LEARNING_GUIDE.md</code> lists the commit for each step.</p>
     </section>
   </main>
 </div>

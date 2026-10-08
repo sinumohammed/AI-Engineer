@@ -1,12 +1,14 @@
 # AI Engineer project: learning guide
 
 A step-by-step walk through everything built in this project, from the first local model call to a
-multi-agent chat app working over a real 241-page handbook. Written to be read top to bottom.
+multi-agent chat app working over a real 241-page handbook, then deployed on free cloud services.
+Written to be read top to bottom.
 
 - **This guide** is the simple version: what each step is, how the flow works, what changed and why.
 - **`ROADMAP.md`** is the detailed log: every experiment, number and dead end.
 - **Notes files** go deep on one topic: `phase5-rag/HYBRID_SEARCH_NOTES.md`,
-  `phase8-framework/FRAMEWORK_COMPARISON_NOTES.md`, `phase8b-multi-agent/MULTI_AGENT_NOTES.md`.
+  `phase8-framework/FRAMEWORK_COMPARISON_NOTES.md`, `phase8b-multi-agent/MULTI_AGENT_NOTES.md`,
+  `phase9-real-docs/PHASE9_NOTES.md`, `phase10-cloud/README.md`.
 
 Contents:
 
@@ -41,8 +43,9 @@ time, and prove each one works before moving on.**
 | 12 | Phase 8b | Multi-agent | A router plus specialist agents |
 | 13 | Phase 8c | Multi-agent in the UI | Switch between single and multi-agent in the chat app |
 | 14 | Phase 9 | Real documents | A 241-page handbook instead of 2 sample files, and everything re-measured |
+| 15 | Phase 10 | On the internet | The same app on free cloud services: Vercel, Neon, Upstash, Groq |
 
-The system as it stands today:
+The system on the Mac (phases 1-9, kept unchanged as the reference):
 
 ```
 Browser (React, port 5173)
@@ -61,6 +64,20 @@ API server (Express, port 3001) ──── Redis (chat history per session)
                                                      │
                                                      ▼
                                    Ollama (the model, port 11434)
+```
+
+The same app deployed (Phase 10, a copy in `phase10-cloud/`):
+
+```
+Browser ──> web app on Vercel (static files)
+   │  question + access code
+   ▼
+API server: one Vercel function in Frankfurt
+   ├── embeds the question itself (the nomic model runs inside the function)
+   ├── Neon, Frankfurt ──── Postgres + pgvector: the public handbook
+   ├── Upstash, Frankfurt ─ Redis: chat history
+   └── Groq ─────────────── gpt-oss-120b writes answers,
+                            gpt-oss-20b judges search results and routes
 ```
 
 ---
@@ -88,6 +105,17 @@ API server (Express, port 3001) ──── Redis (chat history per session)
 | **Structured output** | Forcing the model's reply to match a JSON schema. |
 | **Router / supervisor** | An agent whose only job is deciding which other agent answers. |
 | **Specialist** | An agent with one narrow job and its own prompt. |
+| **Chunk** | A small piece of a document (about 500 characters) that is embedded and searched on its own. |
+| **Relevance judging (reranking)** | A model reads the search results and keeps only the ones that really answer the question. |
+| **Citation** | The answer marks where each fact came from, e.g. "12 weeks [1]", and lists section [1] under it, so it can be checked. |
+| **hit@k, MRR** | Search scores. hit@10: the right chunk is in the top 10. MRR: the average of 1 / its rank (1.0 = always first). |
+| **Groq** | A hosted service that runs open models very fast, with a free tier. |
+| **Free tier limits** | Caps per minute and per day (requests, tokens, or texts) that a free plan allows. |
+| **Quantization (q8)** | Storing a model's numbers with fewer bits: smaller and faster, slightly less exact. |
+| **Serverless function** | Code the host starts only when a request arrives, and stops when idle. |
+| **Cold start** | The extra time for the first request after a serverless function was stopped. |
+| **Fallback** | A second option used automatically when the first fails, e.g. a smaller model when the bigger one's daily limit is used up. |
+| **Access code / CORS** | A shared code the API requires, and the browser rule that only the app's own website may call the API. |
 
 ---
 
@@ -368,6 +396,68 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 - **Try it:** `cd phase9-real-docs && npm run eval`, then `npm run eval:citations`. In the chat app,
   ask "How much paid parental leave do I get?" and look at the Sources under the answer.
 
+
+### Step 15 - Phase 10: on the internet, on free services
+
+- **Goal:** run the chat app on the internet instead of only on the Mac, on free tiers, without
+  disturbing the working local app.
+- **Built:**
+  - `phase10-cloud/`: a self-contained copy of the chat app (`api/`, `web/`, `scripts/`, `eval/`).
+    Phases 1-9 are frozen as the local reference; only the copy changes.
+  - Settings for every outside service, so the same code runs on the Mac or in the cloud.
+  - Deployed: web app https://ai-engineer-web-seven.vercel.app, API on Vercel in Frankfurt,
+    documents in Neon, chat history in Upstash, models on Groq. An access code protects it.
+- **Flow of one question in the cloud:**
+  ```
+  browser ──(access code)──> API function (Frankfurt)
+     │
+  1. a follow-up ("who is eligible for it?") gets "it" replaced:  "...for FMLA?"
+  2. embed the question inside the function, search Neon ──> 10 candidates
+  3. gpt-oss-20b judges which candidates answer it ──> best 4, numbered
+  4. gpt-oss-120b answers and cites [n]   (if its daily limit is used up: 20b answers, with a note)
+  5. the turn is saved in Upstash
+  ```
+- **What changed, each step measured:**
+
+| Step | Change | Effect |
+|---|---|---|
+| 10a.1 | Copy the app into one folder | Every eval exactly as in Phase 9 |
+| 10a.2 | One model client for Ollama and Groq | Groq first 3/7; 7/7 after fixing invisible characters and accepting new wordings |
+| 10a.3 | Connection settings instead of `localhost` | Testing wrong values found 3 silent failures, all fixed |
+| 10a.4 | Embeddings without Ollama | Gemini's free tier was too small; the nomic model inside Node gave the same search results |
+| 10a.5 | Neon, Upstash, Groq together | Follow-ups fixed, model split, judging 30% cheaper, fallback when a daily limit runs out |
+| 10b.6 | Deploy on Vercel with an access code | Through the public URL: 12/12, both modes |
+
+- **Challenges, in plain terms:**
+
+| Challenge | What happened | Fix |
+|---|---|---|
+| Different API format | Ollama and Groq expect and return different shapes | One shared client that speaks both |
+| Invisible characters | gpt-oss writes a no-break space in "90 days" and cites as 【1】: fine on screen, but the citation parser found nothing and correct answers failed tests | The client turns them into plain characters |
+| Different wording | "10 a.m.", "I'm not aware of": correct, but new words, and different on every run | Tests accept more phrasings, never wrong facts |
+| Stricter judging | qwen kept four loose matches, so a vague follow-up worked by luck; gpt-oss judged strictly and it failed | Replace "it" with what it refers to before searching |
+| The model rewrites too much | Asked to rewrite the follow-up, qwen stuffed in facts and moved the right section from rank 1 to 9 | The model only names "it"; code puts the name in |
+| An old router bug | For a follow-up, the router re-added the earlier question (Phase 9 did too) | Repeated questions are dropped in code |
+| Free limits | Groq: 8,000 tokens a minute and 200,000 a day per model. Gemini: 1,000 embedded texts a day | 120b answers, 20b judges; embeddings run inside the server |
+| Hidden thinking costs tokens | gpt-oss's reasoning counted as ~288 tokens per judgement | Low reasoning effort for judging: ~60 tokens, same scores |
+| Silent failures | A wrong database password looked like "no relevant documents"; a database restart crashed the server | Errors logged; a connection pool that recovers |
+| Deploying | The first Vercel deploy built nothing (framework "Other"): every page was a 404 | The framework is set in `vercel.json` |
+| A public app | Anyone with the URL could spend the free quota | An access code on every request |
+
+- **Learned:**
+  - "Change the URL" was never the whole job: each new provider brought its own format, characters,
+    wording and limits, and each was found by an eval, not by reading the docs.
+  - A stricter model exposed weaknesses a lenient one had hidden. qwen passed the follow-up by luck.
+  - Free tiers decide the design: the per-day token limit made us split the work across two models
+    and cut the judging cost.
+  - The prompt-versus-code lesson again: "use the short name" was ignored; a smaller job for the
+    model (name the thing) plus code (substitute it) worked on both models.
+  - Make silent failures loud: a wrong password, mixed embedding models, a dropped connection all
+    looked like normal behaviour until checks were added.
+- **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
+  in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
+  `cd eval && npm run eval:public` to test the deployed app.
+
 ---
 
 ## 4. Iteration log: problem, change, result
@@ -404,20 +494,36 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 26 | 9.3 | Off-topic questions under the 0.5 threshold | Model judges relevance instead (9.4) | 0/8 false positives |
 | 27 | 9.6 | Answers did not say where facts came from | Numbered excerpts, cited sources in the UI | 37/37 cite |
 | 28 | 9.6 | Router sent document questions to the general specialist | Code rule: document-answerable goes to company_docs | 37/37 from docs |
+| 29 | 10.1 | Cloud changes would disturb the working local app | Self-contained copy, phases 1-9 frozen | Every eval identical |
+| 30 | 10.2 | Groq speaks a different API format | One client for Ollama and OpenAI-style APIs | Ollama unchanged, Groq works |
+| 31 | 10.2 | gpt-oss writes no-break spaces and 【1】 citations | Turn them into plain characters in the client | Citations parsed again |
+| 32 | 10.2 | Correct answers in new wording | Four more phrasings accepted | Groq 3/7 to 7/7 |
+| 33 | 10.3 | Wrong database password was silent | Log every failed search | Visible in the server log |
+| 34 | 10.3 | One failed connection broke search; a database restart crashed the server | Connection pool with an error listener | Survives and recovers |
+| 35 | 10.4 | Gemini's free tier: 1,000 embedded texts a day | The nomic model inside Node (q8) | Same search results, 2 minutes to embed |
+| 36 | 10.4 | Mixing embedding models fails silently | Each table labelled with its model; mismatches refused | Refused with a clear message |
+| 37 | 10.5 | "Who is eligible for it?" failed on gpt-oss | Replace "it" before searching | 8/8 |
+| 38 | 10.5 | The rewrite stuffed in facts (rank 1 to 9) | The model names "it", code substitutes | Clean rewrites on both models |
+| 39 | 10.5 | Router re-added the earlier question (also in Phase 9) | Drop repeated questions in code | Supervisor 8/8 |
+| 40 | 10.5 | Groq allows 200,000 tokens a day per model | 120b answers, 20b judges and routes | About 80 questions a day instead of 55 |
+| 41 | 10.5 | Judging spent tokens on hidden reasoning | Low effort for judging, 10 candidates | 30% fewer tokens, same or better scores |
+| 42 | 10.5 | A used-up daily limit showed as "connection error" | Fallback model, clear "try again in N minutes" | Tested on a mock and on Groq |
+| 43 | 10.6 | The first deploy built nothing | Framework set in `vercel.json` | Live |
+| 44 | 10.6 | A public app spends the free quota | Access code, allowed origin | No code: refused |
 
-Where things stand:
+Where things stand (Phase 10 code):
 
-| Test | Result |
-|---|---|
-| Single agent, 7 cases | 7/7 |
-| LangChain Version A and B, 7 cases | 7/7 each |
-| Supervisor routing, 24 cases | 24/24 (hand-written and LangGraph) |
-| Supervisor two-part answers | 3/3 |
-| Supervisor history leak cases | 4/4 |
-| Supervisor on the 7 single-agent cases | 7/7 |
-| Retrieval, 37 cases: answer reaches the agent | 34/37 |
-| Retrieval, off-topic questions wrongly treated as relevant | 0/8 |
-| Citations: document answers that cite a source | 37/37 (single and multi-agent) |
+| Test | On the Mac (Ollama, qwen3-coder) | In the cloud (Groq, documents in Neon) |
+|---|---|---|
+| Single agent, 8 cases (a follow-up added in Phase 10) | 8/8 | 8/8 |
+| LangChain Version A and B, 7 cases (Phase 8a) | 7/7 each | - |
+| Supervisor routing, 24 cases | 24/24 (hand-written and LangGraph) | not run yet (daily limit) |
+| Supervisor two-part answers / history leak cases | 3/3, 4/4 | not run yet |
+| Supervisor on the 8 single-agent cases | 8/8 | 8/8 |
+| Retrieval: answer reaches the agent | 34/37 (37 cases, 4 private) | 31/33 (public only, gpt-oss-20b judging) |
+| Retrieval, off-topic questions wrongly treated as relevant | 0/8 | 0/8 |
+| Citations: document answers that cite a source | 37/37 (single and multi-agent) | 13/13 run so far |
+| Through the public URL, both modes | - | 12/12 |
 
 ---
 
@@ -433,7 +539,8 @@ what changed.
    **Exception found in 9.4:** a focused question with a structured answer ("which of these
    excerpts answer the question?") did respond to better wording, from 1 to 0 false positives out
    of 8. Asking a model to obey a policy against its own preference failed; asking it to judge one
-   specific thing worked. Measure either way.
+   specific thing worked. Measure either way. **Phase 10:** "use the short name" was ignored by
+   qwen; giving it a smaller job (just name what "it" means) and doing the rest in code worked.
 2. **Let code decide when it has a reliable signal, and re-check the signal when the data changes.**
    Relevance by vector distance (Phase 7) was a reliable code rule at 2 chunks and failed at 4,288.
    It was replaced by the model's judgement (9.4), which in turn feeds a code rule
@@ -456,8 +563,17 @@ what changed.
     800-character chunks and "the keyword search rarely helps" were all right for 2 chunks and
     wrong for 4,288.
 11. **Bigger is not always needed, so far.** For "read this text and answer", a 4 GB model matched a
-    21 GB one, and size mattered when the model had to choose and call tools. That was measured on
-    the 2-document corpus and has not been re-tested on the handbook.
+    21 GB one, and size mattered when the model had to choose and call tools. On the handbook
+    (Phase 10), gpt-oss-20b judged search results as well as gpt-oss-120b.
+12. **Different models fail differently.** A lenient model can pass by luck: qwen kept a vague
+    follow-up working by keeping four loose matches; strict gpt-oss exposed the weakness, and an old
+    router bug with it. Test with more than one model before trusting a design.
+13. **Free tiers have limits you only find by hitting them.** Per minute, per day, per request or
+    per text, and different for every service: Gemini counts each embedded text (1,000 a day), Groq
+    counts tokens per day per model. The limits shaped the design.
+14. **Make silent failures loud.** A wrong database password looked like "no documents found", a
+    framework ignored a misspelt option, and two embedding models mixed in one table would give
+    plausible wrong results. Each now fails with a clear message.
 
 ### What changed when the data got real (Phase 9)
 
@@ -492,6 +608,17 @@ One-time setup per machine: install Node, Ollama and Docker Desktop, pull the mo
 
 To try another model, change `CHAT_MODEL` in `phase5-rag/.env` and restart the chat app.
 
+Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
+
+| What | Command |
+|---|---|
+| The copy on the Mac (local services) | `cd phase10-cloud && ./start.sh`, then open http://localhost:5174 |
+| All evals | `cd phase10-cloud/eval && npm run eval:retrieval` (also `eval`, `eval:supervisor`, `eval:citations`, ...) |
+| Evals on Groq | prefix with `LLM_PROVIDER=groq CHAT_MODEL=openai/gpt-oss-120b JUDGE_MODEL=openai/gpt-oss-20b` |
+| Judging cost and quality | `cd phase10-cloud/eval && npm run eval:judge` |
+| Test the deployed app | `cd phase10-cloud/eval && npm run eval:public` |
+| Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
+
 ---
 
 ## 7. Where each step lives in git
@@ -522,5 +649,13 @@ To try another model, change `CHAT_MODEL` in `phase5-rag/.env` and restart the c
 | `787372f` | Phase 9.1: real corpus and retrieval baseline |
 | `0cc4cfd` | Phase 9: chip shows what the document search led to |
 | `53375cc` | Phase 9.2-9.6: cleaning, chunking, judged relevance, citations |
+| `c088b90` | Phase 10a.1: self-contained copy in `phase10-cloud/` |
+| `fa4ef8b` | Phase 10a.2: one model client for Ollama and Groq |
+| `48a3a6e` | Phase 10a.3: connection settings, three silent failures fixed |
+| `ccfc495` | Phase 10a.4: embeddings inside Node |
+| `15245c6`, `298cd86` | Phase 10a.5: Neon, Upstash, follow-ups, two-model split |
+| `486e74f` | Phase 10a.5: cheaper judging, fallback, clear limit message, router fix |
+| `95da540`, `5c53de8` | Phase 10b.6: access code, deployed on Vercel |
 
-Commits up to `eb72eb0` are on `master`. Phase 9 commits are on the `phase9-real-docs` branch.
+Commits up to `eb72eb0` are on `master`. Phase 9 commits are on the `phase9-real-docs` branch, and
+Phase 10 commits on the `phase10-cloud` branch.
