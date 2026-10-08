@@ -16,6 +16,7 @@ import { logTrace } from "./tracer.js";
 import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
 import { standaloneQuestion, isSmallTalk } from "./retrieve.js";
+import { isRework, answerRework } from "./rework.js";
 import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, synthesizerMessages } from "./routing.js";
 
 export async function route(question, history = []) {
@@ -92,6 +93,24 @@ export async function runAgent(
   };
 
   const manual = AGENT_NAMES.includes(forceAgent);
+
+  // Phase 10: "translate that", "make it shorter" - rework the previous
+  // answer from the full conversation, no routing and no search (rework.js).
+  // Reported as the general specialist, the closest of the UI's agents.
+  if (!manual && isRework(question, history)) {
+    const reason = "Rework of the previous answer: answered from the conversation, no new search.";
+    const tasks = [{ agent: "general", question }];
+    onRoute?.({ reason, tasks, fallback: false, manual: false });
+    onAgentStart?.({ index: 0, agent: "general", question });
+    const r = await answerRework({ question, history, summary, model: SPECIALIST_MODEL });
+    count(r);
+    onAgentDone?.({ index: 0, agent: "general", latencyMs: Date.now() - startedAt });
+    usage.totalTokens = usage.promptTokens + usage.completionTokens;
+    const trace = { architecture: "multi-agent", question, rework: true, answer: r.answer, usage, latencyMs: Date.now() - startedAt };
+    await logTrace(trace);
+    return { answer: r.answer, usage, trace, fromCompanyDocs: r.fromCompanyDocs, sources: [] };
+  }
+
   let routing;
   if (manual) {
     routing = { reason: "", tasks: [{ agent: forceAgent, question }], fallback: false, evidence: null, latencyMs: 0 };

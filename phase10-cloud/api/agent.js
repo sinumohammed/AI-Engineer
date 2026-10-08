@@ -6,6 +6,7 @@ import { toolDefs, toolImpls } from "./tools.js";
 import { logTrace } from "./tracer.js";
 import { chat } from "./llmClient.js";
 import { retrieve, standaloneQuestion, isSmallTalk } from "./retrieve.js";
+import { isRework, answerRework } from "./rework.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
@@ -123,6 +124,18 @@ function extractToolCalls(msg) {
 export async function runAgent(question, history = [], { onToolCall, onToolResult, summary } = {}) {
   const startedAt = Date.now();
   const toolCallLog = []; // every tool call this run made, for the trace record below
+
+  // Phase 10: "translate that", "make it shorter" - rework the previous
+  // answer from the conversation, with no new search (rework.js).
+  if (isRework(question, history)) {
+    const r = await answerRework({ question, history, summary });
+    const usage = { promptTokens: r.promptTokens, completionTokens: r.completionTokens, contextWindow: NUM_CTX };
+    usage.totalTokens = usage.promptTokens + usage.completionTokens;
+    usage.remainingTokens = usage.contextWindow - usage.totalTokens;
+    Object.assign(usage, contextWarning(usage));
+    logTrace({ question, rework: true, toolCalls: [], answer: r.answer, usage, latencyMs: Date.now() - startedAt, turns: 1 });
+    return { answer: r.answer, usage, fromCompanyDocs: r.fromCompanyDocs, sources: [] };
+  }
 
   function trackedOnToolCall(name, args) {
     toolCallLog.push({ name, args });

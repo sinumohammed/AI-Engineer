@@ -468,3 +468,21 @@ to a general answer (single agent: no search; multi-agent: no evidence search,
 judge or router call). The match is on the whole message, so "hi, what is
 our rollback process?" is searched as usual. Ollama: single 8/8, routing
 24/24, supervisor regression 8/8.
+
+**Rework requests and other languages** (same day, found on the deployed
+app): after an FMLA answer, "tell that in malayalam" got "I don't have
+information about that in the company documents". The follow-up rewrite made
+it the search "tell FMLA in malayalam", nothing answered that, and the
+company_docs specialist gave its fixed refusal - although the answer was
+already in the conversation. `api/rework.js`: a message that only asks to
+rework the previous answer (translate it, shorten it, simplify it, bullet
+points...) is answered from the conversation with one model call - no
+search, no routing. Matched on the whole message in code, only when there is
+an earlier answer; "What is FMLA? Answer in Malayalam" still searches. The
+reworked answer keeps the original's `fromCompanyDocs` tag (Phase 8c).
+- Two new eval cases (shorter, French): single agent and supervisor 10/10 on
+  Ollama. Malayalam is tested on Groq only: qwen on the Mac took over 5
+  minutes and the request timed out.
+- Live: Malayalam and Hindi rework, a new question with "answer in
+  Malayalam", and a question written in Malayalam all answered correctly.
+  gpt-oss once wrote a Hindi word in Cyrillic letters - a model slip.

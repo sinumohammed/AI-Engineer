@@ -92,6 +92,31 @@ const cases = [
     ],
     mustContain: [["one year of federal service", "1 year of federal service", "a year of federal service"]],
   },
+  {
+    // Phase 10: found by using the deployed app. "tell that in malayalam" was
+    // searched as a new question and got "I don't have information about that
+    // in the company documents". Requests to rework the previous answer are
+    // now answered from the conversation (rework.js). English and French
+    // here: the local model takes minutes to write Malayalam.
+    name: "rework the previous answer - shorter (Phase 10)",
+    question: "make it shorter",
+    history: [
+      { role: "user", content: "Who is eligible for FMLA?" },
+      { role: "assistant", content: "To be eligible for FMLA, you must have at least one year of federal service [1]. Most veterans are immediately eligible [1].", fromCompanyDocs: true },
+    ],
+    mustContain: [["year", "1 yr"], "federal"],
+    mustNotContain: ["company documents", "don't have information"],
+  },
+  {
+    name: "rework the previous answer - translate (Phase 10)",
+    question: "translate that into French",
+    history: [
+      { role: "user", content: "Who is eligible for FMLA?" },
+      { role: "assistant", content: "To be eligible for FMLA, you must have at least one year of federal service [1]. Most veterans are immediately eligible [1].", fromCompanyDocs: true },
+    ],
+    mustContain: [["fédéral", "federal"], ["an ", "année"]],
+    mustNotContain: ["company documents", "don't have information"],
+  },
 ];
 
 function check(answer, mustContain = [], mustNotContain = []) {
