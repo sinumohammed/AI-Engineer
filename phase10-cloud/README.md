@@ -451,3 +451,11 @@ names only the web app.
 - `ROUTING_ONLY=1 npm run eval:supervisor` runs only the 24 routing cases and
   reports the router's tokens per question (qwen: 24/24, ~660) - for the
   router comparison, 20b vs 120b, still to run: today's 20b quota ran out.
+
+**Two-way fallback** (same day): with 20b's daily quota used up, every
+question failed at the judging step - the fallback only covered 120b's
+answers. `FALLBACK_MODEL` is now a list; on Vercel
+`openai/gpt-oss-20b,openai/gpt-oss-120b`, so each model covers the other.
+Tested on the mock (each direction, both out, the old single setting) and
+live: with 20b out, "Who is eligible for FMLA?" was answered with the note
+"openai/gpt-oss-120b stood in for openai/gpt-oss-20b".

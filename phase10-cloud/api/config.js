@@ -30,9 +30,13 @@ export const CHAT_MODEL = process.env.CHAT_MODEL ?? "qwen3-coder:30b";
 // them a smaller model with its own free quota (Groq limits each model to
 // 200,000 tokens a day) and keep the bigger one for answers.
 export const JUDGE_MODEL = process.env.JUDGE_MODEL ?? CHAT_MODEL;
-// Phase 10: when a model's daily quota is used up, answer with this one
-// instead of failing (llmClient.js); the UI says so. Unset = no fallback.
-export const FALLBACK_MODEL = process.env.FALLBACK_MODEL || null;
+// Phase 10: when a model's daily quota is used up, use the next model in
+// this comma-separated list that is not the one that ran out (llmClient.js);
+// the UI says so. With "openai/gpt-oss-20b,openai/gpt-oss-120b" the two cover
+// each other: 120b's answers fall back to 20b, and 20b's judging and routing
+// to 120b. One model only covered one direction - with 20b out, every
+// question failed at the judging step. Unset = no fallback.
+export const FALLBACK_MODELS = (process.env.FALLBACK_MODEL ?? "").split(",").map((m) => m.trim()).filter(Boolean);
 // gpt-oss models think before answering; "low" | "medium" | "high". Unset
 // sends nothing (the provider's default). OpenAI format only.
 export const REASONING_EFFORT = process.env.REASONING_EFFORT || null;

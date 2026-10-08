@@ -7,7 +7,7 @@ import cors from "cors";
 import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODEL, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl } from "./config.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
 
@@ -155,7 +155,7 @@ function logServices(firstLine) {
     ROUTER_MODEL === CHAT_MODEL && SPECIALIST_MODEL === CHAT_MODEL && JUDGE_MODEL === CHAT_MODEL
       ? ""
       : ` (judging ${JUDGE_MODEL}, router ${ROUTER_MODEL}, specialists ${SPECIALIST_MODEL})`;
-  const fallback = FALLBACK_MODEL ? `, falls back to ${FALLBACK_MODEL} when a daily limit is reached` : "";
+  const fallback = FALLBACK_MODELS.length ? `, falls back to ${FALLBACK_MODELS.join(" / ")} when a daily limit is reached` : "";
   console.log(`  chat:       ${LLM_PROVIDER} ${CHAT_MODEL}${roles} at ${describeUrl(LLM_BASE_URL)}${fallback}`);
   const embedWhere = { ollama: `at ${describeUrl(EMBED_BASE_URL)}`, local: "in this process", gemini: "at Google's Gemini API" }[EMBED_PROVIDER];
   console.log(`  embeddings: ${EMBED_PROVIDER} ${EMBED_MODEL} ${embedWhere}, table ${DOCS_TABLE}`);

@@ -13,7 +13,7 @@
 // `tools` is sent only when the list is not empty.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { withRetry } from "./retry.js";
-import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, FALLBACK_MODEL, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
+import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, FALLBACK_MODELS, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
 
 export async function chat({ model = CHAT_MODEL, messages, format, tools, label = "chat", reasoningEffort = REASONING_EFFORT }) {
   const send = LLM_FORMAT === "openai" ? sendOpenAI : sendOllama;
@@ -34,16 +34,23 @@ export async function chat({ model = CHAT_MODEL, messages, format, tools, label 
       return { content: "", toolCalls: [], promptTokens: 0, completionTokens: 0, schemaFailed: true };
     }
     if (!err.dailyLimit) throw err;
-    // Phase 10: a free tier's daily quota is used up for this model. Answer
-    // with FALLBACK_MODEL (its own quota) and tell the user; or, with no
-    // other model left, say plainly when to try again instead of a raw 429.
-    if (!FALLBACK_MODEL || model === FALLBACK_MODEL) throw limitReached(err, model);
-    notice(`Answered by ${FALLBACK_MODEL}: today's free limit for ${model} is used up.`);
-    try {
-      res = await call(FALLBACK_MODEL);
-    } catch (err2) {
-      throw err2.dailyLimit ? limitReached(err2, FALLBACK_MODEL) : err2;
+    // Phase 10: a free tier's daily quota is used up for this model. Use the
+    // next fallback model (its own quota) and tell the user; with none left,
+    // say plainly when to try again instead of a raw 429.
+    let lastErr = err;
+    let lastModel = model;
+    for (const fallback of FALLBACK_MODELS.filter((m) => m !== model)) {
+      try {
+        res = await call(fallback);
+        notice(`${fallback} stood in for ${model}: today's free limit for ${model} is used up.`);
+        break;
+      } catch (err2) {
+        if (!err2.dailyLimit) throw err2;
+        lastErr = err2;
+        lastModel = fallback;
+      }
     }
+    if (!res) throw limitReached(lastErr, lastModel);
   }
   return { ...res, content: plainText(res.content) };
 }
