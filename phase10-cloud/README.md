@@ -420,3 +420,34 @@ download included): 6-9 s. Single agent: 1-3 s per answer. Multi-agent:
 2-19 s - three or four model calls per question meet Groq's 8,000 tokens a
 minute. Access code: no code / wrong code → 401, right code → 200; CORS
 names only the web app.
+
+**2026-10-08: the remaining Groq evals** (answers 120b, judging and routing
+20b, documents in Neon):
+
+| Eval | Ollama (public cases) | Groq |
+|---|---|---|
+| Citations, single agent: from the documents / expected passage | 33/33, 28/33 | 32/33, **30/33** (direct 20/20) |
+| Citations, multi-agent, direct questions | 20/20, 17/20 | **20/20, 20/20** - then the daily limit |
+| Routing (router on 20b) | 24/24 | 18 passed, 2 failed, then a crash |
+
+- The one single-agent case not answered from the documents ("Can journalists
+  request what I write in chat?") is a search miss: the answer is not in the
+  top 10. qwen's judge kept a loose match; gpt-oss judged that nothing
+  answers it and said so.
+- Routing on 20b failed the close-topic two-part question in both orders
+  ("How are rollbacks done, and how do I list git tags?"), the case qwen
+  needed the "list the parts first" rule for in Phase 8c.
+- **The crash:** gpt-oss-20b wrote JSON that broke the router's schema (it
+  put "reason" and "tasks" inside the "parts" list) and Groq answered 400
+  `json_validate_failed` - its strict mode checks the output instead of
+  forcing it, as Ollama does. In the deployed app that question would have
+  shown an error. Now schema failures are retried, and if every attempt
+  fails the caller gets empty content, which it already handles: the router
+  falls back to a safe default, the judge to "nothing relevant". Tested on a
+  mock Groq.
+- The daily-limit message now names the model ("...the AI model
+  (openai/gpt-oss-20b) is used up..."): without it neither the logs nor the
+  user could tell which limit ran out.
+- `ROUTING_ONLY=1 npm run eval:supervisor` runs only the 24 routing cases and
+  reports the router's tokens per question (qwen: 24/24, ~660) - for the
+  router comparison, 20b vs 120b, still to run: today's 20b quota ran out.

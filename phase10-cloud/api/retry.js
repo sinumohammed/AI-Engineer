@@ -40,6 +40,8 @@ export async function withRetry(fn, { retries = 3, baseDelayMs = 500, label = "o
 function isRetryable(err) {
   // A daily quota does not come back in a few seconds (llmClient.js marks it).
   if (err.dailyLimit) return false;
+  // Output that broke the JSON schema: a new attempt is usually valid.
+  if (err.schemaFailed) return true;
   // Network-level failures (connection refused, timeout, DNS, etc) - these
   // come from fetch itself throwing, not from a response with a status code.
   if (err instanceof TypeError) return true;

@@ -107,10 +107,17 @@ const sameAgents = (a, b) => JSON.stringify([...new Set(a)].sort()) === JSON.str
 
 let failed = 0;
 
+// Phase 10: ROUTING_ONLY=1 stops after the routing section, and the router's
+// own tokens are totalled - to compare router models without spending a
+// day's free quota on the rest.
+const ROUTING_ONLY = process.env.ROUTING_ONLY === "1";
+const routerTokens = [];
+
 console.log(`Routing: ${routingCases.length} cases\n`);
 let routingPassed = 0;
 for (const c of routingCases) {
   const r = await route(c.question);
+  routerTokens.push(r.promptTokens + r.completionTokens);
   const got = r.tasks.map((t) => t.agent);
   const ok = sameAgents(got, c.expect);
   if (ok) routingPassed++;
@@ -120,6 +127,8 @@ for (const c of routingCases) {
   if (!ok) console.log(`   reason: ${r.reason}`);
 }
 console.log(`\nRouting: ${routingPassed}/${routingCases.length} passed.\n`);
+console.log(`Router tokens per question: ${Math.round(routerTokens.reduce((a, b) => a + b, 0) / routerTokens.length)}\n`);
+if (ROUTING_ONLY) process.exit(failed ? 1 : 0);
 
 console.log(`End to end (two specialists): ${endToEndCases.length} cases\n`);
 let e2ePassed = 0;

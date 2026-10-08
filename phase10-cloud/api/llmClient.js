@@ -22,16 +22,27 @@ export async function chat({ model = CHAT_MODEL, messages, format, tools, label 
   try {
     res = await call(model);
   } catch (err) {
+    // Phase 10, found by the routing eval on Groq: gpt-oss sometimes writes
+    // JSON that breaks the schema (it put "reason" and "tasks" inside the
+    // "parts" list), and Groq rejects it with a 400 - its strict mode checks
+    // the output rather than forcing it, as Ollama does. retry.js tries again
+    // (the next attempt is usually valid); if every attempt fails, empty
+    // content goes back, which each caller already treats as "unreadable":
+    // the router falls back to a safe default, judging to "nothing relevant".
+    if (err.schemaFailed) {
+      console.error(`[llm] ${label}: the model's JSON did not match the schema, after retries`);
+      return { content: "", toolCalls: [], promptTokens: 0, completionTokens: 0, schemaFailed: true };
+    }
     if (!err.dailyLimit) throw err;
     // Phase 10: a free tier's daily quota is used up for this model. Answer
     // with FALLBACK_MODEL (its own quota) and tell the user; or, with no
     // other model left, say plainly when to try again instead of a raw 429.
-    if (!FALLBACK_MODEL || model === FALLBACK_MODEL) throw limitReached(err);
+    if (!FALLBACK_MODEL || model === FALLBACK_MODEL) throw limitReached(err, model);
     notice(`Answered by ${FALLBACK_MODEL}: today's free limit for ${model} is used up.`);
     try {
       res = await call(FALLBACK_MODEL);
     } catch (err2) {
-      throw err2.dailyLimit ? limitReached(err2) : err2;
+      throw err2.dailyLimit ? limitReached(err2, FALLBACK_MODEL) : err2;
     }
   }
   return { ...res, content: plainText(res.content) };
@@ -51,11 +62,13 @@ function notice(text) {
   if (notices && !notices.includes(text)) notices.push(text);
 }
 
-function limitReached(err) {
+// Names the model: "the AI model" alone told neither the user nor the logs
+// which daily limit ran out (found when both evals and the app stopped at once).
+function limitReached(err, model) {
   const wait = err.message.match(/try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/);
   const minutes = wait ? Math.max(1, Math.ceil((Number(wait[1] ?? 0) * 3600 + Number(wait[2] ?? 0) * 60 + Number(wait[3] ?? 0)) / 60)) : null;
   const e = new Error(
-    `Today's free limit for the AI model is used up${minutes ? ` - try again in about ${minutes} minute${minutes === 1 ? "" : "s"}` : " - try again later"}.`
+    `Today's free limit for the AI model (${model}) is used up${minutes ? ` - try again in about ${minutes} minute${minutes === 1 ? "" : "s"}` : " - try again later"}.`
   );
   e.status = 429;
   e.dailyLimit = true;
@@ -90,6 +103,7 @@ async function post(url, body) {
     if (retryAfter > 0) err.retryAfterMs = retryAfter * 1000;
     // Groq says which limit: "tokens per day (TPD)" or "requests per day (RPD)".
     if (res.status === 429 && /per day/i.test(err.message)) err.dailyLimit = true;
+    if (res.status === 400 && /json_validate_failed/.test(err.message)) err.schemaFailed = true;
     throw err;
   }
   return res.json();
