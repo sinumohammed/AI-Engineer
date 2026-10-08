@@ -5,7 +5,7 @@
 import { toolDefs, toolImpls } from "./tools.js";
 import { logTrace } from "./tracer.js";
 import { chat } from "./llmClient.js";
-import { retrieve, standaloneQuestion } from "./retrieve.js";
+import { retrieve, standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
@@ -135,8 +135,11 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // Phase 10: a follow-up is searched as a self-contained question
   // (retrieve.js, standaloneQuestion); the model still answers the message
   // as written, with the conversation.
-  const searchQuery = await standaloneQuestion(question, history);
-  trackedOnToolCall("search_company_docs", { query: searchQuery });
+  // Phase 10: small talk ("hi", "thanks") skips the search and the judge
+  // (retrieve.js, isSmallTalk) and is answered as a general message.
+  const smallTalk = isSmallTalk(question);
+  const searchQuery = smallTalk ? question : await standaloneQuestion(question, history);
+  if (!smallTalk) trackedOnToolCall("search_company_docs", { query: searchQuery });
   // Phase 9.4: search plus the relevance decision, in one shared step
   // (retrieve.js). The model now judges which candidates answer the
   // question; that replaced the fixed distance threshold, which stopped
@@ -146,7 +149,9 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // search alone would call a similar chunk "relevant". Kept as its own flat
   // branch below rather than nested inside another - per the Phase 7 lesson
   // that this model blends nested conditions into nonsense.
-  const retrieval = await retrieve(searchQuery);
+  const retrieval = smallTalk
+    ? { chunks: [], isRelevant: false, identifierMismatch: false, bestDistance: null }
+    : await retrieve(searchQuery);
   const { identifierMismatch, isRelevant, bestDistance } = retrieval;
   const docResults = retrieval.chunks;
 
@@ -156,7 +161,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // loaded, the relevance check now gets general questions wrong, and the UI
   // had no way to show it. Reported after the decision, so it is the real one.
   const outcome = identifierMismatch ? "code not found" : isRelevant ? "used" : "not relevant";
-  onToolResult?.("search_company_docs", docResults, { outcome, bestDistance });
+  if (!smallTalk) onToolResult?.("search_company_docs", docResults, { outcome, bestDistance });
 
   let systemContent;
   if (identifierMismatch) {

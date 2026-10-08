@@ -15,11 +15,24 @@ import { pathToFileURL } from "node:url";
 import { logTrace } from "./tracer.js";
 import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
-import { standaloneQuestion } from "./retrieve.js";
+import { standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, synthesizerMessages } from "./routing.js";
 
 export async function route(question, history = []) {
   const startedAt = Date.now();
+  // Phase 10: small talk goes straight to `general` - no evidence search, no
+  // judge, no router call (retrieve.js, isSmallTalk).
+  if (isSmallTalk(question)) {
+    return {
+      reason: "Greeting or thanks: answered without searching the documents.",
+      tasks: [{ agent: "general", question }],
+      fallback: false,
+      evidence: null,
+      latencyMs: Date.now() - startedAt,
+      promptTokens: 0,
+      completionTokens: 0,
+    };
+  }
   const searchQuestion = await standaloneQuestion(question, history);
   const { messages, evidence } = await routerMessages(question, history, searchQuestion);
   const res = await chat({ model: ROUTER_MODEL, label: "router", format: ROUTE_SCHEMA, messages });

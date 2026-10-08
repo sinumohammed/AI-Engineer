@@ -128,6 +128,18 @@ export async function standaloneQuestion(question, history = []) {
   return question.slice(0, word.index) + refersTo + question.slice(word.index + word[0].length);
 }
 
+// Phase 10: a message that is only a greeting, thanks or a short
+// acknowledgement has nothing to search for. Before this, "hi" still ran
+// the document search, the relevance judge and (multi-agent) the router -
+// about 1,000-2,000 free-tier tokens to say hello. Decided in code, and
+// strictly: the whole message must be small talk, so "hi, who is eligible
+// for FMLA?" is searched as usual.
+const SMALL_TALK =
+  /^(hi|hii+|hello|hey|hey there|hi there|hello there|good (morning|afternoon|evening|night)|thanks|thank you|thank you very much|thanks a lot|many thanks|thx|ty|ok|okay|ok thanks|okay thanks|cool|great|nice|got it|bye|goodbye|see you|cheers)( (again|so much|there))?[\s!.,?🙂😊👍🙏]*$/i;
+export function isSmallTalk(message) {
+  return SMALL_TALK.test(message.trim());
+}
+
 // Returns the chunks the agent should read (at most 4) and the decision
 // about them, in the shape the agents already use.
 export async function retrieve(question, { rerank = RERANK } = {}) {

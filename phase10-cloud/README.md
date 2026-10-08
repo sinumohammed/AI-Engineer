@@ -459,3 +459,12 @@ answers. `FALLBACK_MODEL` is now a list; on Vercel
 Tested on the mock (each direction, both out, the old single setting) and
 live: with 20b out, "Who is eligible for FMLA?" was answered with the note
 "openai/gpt-oss-120b stood in for openai/gpt-oss-20b".
+
+**Small talk skips the search** (same day): "hi" still ran the document
+search, the relevance judge and the router - about 1,000-2,000 free-tier
+tokens for a greeting. `isSmallTalk` (`api/retrieve.js`) matches a message
+that is only a greeting, thanks or a short acknowledgement; it goes straight
+to a general answer (single agent: no search; multi-agent: no evidence search,
+judge or router call). The match is on the whole message, so "hi, what is
+our rollback process?" is searched as usual. Ollama: single 8/8, routing
+24/24, supervisor regression 8/8.
