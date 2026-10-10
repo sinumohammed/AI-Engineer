@@ -836,6 +836,9 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10b.8</td><td>Search in English for questions in other languages</td><td class="res">Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language</td></tr>
                 <tr><td class="n">10b.9</td><td>New UI with Ant Design X, installable as an app (PWA)</td><td class="res">Phone, tablet and desktop layouts; home-screen icon; opens offline; Chrome: 0 installability errors</td></tr>
                 <tr><td class="n">10b.10</td><td>Voice input: record in the browser, Gemini writes the text (Groq Whisper as backup)</td><td class="res">Works in every browser and the installed app; Malayalam 3/3 in Malayalam script with the language picked, ~1.5 s</td></tr>
+                <tr><td class="n">10b.11</td><td>Reply in the language of the question</td><td class="res">A Malayalam question after English turns was answered in English; now in Malayalam. English prompts unchanged</td></tr>
+                <tr><td class="n">10b.12</td><td>Date and time on every message</td><td class="res">Small time under each message, full date on tap, "Today" / "Yesterday" dividers</td></tr>
+                <tr><td class="n">10b.13</td><td>Attach a PDF or a photo (step 1: short files)</td><td class="res">Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source</td></tr>
               </tbody>
             </table>
           </div>
@@ -858,6 +861,9 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td>"hi" cost 2,000 tokens</td><td>A greeting went through search, judging and the router</td><td class="res">Small talk recognised in code and answered directly</td></tr>
                 <tr><td>"Tell that in Malayalam"</td><td>Searched as a new question: "I don't have information about that"</td><td class="res">Translate, shorten or simplify requests rework the last answer, no search</td></tr>
                 <tr><td>Broken JSON</td><td>gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply</td><td class="res">Retried, then the existing safe fallback</td></tr>
+                <tr><td>Answering in the wrong language</td><td>After English turns, a Malayalam question got an English answer</td><td class="res">Reply in the user's language - added only for non-English messages, because it changed how qwen worded English answers</td></tr>
+                <tr><td>Citing an attachment</td><td>Told not to number facts from the file, qwen did anyway: a receipt total was cited as a handbook page, and a heading "3. Hotels" became citation [3]</td><td class="res">The file is one more numbered excerpt, and its number is named in the prompt</td></tr>
+                <tr><td>Two sources, one question</td><td>With a travel policy attached, a booking question went to the handbook only; a router instruction to ask both was ignored</td><td class="res">In code: a one-part question sharing words with the file also goes to the file</td></tr>
                 <tr><td>Malayalam voice</td><td>Whisper wrote Malayalam speech in Tamil, Gujarati or Gurmukhi script, even when told the language</td><td class="res">Gemini 3.5 Flash Lite with the user's language as a hint; Whisper only as a backup</td></tr>
                 <tr><td>Whisper hears words in silence</td><td>A silent recording came back as "Thank you." with full confidence, so the server cannot tell</td><td class="res">The browser measures the mic level; a recording that never gets loud is not sent</td></tr>
                 <tr><td>Answers wider than a phone</td><td>One long code line made a whole answer 696 px wide on a 390 px screen</td><td class="res"><code>min-width: 0</code> on the chat bubbles; code scrolls inside its box</td></tr>
@@ -943,6 +949,9 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td class="n">51</td><td class="n">10.9</td><td>The UI was one fixed card: cramped on a phone, no app icon</td><td>Ant Design X chat components, responsive layout, PWA</td><td class="res">Installable, opens offline, checked at 390, 820 and 1440 px</td></tr>
             <tr><td class="n">52</td><td class="n">10.10</td><td>Typing on a phone is slow; questions in Malayalam or Hindi even more so</td><td>Mic button: MediaRecorder + Groq Whisper; the text lands in the box to check</td><td class="res">English and Hindi transcribed; silence caught before upload</td></tr>
             <tr><td class="n">53</td><td class="n">10.10</td><td>"Malayalam voice not taking": Whisper wrote it in other scripts</td><td>Gemini 3.5 Flash Lite + a "Voice language" setting as a hint</td><td class="res">Malayalam 0/3 to 3/3 in the right script; still finds the handbook passage</td></tr>
+            <tr><td class="n">54</td><td class="n">10.11</td><td>Malayalam question after English turns answered in English</td><td>Reply-language rule, only for non-English messages</td><td class="res">Fixed; English evals unchanged</td></tr>
+            <tr><td class="n">55</td><td class="n">10.12</td><td>No way to see when a message was sent</td><td>Time stored with each turn; shown small, full date on tap</td><td class="res">Survives reloads</td></tr>
+            <tr><td class="n">56</td><td class="n">10.13</td><td>Attachment facts cited as handbook pages</td><td>The file gets its own excerpt number, named in the prompt</td><td class="res">Receipt, text PDF and scanned PDF all cited as the file</td></tr>
           </tbody>
         </table>
       </div>

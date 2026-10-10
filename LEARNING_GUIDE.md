@@ -435,6 +435,9 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10b.8 | Search in English for questions in other languages | Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language |
 | 10b.9 | New UI with Ant Design X, installable as an app (PWA) | Phone, tablet and desktop layouts; home-screen icon; opens offline; Chrome: 0 installability errors |
 | 10b.10 | Voice input: record in the browser, Gemini writes the text (Groq Whisper as backup) | Works in every browser and the installed app; Malayalam 3/3 in Malayalam script with the language picked, ~1.5 s |
+| 10b.11 | Reply in the language of the question | A Malayalam question after English turns was answered in English; now in Malayalam. English prompts unchanged |
+| 10b.12 | Date and time on every message | Small time under each message, full date on tap, "Today" / "Yesterday" dividers; stored with the history |
+| 10b.13 | Attach a PDF or a photo (step 1: short files) | Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source |
 
 - **Challenges, in plain terms:**
 
@@ -455,6 +458,9 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | "hi" cost 2,000 tokens | A greeting went through search, judging and the router | Small talk is recognised in code and answered directly |
 | "Tell that in Malayalam" | Searched as a new question: "I don't have information about that" | Requests to translate, shorten or simplify rework the last answer, no search |
 | Broken JSON | gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply | Retried, then the existing safe fallback |
+| Answering in the wrong language | After English turns, a Malayalam question got an English answer | A rule to reply in the user's language - added only when the message is not English, because it changed how qwen worded English answers |
+| Citing an attachment | Told "don't number facts from the file", qwen numbered them anyway - a receipt total was cited as a handbook travel page; a PDF heading "3. Hotels" became citation [3] | The file is one more numbered excerpt, and its number is named in the prompt |
+| Two sources, one question | With a travel policy attached, "how many days before departure must flights be booked?" went to the handbook only; a router instruction to ask both was ignored | In code: a one-part question that shares words with the file also goes to the file; the reply says which source says what |
 | Malayalam voice | Whisper wrote Malayalam speech in Tamil, Gujarati or Gurmukhi script, even when told the language | Gemini 3.5 Flash Lite with the user's language as a hint; Whisper only as a backup |
 | Whisper hears words in silence | A silent recording came back as "Thank you." with full confidence (`no_speech_prob` 0), so the server cannot tell | The browser measures the mic level; a recording that never gets loud is not sent |
 | Answers wider than a phone | One long code line made a whole answer 696 px wide on a 390 px screen | `min-width: 0` on the chat bubbles; code scrolls inside its box |
@@ -540,6 +546,9 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 51 | 10.9 | The UI was one fixed card: cramped on a phone, no app icon | Ant Design X chat components, responsive layout, PWA | Installable, opens offline, checked at 390, 820 and 1440 px |
 | 52 | 10.10 | Typing on a phone is slow; questions in Malayalam or Hindi even more so | Mic button: MediaRecorder + Groq Whisper; the text lands in the box to check | English and Hindi recordings transcribed; silence caught before upload |
 | 53 | 10.10 | "Malayalam voice not taking": Whisper wrote it in other scripts | Gemini 3.5 Flash Lite + a "Voice language" setting as a hint | Malayalam 0/3 to 3/3 in the right script; still finds the handbook passage |
+| 54 | 10.11 | Malayalam question after English turns answered in English | Reply-language rule, only for non-English messages | Fixed on Groq; local English evals back to 10/10 and 3/3 after limiting the rule |
+| 55 | 10.12 | No way to see when a message was sent | Time stored with each turn; shown small, full date on tap | Survives reloads; old turns show none |
+| 56 | 10.13 | Attachment facts cited as handbook pages | The file gets its own excerpt number, named in the prompt | Receipt, text PDF and scanned PDF all cited as the file |
 
 Where things stand (Phase 10 code):
 
