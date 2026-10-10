@@ -140,9 +140,70 @@ export function isSmallTalk(message) {
   return SMALL_TALK.test(message.trim());
 }
 
+// Phase 10: a question in another language is searched in English. The
+// handbook is English and the nomic embedding model is English-first: before
+// this, 5 of 18 Malayalam, Hindi and Spanish questions found their passage -
+// the ones naming "FMLA", which the keyword search matched
+// (eval/multilingual-eval.js). Only the search and the relevance judge see
+// the translation; the agent still answers the message as written, so it
+// replies in the user's language.
+// Whether to translate is decided in code, so English questions cost no
+// extra call: a letter outside the Latin script (Malayalam, Hindi, Arabic...),
+// or three or more words with none of these common English words.
+// TRANSLATE_SEARCH=0 turns it off, to compare.
+const TRANSLATE_SEARCH = process.env.TRANSLATE_SEARCH !== "0";
+const NON_LATIN_LETTER = /(?=\p{L})\P{Script=Latin}/u;
+const ENGLISH_WORDS = new Set(
+  "the is are was do does did what how when where who which why can could should will would must my our your i we you they to of for and with it be have has get there this that".split(" ")
+);
+const TRANSLATE_SCHEMA = {
+  type: "object",
+  properties: { english: { type: "string" } },
+  required: ["english"],
+};
+const TRANSLATE_PROMPT =
+  "Translate the user's question into English, for searching English documents. Keep names, acronyms, codes " +
+  "and numbers exactly as written. Translate only - do not answer, explain or add anything. If it is already " +
+  "English, return it unchanged.";
+
+function looksNonEnglish(text) {
+  if (NON_LATIN_LETTER.test(text)) return true;
+  const words = text.toLowerCase().match(/\p{L}+/gu) ?? [];
+  return words.length >= 3 && !words.some((w) => ENGLISH_WORDS.has(w));
+}
+
+async function englishForSearch(question) {
+  if (!TRANSLATE_SEARCH || !looksNonEnglish(question)) return question;
+  const res = await chat({
+    model: JUDGE_MODEL,
+    reasoningEffort: JUDGE_REASONING_EFFORT,
+    label: "translate",
+    format: TRANSLATE_SCHEMA,
+    messages: [
+      { role: "system", content: TRANSLATE_PROMPT },
+      { role: "user", content: question },
+    ],
+  });
+  let english = "";
+  try {
+    english = JSON.parse(res.content).english?.trim() ?? "";
+  } catch {
+    // unparseable: search with the question as written, as before
+  }
+  // Empty, or still not English: no better than the original.
+  return english && !NON_LATIN_LETTER.test(english) ? english : question;
+}
+
 // Returns the chunks the agent should read (at most 4) and the decision
-// about them, in the shape the agents already use.
-export async function retrieve(question, { rerank = RERANK } = {}) {
+// about them, in the shape the agents already use. `searchedAs` is set when
+// the question was translated for the search.
+export async function retrieve(question, opts = {}) {
+  const english = await englishForSearch(question);
+  const result = await searchAndJudge(english, opts);
+  return english === question ? result : { ...result, searchedAs: english };
+}
+
+async function searchAndJudge(question, { rerank = RERANK } = {}) {
   const results = await toolImpls.search_company_docs({ query: question, k: rerank ? CANDIDATES : KEEP });
   if (!Array.isArray(results)) {
     return { chunks: [], isRelevant: false, identifierMismatch: false, bestDistance: null, error: results?.error };

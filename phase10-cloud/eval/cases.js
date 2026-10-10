@@ -68,3 +68,51 @@ export const offTopic = [
   "Write a SQL query to find duplicate emails in a users table.",
   "How do I list all git tags from the command line?",
 ];
+
+// Phase 10: the same facts asked in other languages. The handbook and the
+// embedding model are English-first, so these test whether a question in
+// Malayalam, Hindi or Spanish still finds the English passage.
+const ML = {
+  carry: "എനിക്ക് എത്ര മണിക്കൂർ വാർഷിക അവധി അടുത്ത വർഷത്തേക്ക് മാറ്റാൻ കഴിയും?",
+  parental: "എനിക്ക് എത്ര ശമ്പളത്തോടെയുള്ള പേരന്റൽ ലീവ് ലഭിക്കും?",
+  incident: "സംശയാസ്പദമായ ഒരു സുരക്ഷാ സംഭവം എത്ര വേഗം റിപ്പോർട്ട് ചെയ്യണം?",
+  fmla: "FMLA-യ്ക്ക് ആർക്കാണ് അർഹത?",
+  comp: "കോമ്പ് ടൈം എപ്പോഴാണ് കാലഹരണപ്പെടുന്നത്?",
+  offboard: "ഓഫ്ബോർഡിംഗ് പ്രക്രിയ എന്റെ അവസാന ദിവസത്തിന് എത്ര മുമ്പ് തുടങ്ങണം?",
+};
+const HI = {
+  carry: "मैं अगले साल के लिए कितने घंटे की वार्षिक छुट्टी आगे ले जा सकता हूँ?",
+  parental: "मुझे कितनी सवेतन पैरेंटल लीव मिलती है?",
+  incident: "संदिग्ध सुरक्षा घटना की रिपोर्ट कितनी जल्दी करनी होती है?",
+  fmla: "FMLA के लिए कौन पात्र है?",
+  comp: "कॉम्प टाइम कब समाप्त होता है?",
+  offboard: "ऑफबोर्डिंग प्रक्रिया मेरे आखिरी दिन से कितने समय पहले शुरू करनी चाहिए?",
+};
+const ES = {
+  carry: "¿Cuántas horas de vacaciones anuales puedo transferir al año siguiente?",
+  parental: "¿Cuánto permiso parental pagado me corresponde?",
+  incident: "¿Con qué rapidez debo informar de un posible incidente de seguridad?",
+  fmla: "¿Quién tiene derecho al FMLA?",
+  comp: "¿Cuándo caduca el tiempo compensatorio?",
+  offboard: "¿Cuánto tiempo antes de mi último día debo empezar el proceso de salida?",
+};
+const ANSWERS = {
+  carry: "maximum of 240 annual leave hours",
+  parental: "12 weeks of paid time off",
+  incident: "within 1 hour of suspected incident",
+  fmla: "at least one year of federal service",
+  comp: "Comp time expires one year",
+  offboard: "at least two weeks before your last day",
+};
+export const multilingual = Object.fromEntries(
+  Object.entries({ Malayalam: ML, Hindi: HI, Spanish: ES }).map(([lang, qs]) => [
+    lang,
+    Object.entries(qs).map(([key, question]) => ({ question, mustFind: ANSWERS[key] })),
+  ])
+);
+// Must NOT be treated as answered by the handbook.
+export const multilingualOffTopic = [
+  "ഫ്രാൻസിന്റെ തലസ്ഥാനം ഏതാണ്?",
+  "जावास्क्रिप्ट में स्ट्रिंग को उल्टा कैसे करें?",
+  "¿Quién escribió Don Quijote?",
+];
