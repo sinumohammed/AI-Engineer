@@ -235,7 +235,13 @@ export function useChatSession() {
       } catch {
         // not JSON: treat as a lost connection
       }
-      dispatch({ type: "ERROR", message: message ? `(${message})` : `(connection error - is the backend running at ${API_BASE || "this site"}?)` });
+      // Phase 10: a lost connection is usually this device's network (a
+      // laptop just woken from sleep could not even look up the hosts for a
+      // few minutes), not the server - so say which, when the browser knows.
+      const lost = navigator.onLine === false
+        ? "(no internet connection - reconnect and ask again)"
+        : `(connection lost - check your internet connection and ask again; if it keeps happening, the server at ${API_BASE || "this site"} may be down)`;
+      dispatch({ type: "ERROR", message: message ? `(${message})` : lost });
     });
   }
 
