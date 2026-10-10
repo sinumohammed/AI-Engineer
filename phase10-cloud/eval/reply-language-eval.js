@@ -20,12 +20,17 @@ const CASES = [
   },
   { lang: "English", question: "How much paid parental leave do I get?", check: (a) => /\b(the|weeks|you)\b/i.test(a) && !/[ऀ-ൿ]/.test(a) },
 ];
+// ONLY=Malayalam,English runs those languages only - to confirm a fix on
+// Groq without spending the day's quota on every case.
+const ONLY = process.env.ONLY?.split(",");
+const cases = ONLY ? CASES.filter((c) => ONLY.includes(c.lang)) : CASES;
 let passed = 0;
 let total = 0;
-for (const mode of ["single", "multi"]) {
+// MODES=multi runs one architecture only.
+for (const mode of process.env.MODES?.split(",") ?? ["single", "multi"]) {
   const { runAgent } = await import(mode === "single" ? "../api/agent.js" : "../api/supervisor.js");
   console.log(`\n${mode === "single" ? "Single agent" : "Multi-agent"}:`);
-  for (const c of CASES) {
+  for (const c of cases) {
     const { answer } = await runAgent(c.question, c.history ?? []);
     const ok = c.check(answer);
     total++;
