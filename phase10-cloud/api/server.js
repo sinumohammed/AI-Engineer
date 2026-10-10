@@ -8,7 +8,7 @@ import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
 import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
-import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion } from "./attachments.js";
+import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, nameTheFile } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
@@ -92,6 +92,9 @@ app.get("/api/chat/stream", async (req, res) => {
     // with follow-ups that look related (attachments.js, fileForQuestion).
     const attachment = fileForQuestion(stored, question, history, POINTS_BACK);
     if (attachment) send("file_used", { name: attachment.name, sentWithMessage: !attachment.sent });
+    // "Explain it" with a new file attached -> 'Explain the attached file "scan.pdf"' for
+    // the model; the user's own words are what is stored and shown.
+    const asked = nameTheFile(question, attachment);
     // Sessions, memory, summaries and the answer/usage/memory events below
     // are identical for both modes - only the progress events differ: the
     // single agent reports tool calls, the supervisor reports its routing
@@ -100,7 +103,7 @@ app.get("/api/chat/stream", async (req, res) => {
     // for this request by the model client and sent before the answer.
     const { result, notices } = await collectNotices(() =>
       mode === "multi"
-        ? runMultiAgent(question, history, {
+        ? runMultiAgent(asked, history, {
             onRoute: (decision) => send("route", decision),
             onAgentStart: (step) => send("agent_start", step),
             onAgentDone: (step) => send("agent_done", step),
@@ -110,7 +113,7 @@ app.get("/api/chat/stream", async (req, res) => {
             forceAgent: req.query.agent,
             attachment,
           })
-        : runAgent(question, history, {
+        : runAgent(asked, history, {
             onToolCall: (name, args) => send("tool_call", { name, args }),
             // `outcome` (document search only): "used", "not relevant" or
             // "code not found" - what the search led to, shown on the chip.

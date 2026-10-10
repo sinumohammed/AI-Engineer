@@ -6,7 +6,8 @@
 // comparison between them varies the orchestration and nothing else.
 import { specialists, searchDocs } from "./specialists.js";
 import { replyLanguageRule } from "./replyLanguage.js";
-import { sharesWords } from "./attachments.js";
+import { sharesWords, MENTIONS_FILE } from "./attachments.js";
+import { POINTS_BACK } from "./retrieve.js";
 
 export const AGENT_NAMES = Object.keys(specialists);
 const MAX_TASKS = 3;
@@ -111,7 +112,8 @@ export async function routerMessages(question, history = [], searchQuestion = qu
   const recent = history.slice(-ROUTER_HISTORY_MESSAGES);
   const evidence = await docEvidence(searchQuestion);
   const attached = attachment
-    ? `\n\nAttached file: "${attachment.name}" (${attachment.kind === "image" ? "a photo" : `a ${attachment.pages}-page PDF`}).`
+    ? `\n\nAttached file${attachment.sent ? "" : ", sent with this message"}: "${attachment.name}" (${attachment.kind === "image" ? "a photo" : `a ${attachment.pages}-page PDF`}).` +
+      (attachment.sent ? "" : ' Words like "it" or "this" in the message mean this file, not anything earlier in the conversation.')
     : "\n\nNo file is attached to this chat.";
   // The user's message is always labelled, so the router can tell it apart
   // from the excerpt below it. Without the label, a one-question message
@@ -157,6 +159,21 @@ export function validateRoute(parsed, question, history = []) {
   const fallback = tasks.length === 0;
   if (fallback) tasks = [{ agent: "general", question }];
   return { reason, tasks, fallback, ...(repeatsDropped ? { repeatsDropped } : {}) };
+}
+
+// Phase 10, found by the user: receipt first, then a scanned PDF and "explain
+// it" - the router rewrote the task as "Explain the total amount of 16.90 EUR
+// mentioned in the previous conversation" and the answer was about the
+// receipt. With a file sent with this message, a one-part question that
+// points back ("it", "this") or mentions a file goes to the attachment
+// specialist in the user's own words.
+export function checkFreshFile(decision, question, freshFile) {
+  if (!freshFile || decision.tasks.length !== 1) return decision;
+  const [only] = decision.tasks;
+  if (only.agent === "attachment" || POINTS_BACK.test(question) || MENTIONS_FILE.test(question)) {
+    return { ...decision, tasks: [{ agent: "attachment", question }] };
+  }
+  return decision;
 }
 
 // Phase 10, attachments:

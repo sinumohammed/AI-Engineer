@@ -550,6 +550,7 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 55 | 10.12 | No way to see when a message was sent | Time stored with each turn; shown small, full date on tap | Survives reloads; old turns show none |
 | 56 | 10.13 | Attachment facts cited as handbook pages | The file gets its own excerpt number, named in the prompt | Receipt, text PDF and scanned PDF all cited as the file |
 | 57 | 10.13 | The file stayed attached to every later question (found by the user) | Like a chat app: it goes with its message; later only with related follow-ups, decided in code | Paris and "And in London?" read the file; "git tags" did not |
+| 58 | 10.13 | Receipt, then a scanned PDF + "explain it": the receipt was explained (found by the user) | With a new file, skip the "it" rewrite, route to the file, and put the file's name in place of a bare "it" | "Explain it" and "What is this?" explain the new file, both modes |
 
 Where things stand (Phase 10 code):
 

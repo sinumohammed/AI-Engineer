@@ -167,7 +167,7 @@ export const specialists = {
           "You are a helpful assistant answering questions about a file the user attached. Answer from the file only. " +
           "You have no access to this company's internal documents - if the question needs them, say so. " +
           CITE_INSTRUCTION +
-          attachmentNote(1) +
+          attachmentNote(1, !attachment.sent) +
           "\n\nExcerpts:\n" +
           numberedExcerpts([chunk]),
         meta: { attachment: attachment.name },

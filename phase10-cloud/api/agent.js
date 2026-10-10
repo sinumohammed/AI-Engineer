@@ -154,7 +154,10 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // Phase 10: small talk ("hi", "thanks") skips the search and the judge
   // (retrieve.js, isSmallTalk) and is answered as a general message.
   const smallTalk = isSmallTalk(question);
-  const searchQuery = smallTalk ? question : await standaloneQuestion(question, history);
+  // A file sent with this message: "it" / "this" mean the file, not something
+  // earlier in the conversation, so the follow-up rewrite is skipped.
+  const freshFile = Boolean(attachment && !attachment.sent);
+  const searchQuery = smallTalk || freshFile ? question : await standaloneQuestion(question, history);
   if (!smallTalk) trackedOnToolCall("search_company_docs", { query: searchQuery });
   // Phase 9.4: search plus the relevance decision, in one shared step
   // (retrieve.js). The model now judges which candidates answer the
@@ -207,7 +210,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       "answer from your own knowledge.";
   }
   if (fileChunk) {
-    systemContent += attachmentNote(citable.length);
+    systemContent += attachmentNote(citable.length, freshFile);
     // Without relevant handbook excerpts the file is the only numbered one.
     if (!isRelevant) systemContent += " " + CITE_INSTRUCTION + "\n\nExcerpts:\n" + numberedExcerpts(citable);
   }

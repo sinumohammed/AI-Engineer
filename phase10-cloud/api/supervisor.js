@@ -17,7 +17,7 @@ import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
 import { standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
-import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, checkAttachmentTasks, synthesizerMessages } from "./routing.js";
+import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, checkAttachmentTasks, checkFreshFile, synthesizerMessages } from "./routing.js";
 
 export async function route(question, history = [], attachment = null) {
   const startedAt = Date.now();
@@ -34,7 +34,10 @@ export async function route(question, history = [], attachment = null) {
       completionTokens: 0,
     };
   }
-  const searchQuestion = await standaloneQuestion(question, history);
+  // A file sent with this message: "it" / "this" mean the file, so no
+  // follow-up rewrite from the earlier conversation (see checkFreshFile).
+  const freshFile = Boolean(attachment && !attachment.sent);
+  const searchQuestion = freshFile ? question : await standaloneQuestion(question, history);
   const { messages, evidence } = await routerMessages(question, history, searchQuestion, attachment);
   const res = await chat({ model: ROUTER_MODEL, label: "router", format: ROUTE_SCHEMA, messages });
 
@@ -48,7 +51,7 @@ export async function route(question, history = [], attachment = null) {
   // Phase 10: a task that is the user's follow-up word for word ("And who is
   // eligible for it?") gets the resolved wording, so the specialist's own
   // document search can find what "it" is.
-  const decision = checkAttachmentTasks(await applyDocPriority(validateRoute(parsed, question, history), evidence), attachment);
+  const decision = checkFreshFile(checkAttachmentTasks(await applyDocPriority(validateRoute(parsed, question, history), evidence), attachment), question, freshFile);
   if (searchQuestion !== question) {
     decision.tasks = decision.tasks.map((t) => (t.question.trim() === question.trim() ? { ...t, question: searchQuestion } : t));
   }
