@@ -62,6 +62,13 @@ export const TRACE_TO = process.env.TRACE_TO ?? (process.env.VERCEL ? "console" 
 // call the API from a browser (CORS). Both unset = open, as on the Mac.
 export const ACCESS_CODE = process.env.ACCESS_CODE || null;
 export const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null;
+// Phase 10 UI: voice input (transcribe.js). Gemini writes the text when
+// GEMINI_API_KEY is set (Whisper could not write Malayalam), Groq's Whisper
+// when it is not, or when Gemini fails. Hosted services even when answers
+// come from local Ollama; with neither key the mic button is hidden.
+export const GEMINI_TRANSCRIBE_MODEL = process.env.GEMINI_TRANSCRIBE_MODEL ?? "gemini-3.5-flash-lite";
+export const TRANSCRIBE_MODEL = process.env.TRANSCRIBE_MODEL ?? "whisper-large-v3-turbo";
+export const GROQ_API_KEY = process.env.GROQ_API_KEY || null;
 
 // For startup logs: host, port and path of a connection URL, never the password.
 export function describeUrl(url) {

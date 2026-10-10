@@ -7,7 +7,8 @@ import cors from "cors";
 import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl } from "./config.js";
+import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
 
@@ -27,7 +28,8 @@ function hasAccess(req) {
 // Lets the web app ask, before opening the stream, whether a code is needed
 // and whether the one it has is right - so a wrong code shows a prompt, not
 // a dropped connection.
-app.get("/api/access", (req, res) => res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req) }));
+// `voice`: whether the mic button can work (transcribe.js needs a Gemini or Groq key).
+app.get("/api/access", (req, res) => res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req), voice: voiceAvailable }));
 app.use("/api", (req, res, next) => (hasAccess(req) ? next() : res.status(401).json({ error: "Access code required" })));
 
 // How many turns are stored, and whether older ones have been folded into a
@@ -136,6 +138,24 @@ app.delete("/api/chat/session/:sessionId", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Phase 10 UI: voice input - the recorded audio as the raw request body, the
+// text back (transcribe.js). 4 MB is under Vercel's 4.5 MB request limit and
+// far above a 2-minute recording (the web app stops there; ~1 MB of Opus).
+app.post("/api/transcribe", express.raw({ type: () => true, limit: "4mb" }), async (req, res) => {
+  try {
+    // ?lang=Malayalam: the language the user picked, a hint for the model.
+    res.json(await transcribe(req.body, req.get("content-type"), req.query.lang));
+  } catch (err) {
+    if (!(err instanceof TranscribeError)) console.error("[transcribe]", err);
+    res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });
+  }
+});
+// A recording over the limit: express.raw throws before the handler runs.
+app.use((err, req, res, next) => {
+  if (err?.type === "entity.too.large") return res.status(413).json({ error: "That recording is too long - keep it under 2 minutes." });
+  next(err);
+});
+
 // Phase 10 step 6: on Vercel the app is exported and Vercel runs it as one
 // function; on the Mac it listens on a port as before.
 export default app;
@@ -162,5 +182,7 @@ function logServices(firstLine) {
   console.log(`  documents:  ${describeUrl(DATABASE_URL)}`);
   console.log(`  sessions:   ${describeUrl(REDIS_URL)}`);
   console.log(`  traces:     ${TRACE_TO === "console" ? "console" : "logs/traces.jsonl"}`);
+  const voiceBy = [GEMINI_API_KEY && `Gemini ${GEMINI_TRANSCRIBE_MODEL}`, GROQ_API_KEY && `Groq ${TRANSCRIBE_MODEL}`].filter(Boolean);
+  console.log(`  voice:      ${voiceBy.length ? voiceBy.join(", then ") : "off (no GEMINI_API_KEY or GROQ_API_KEY)"}`);
   console.log(`  access:     ${ACCESS_CODE ? "code required" : "open (no ACCESS_CODE)"}${ALLOWED_ORIGIN ? `, browser calls only from ${ALLOWED_ORIGIN}` : ""}`);
 }

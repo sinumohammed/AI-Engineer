@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Card, Drawer, Grid, Input, Spin, Tag, Tooltip, Typography, theme } from "antd";
+import { Alert, App as AntApp, Button, Card, Drawer, Grid, Input, Spin, Tag, Tooltip, Typography, theme } from "antd";
 import { Prompts, Sender, Welcome } from "@ant-design/x";
 import {
   ArrowDownOutlined,
@@ -13,6 +13,8 @@ import {
 import { useChatSession } from "./useChatSession.js";
 import Sidebar, { AGENT_LABELS, Brand } from "./Sidebar.jsx";
 import Message from "./Message.jsx";
+import VoiceBar, { MicButton } from "./VoiceBar.jsx";
+import { useVoiceInput, voiceSupported } from "./useVoiceInput.js";
 
 const { Text } = Typography;
 
@@ -21,8 +23,50 @@ const { Text } = Typography;
 //   phone and tablet in portrait: settings in a drawer behind the menu button
 // Everything the old single-card page showed is still here: both modes, the
 // specialist override, search and routing chips, sources, notices, token use.
+
+// A setting remembered in this browser.
+function useStoredValue(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      return localStorage.getItem(key) ?? initial;
+    } catch {
+      return initial;
+    }
+  });
+  const set = (v) => {
+    setValue(v);
+    try {
+      localStorage.setItem(key, v);
+    } catch {
+      // storage blocked: lasts until the page closes
+    }
+  };
+  return [value, set];
+}
+
+function useStoredFlag(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? initial : v === "1";
+    } catch {
+      return initial;
+    }
+  });
+  const set = (v) => {
+    setValue(v);
+    try {
+      localStorage.setItem(key, v ? "1" : "0");
+    } catch {
+      // storage blocked: lasts until the page closes
+    }
+  };
+  return [value, set];
+}
+
 export default function App({ themeMode, setThemeMode, isDark }) {
-  const { state, ask, stop, newChat, setMode, setAgent, access, submitCode } = useChatSession();
+  const { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice: voiceOnServer } = useChatSession();
+  const { message } = AntApp.useApp();
   const screens = Grid.useBreakpoint();
   const wide = Boolean(screens.lg);
   const compact = !screens.sm; // phones
@@ -60,6 +104,20 @@ export default function App({ themeMode, setThemeMode, isDark }) {
     setInput("");
   }
 
+  // Phase 10 UI: voice input. The text goes into the box to check and send -
+  // or straight out, if "Send as soon as I stop talking" is on.
+  const [voiceAutoSend, setVoiceAutoSend] = useStoredFlag("voiceAutoSend", false);
+  const [voiceLanguage, setVoiceLanguage] = useStoredValue("voiceLanguage", "auto");
+  const canSpeak = voiceOnServer && voiceSupported();
+  const voice = useVoiceInput({
+    onText: (text) => {
+      if (voiceAutoSend && !state.busy && !input.trim()) return send(text);
+      setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text));
+    },
+    onError: (msg) => message.warning(msg),
+    language: voiceLanguage,
+  });
+
   // Phase 10 step 6: the hosted API needs an access code before anything else.
   if (access.needed) return <AccessScreen wrong={access.wrong} onSubmit={submitCode} />;
 
@@ -80,6 +138,11 @@ export default function App({ themeMode, setThemeMode, isDark }) {
       setAgent={setAgent}
       themeMode={themeMode}
       setThemeMode={setThemeMode}
+      canSpeak={canSpeak}
+      voiceAutoSend={voiceAutoSend}
+      setVoiceAutoSend={setVoiceAutoSend}
+      voiceLanguage={voiceLanguage}
+      setVoiceLanguage={setVoiceLanguage}
       onDone={() => setDrawerOpen(false)}
     />
   );
@@ -140,6 +203,9 @@ export default function App({ themeMode, setThemeMode, isDark }) {
 
         <div className="composer">
           <div className="composer-inner">
+            {voice.status !== "idle" ? (
+              <VoiceBar voice={voice} />
+            ) : (
             <Sender
               value={input}
               onChange={setInput}
@@ -150,6 +216,12 @@ export default function App({ themeMode, setThemeMode, isDark }) {
               autoSize={{ minRows: 1, maxRows: 6 }}
               // 16px on phones: iPhones zoom into any smaller input on focus.
               styles={{ input: { fontSize: compact ? 16 : 15 } }}
+              suffix={(actions) => (
+                <div className="sender-actions">
+                  {canSpeak && <MicButton onClick={voice.start} />}
+                  {actions}
+                </div>
+              )}
               header={
                 overriding && (
                   <div className="override">
@@ -160,9 +232,10 @@ export default function App({ themeMode, setThemeMode, isDark }) {
                 )
               }
             />
+            )}
             {!compact && (
               <Text type="secondary" className="hint">
-                Enter to send · Shift + Enter for a new line · answers can be wrong, check the sources
+                Enter to send · Shift + Enter for a new line{canSpeak ? " · mic to speak" : ""} · answers can be wrong, check the sources
               </Text>
             )}
           </div>

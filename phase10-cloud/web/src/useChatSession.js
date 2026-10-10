@@ -4,7 +4,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 // vite.config.js) or the host's build settings. Read at build time, so a
 // change needs a restart of `npm run dev` or a new build. An empty value
 // means the same site as the page, for when one host serves both.
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3002";
+export const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3002";
 
 // Phase 10 step 6: the access code a hosted API asks for (ACCESS_CODE on the
 // server), remembered in this browser once entered. Sent as a header, and as
@@ -16,7 +16,7 @@ function storedCode() {
     return "";
   }
 }
-const codeHeaders = () => (storedCode() ? { "x-access-code": storedCode() } : {});
+export const codeHeaders = () => (storedCode() ? { "x-access-code": storedCode() } : {});
 
 function getOrCreateSessionId() {
   let id = localStorage.getItem("sessionId");
@@ -158,6 +158,8 @@ export function useChatSession() {
   // { needed, wrong }: whether to show the access-code form, and whether the
   // last code entered was rejected.
   const [access, setAccess] = useState({ needed: false, wrong: false });
+  // Phase 10 UI: whether the server can turn speech into text (GROQ_API_KEY).
+  const [voice, setVoice] = useState(false);
 
   function loadSession() {
     fetch(`${API_BASE}/api/chat/session/${state.sessionId}`, { headers: codeHeaders() })
@@ -171,7 +173,8 @@ export function useChatSession() {
   async function checkAccess() {
     try {
       const r = await fetch(`${API_BASE}/api/access`, { headers: codeHeaders() });
-      const { ok } = await r.json();
+      const { ok, voice } = await r.json();
+      setVoice(Boolean(voice));
       return ok;
     } catch {
       return true; // unreachable API: let the normal connection error show
@@ -269,5 +272,5 @@ export function useChatSession() {
     dispatch({ type: "SET_AGENT", agent });
   }
 
-  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode };
+  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice };
 }
