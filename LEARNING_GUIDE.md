@@ -414,6 +414,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   0. "hi"/"thanks" -> answered directly, no search      (small talk, decided in code)
      "translate that"/"make it shorter" -> reworks the last answer, no search
   1. a follow-up ("who is eligible for it?") gets "it" replaced:  "...for FMLA?"
+     a question in Malayalam, Hindi, Spanish... is translated to English for the search only
   2. embed the question inside the function, search Neon ──> 10 candidates
   3. gpt-oss-20b judges which candidates answer it ──> best 4, numbered
   4. gpt-oss-120b answers and cites [n]
@@ -431,6 +432,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10a.5 | Neon, Upstash, Groq together | Follow-ups fixed, model split, judging 30% cheaper, fallback when a daily limit runs out |
 | 10b.6 | Deploy on Vercel with an access code | Through the public URL: 12/12, both modes |
 | 10b.7 | Fixes found on the live app and the Groq evals | Two-way fallback, small talk, rework requests, router 24/24 on gpt-oss |
+| 10b.8 | Search in English for questions in other languages | Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language |
 
 - **Challenges, in plain terms:**
 
@@ -451,6 +453,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | "hi" cost 2,000 tokens | A greeting went through search, judging and the router | Small talk is recognised in code and answered directly |
 | "Tell that in Malayalam" | Searched as a new question: "I don't have information about that" | Requests to translate, shorten or simplify rework the last answer, no search |
 | Broken JSON | gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply | Retried, then the existing safe fallback |
+| Other languages | The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA" | Translated to English for the search and the judge only; the model answers the original, in the user's language |
 | Two-part questions on gpt-oss | Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to `general` | Each part is searched on its own; a part the documents answer goes to company_docs |
 
 - **Learned:**
@@ -528,6 +531,7 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 47 | 10.7 | "hi" spent 1,000-2,000 tokens | Small talk answered without search | 0 extra tokens |
 | 48 | 10.7 | "Tell that in Malayalam" searched as a new question | Rework the last answer from the conversation | Malayalam and Hindi work live |
 | 49 | 10.7 | Two-part questions: one part sent to `general` on gpt-oss | Document check per part, in code | Routing 22/24 (20b), 21/24 (120b) to 24/24 |
+| 50 | 10.8 | Questions in other languages missed the English handbook | Translate for the search only; non-English detected in code | 5/18 to 17/18 (16/18 on qwen), off-topic 0/3 |
 
 Where things stand (Phase 10 code):
 
@@ -540,6 +544,7 @@ Where things stand (Phase 10 code):
 | Supervisor on the 8 single-agent cases | 8/8 | 8/8 |
 | Retrieval: answer reaches the agent | 34/37 (37 cases, 4 private) | 31/33 (public only, gpt-oss-20b judging) |
 | Retrieval, off-topic questions wrongly treated as relevant | 0/8 | 0/8 |
+| Retrieval in Malayalam, Hindi, Spanish (18 cases, 3 off-topic) | 16/18, 0/3 | 17/18, 0/3 |
 | Citations: document answers that cite a source | 37/37 (single and multi-agent) | 32/33 single, 32/33 multi-agent (public only) |
 | Through the public URL, both modes | - | 12/12 |
 
@@ -636,6 +641,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | All evals | `cd phase10-cloud/eval && npm run eval:retrieval` (also `eval`, `eval:supervisor`, `eval:citations`, ...) |
 | Evals on Groq | prefix with `LLM_PROVIDER=groq CHAT_MODEL=openai/gpt-oss-120b JUDGE_MODEL=openai/gpt-oss-20b` |
 | Judging cost and quality | `cd phase10-cloud/eval && npm run eval:judge` |
+| Questions in other languages | `cd phase10-cloud/eval && npm run eval:multilingual` |
 | Test the deployed app | `cd phase10-cloud/eval && npm run eval:public` |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
 

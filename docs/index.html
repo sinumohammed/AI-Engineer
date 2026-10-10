@@ -782,7 +782,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
           </dl>
           <figure>
             <div class="scroll">
-              <svg class="dg" viewBox="0 0 720 370" role="img" aria-label="The browser loads the web app from Vercel and sends each question with the access code to the API, one Vercel function in Frankfurt. The function rewrites follow-ups, embeds the question itself, searches the handbook in Neon, keeps chat history in Upstash, and calls Groq: gpt-oss-20b judges search results and routes, gpt-oss-120b writes the answer. If one model's daily limit is used up, the other stands in, with a note. Greetings and requests like "translate that" skip the search.">
+              <svg class="dg" viewBox="0 0 720 370" role="img" aria-label="The browser loads the web app from Vercel and sends each question with the access code to the API, one Vercel function in Frankfurt. The function rewrites follow-ups, embeds the question itself, searches the handbook in Neon, keeps chat history in Upstash, and calls Groq: gpt-oss-20b judges search results and routes, gpt-oss-120b writes the answer. If one model's daily limit is used up, the other stands in, with a note. Greetings and requests like "translate that" skip the search. A question in another language is searched in English.">
                 <defs><marker id="a9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
                 <rect class="b" x="30" y="16" width="190" height="46" rx="6"/>
                 <text class="t" x="125" y="36" text-anchor="middle">Web app on Vercel</text>
@@ -833,6 +833,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10a.5</td><td>Neon, Upstash and Groq together</td><td class="res">Follow-ups fixed, two-model split, judging 30% cheaper, fallback when a daily limit runs out</td></tr>
                 <tr><td class="n">10b.6</td><td>Deploy on Vercel with an access code</td><td class="res">Through the public URL: 12/12, both modes</td></tr>
                 <tr><td class="n">10b.7</td><td>Fixes found on the live app and the Groq evals</td><td class="res">Two-way fallback, small talk, rework requests, router 24/24 on gpt-oss</td></tr>
+                <tr><td class="n">10b.8</td><td>Search in English for questions in other languages</td><td class="res">Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language</td></tr>
               </tbody>
             </table>
           </div>
@@ -855,6 +856,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td>"hi" cost 2,000 tokens</td><td>A greeting went through search, judging and the router</td><td class="res">Small talk recognised in code and answered directly</td></tr>
                 <tr><td>"Tell that in Malayalam"</td><td>Searched as a new question: "I don't have information about that"</td><td class="res">Translate, shorten or simplify requests rework the last answer, no search</td></tr>
                 <tr><td>Broken JSON</td><td>gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply</td><td class="res">Retried, then the existing safe fallback</td></tr>
+                <tr><td>Other languages</td><td>The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA"</td><td class="res">Translated to English for the search and the judge only; the model answers the original, in the user's language</td></tr>
                 <tr><td>Two-part questions on gpt-oss</td><td>Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to <code>general</code></td><td class="res">Each part searched on its own; a part the documents answer goes to company_docs</td></tr>
               </tbody>
             </table>
@@ -932,6 +934,7 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td class="n">47</td><td class="n">10.7</td><td>"hi" spent 1,000 to 2,000 tokens</td><td>Small talk answered without search</td><td class="res">0 extra tokens</td></tr>
             <tr><td class="n">48</td><td class="n">10.7</td><td>"Tell that in Malayalam" searched as a new question</td><td>Rework the last answer from the conversation</td><td class="res">Malayalam and Hindi work live</td></tr>
             <tr><td class="n">49</td><td class="n">10.7</td><td>Two-part questions: one part sent to <code>general</code> on gpt-oss</td><td>Document check per part, in code</td><td class="res">Routing 22/24 (20b), 21/24 (120b) to 24/24</td></tr>
+            <tr><td class="n">50</td><td class="n">10.8</td><td>Questions in other languages missed the English handbook</td><td>Translate for the search only; non-English detected in code</td><td class="res">5/18 to 17/18, off-topic 0/3</td></tr>
           </tbody>
         </table>
       </div>
@@ -947,6 +950,7 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td>Supervisor on the 8 single-agent cases</td><td class="n">8/8</td><td class="n">8/8</td></tr>
             <tr><td>Retrieval: answer reaches the agent</td><td class="n">34/37</td><td class="n">31/33 public</td></tr>
             <tr><td>Retrieval, off-topic questions wrongly treated as relevant</td><td class="n">0/8</td><td class="n">0/8</td></tr>
+            <tr><td>Retrieval in Malayalam, Hindi, Spanish (18 cases, 3 off-topic)</td><td class="n">16/18, 0/3</td><td class="n">17/18, 0/3</td></tr>
             <tr><td>Document answers that cite a source</td><td class="n">37/37</td><td class="n">32/33 public, single and multi-agent</td></tr>
             <tr><td>Through the public URL, both modes</td><td class="n">-</td><td class="n">12/12</td></tr>
           </tbody>
@@ -1016,6 +1020,7 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td>The copy on the Mac</td><td><code>cd phase10-cloud &amp;&amp; ./start.sh</code>, then open localhost:5174</td></tr>
             <tr><td>Evals</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:retrieval</code> (also <code>eval</code>, <code>eval:supervisor</code>, <code>eval:citations</code>)</td></tr>
             <tr><td>Judging cost and quality</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:judge</code></td></tr>
+            <tr><td>Questions in other languages</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:multilingual</code></td></tr>
             <tr><td>Test the deployed app</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:public</code></td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>
           </tbody>
