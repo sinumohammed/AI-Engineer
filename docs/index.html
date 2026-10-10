@@ -834,6 +834,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10b.6</td><td>Deploy on Vercel with an access code</td><td class="res">Through the public URL: 12/12, both modes</td></tr>
                 <tr><td class="n">10b.7</td><td>Fixes found on the live app and the Groq evals</td><td class="res">Two-way fallback, small talk, rework requests, router 24/24 on gpt-oss</td></tr>
                 <tr><td class="n">10b.8</td><td>Search in English for questions in other languages</td><td class="res">Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language</td></tr>
+                <tr><td class="n">10b.9</td><td>New UI with Ant Design X, installable as an app (PWA)</td><td class="res">Phone, tablet and desktop layouts; home-screen icon; opens offline; Chrome: 0 installability errors</td></tr>
               </tbody>
             </table>
           </div>
@@ -856,6 +857,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td>"hi" cost 2,000 tokens</td><td>A greeting went through search, judging and the router</td><td class="res">Small talk recognised in code and answered directly</td></tr>
                 <tr><td>"Tell that in Malayalam"</td><td>Searched as a new question: "I don't have information about that"</td><td class="res">Translate, shorten or simplify requests rework the last answer, no search</td></tr>
                 <tr><td>Broken JSON</td><td>gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply</td><td class="res">Retried, then the existing safe fallback</td></tr>
+                <tr><td>Answers wider than a phone</td><td>One long code line made a whole answer 696 px wide on a 390 px screen</td><td class="res"><code>min-width: 0</code> on the chat bubbles; code scrolls inside its box</td></tr>
                 <tr><td>Other languages</td><td>The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA"</td><td class="res">Translated to English for the search and the judge only; the model answers the original, in the user's language</td></tr>
                 <tr><td>Two-part questions on gpt-oss</td><td>Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to <code>general</code></td><td class="res">Each part searched on its own; a part the documents answer goes to company_docs</td></tr>
               </tbody>
@@ -935,6 +937,7 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td class="n">48</td><td class="n">10.7</td><td>"Tell that in Malayalam" searched as a new question</td><td>Rework the last answer from the conversation</td><td class="res">Malayalam and Hindi work live</td></tr>
             <tr><td class="n">49</td><td class="n">10.7</td><td>Two-part questions: one part sent to <code>general</code> on gpt-oss</td><td>Document check per part, in code</td><td class="res">Routing 22/24 (20b), 21/24 (120b) to 24/24</td></tr>
             <tr><td class="n">50</td><td class="n">10.8</td><td>Questions in other languages missed the English handbook</td><td>Translate for the search only; non-English detected in code</td><td class="res">5/18 to 17/18, off-topic 0/3</td></tr>
+            <tr><td class="n">51</td><td class="n">10.9</td><td>The UI was one fixed card: cramped on a phone, no app icon</td><td>Ant Design X chat components, responsive layout, PWA</td><td class="res">Installable, opens offline, checked at 390, 820 and 1440 px</td></tr>
           </tbody>
         </table>
       </div>

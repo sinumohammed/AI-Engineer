@@ -433,6 +433,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10b.6 | Deploy on Vercel with an access code | Through the public URL: 12/12, both modes |
 | 10b.7 | Fixes found on the live app and the Groq evals | Two-way fallback, small talk, rework requests, router 24/24 on gpt-oss |
 | 10b.8 | Search in English for questions in other languages | Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language |
+| 10b.9 | New UI with Ant Design X, installable as an app (PWA) | Phone, tablet and desktop layouts; home-screen icon; opens offline; Chrome: 0 installability errors |
 
 - **Challenges, in plain terms:**
 
@@ -453,6 +454,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | "hi" cost 2,000 tokens | A greeting went through search, judging and the router | Small talk is recognised in code and answered directly |
 | "Tell that in Malayalam" | Searched as a new question: "I don't have information about that" | Requests to translate, shorten or simplify rework the last answer, no search |
 | Broken JSON | gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply | Retried, then the existing safe fallback |
+| Answers wider than a phone | One long code line made a whole answer 696 px wide on a 390 px screen | `min-width: 0` on the chat bubbles; code scrolls inside its box |
 | Other languages | The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA" | Translated to English for the search and the judge only; the model answers the original, in the user's language |
 | Two-part questions on gpt-oss | Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to `general` | Each part is searched on its own; a part the documents answer goes to company_docs |
 
@@ -532,6 +534,7 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 48 | 10.7 | "Tell that in Malayalam" searched as a new question | Rework the last answer from the conversation | Malayalam and Hindi work live |
 | 49 | 10.7 | Two-part questions: one part sent to `general` on gpt-oss | Document check per part, in code | Routing 22/24 (20b), 21/24 (120b) to 24/24 |
 | 50 | 10.8 | Questions in other languages missed the English handbook | Translate for the search only; non-English detected in code | 5/18 to 17/18 (16/18 on qwen), off-topic 0/3 |
+| 51 | 10.9 | The UI was one fixed card: cramped on a phone, no app icon | Ant Design X chat components, responsive layout, PWA | Installable, opens offline, checked at 390, 820 and 1440 px |
 
 Where things stand (Phase 10 code):
 
