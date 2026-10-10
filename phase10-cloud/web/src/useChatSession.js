@@ -121,7 +121,8 @@ function reducer(state, action) {
       return {
         ...state,
         busy: false,
-        messages: updateLast(state.messages, (m) => ({ ...m, text: m.text || action.message })),
+        // Phase 10 UI: kept apart from the answer text, so it shows as a warning.
+        messages: updateLast(state.messages, (m) => ({ ...m, error: action.message })),
       };
     case "RESET":
       return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId, mode: state.mode, agent: "auto" };
@@ -239,10 +240,17 @@ export function useChatSession() {
       // laptop just woken from sleep could not even look up the hosts for a
       // few minutes), not the server - so say which, when the browser knows.
       const lost = navigator.onLine === false
-        ? "(no internet connection - reconnect and ask again)"
-        : `(connection lost - check your internet connection and ask again; if it keeps happening, the server at ${API_BASE || "this site"} may be down)`;
-      dispatch({ type: "ERROR", message: message ? `(${message})` : lost });
+        ? "No internet connection - reconnect and ask again."
+        : `Connection lost - check your internet connection and ask again. If it keeps happening, the server at ${API_BASE || "this site"} may be down.`;
+      dispatch({ type: "ERROR", message: message ?? lost });
     });
+  }
+
+  // Stop waiting for the current answer. The server finishes on its own and
+  // still saves the turn; the browser just stops listening.
+  function stop() {
+    esRef.current?.close();
+    dispatch({ type: "DONE" });
   }
 
   async function newChat() {
@@ -261,5 +269,5 @@ export function useChatSession() {
     dispatch({ type: "SET_AGENT", agent });
   }
 
-  return { state, ask, newChat, setMode, setAgent, access, submitCode };
+  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode };
 }

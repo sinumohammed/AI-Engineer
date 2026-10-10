@@ -1,30 +1,410 @@
+/* Phase 10 UI. Colours come from the Ant Design theme (Root.jsx) as CSS
+   variables set on .app, so light and dark mode need no rules here. */
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-}
-
+html,
+body,
 #root {
-  min-height: 100svh;
-}
-
-h1, h2, p {
   margin: 0;
+  height: 100%;
 }
 
-@keyframes aiengineer-spin {
-  to {
-    transform: rotate(360deg);
-  }
+body {
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-@keyframes aiengineer-blink {
-  0%, 80%, 100% {
-    opacity: 0.25;
+.small {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.grow {
+  flex: 1;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+/* ---- frame: sidebar + main, full height on every screen ---- */
+.app {
+  display: flex;
+  height: 100vh;
+  height: 100dvh; /* phones: the visible height, without the browser bars */
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: calc(20px + env(safe-area-inset-top)) 18px calc(20px + env(safe-area-inset-bottom));
+  min-height: 100%;
+}
+
+.side section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.side-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.side-foot {
+  margin-top: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand img {
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-name {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.meter-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  z-index: 2;
+}
+
+.topbar-title {
+  font-size: 15px;
+  padding-left: 8px;
+}
+
+/* ---- conversation ---- */
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.thread {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 24px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+/* A flex child defaults to min-width:auto - its widest line (a long code
+   line) - which pushed answers past the edge of a phone screen. */
+.thread > *,
+.ant-bubble,
+.ant-bubble-body,
+.ant-bubble-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 6vh;
+}
+
+.process {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.process .ant-tag {
+  margin: 0;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.route-reason.ant-typography {
+  flex-basis: 100%;
+  margin: 2px 0 0 !important;
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+/* answers: markdown that never pushes the page sideways on a phone */
+.answer {
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  background: transparent !important;
+}
+
+/* code blocks: the x-markdown theme draws the box; this only keeps long
+   lines scrolling inside it instead of wrapping mid-word */
+.answer pre {
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre;
+  overflow-wrap: normal;
+  border-radius: 10px;
+}
+
+.answer pre code {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: 13px;
+  line-height: 1.55;
+  width: max-content;
+  min-width: 100%;
+  padding: 12px 14px !important;
+}
+
+.ctx-tag.ant-tag {
+  margin: 0;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.answer table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.answer > :first-child {
+  margin-top: 0;
+}
+
+.answer > :last-child {
+  margin-bottom: 0;
+}
+
+.answer-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0;
+  width: 100%;
+}
+
+.answer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.usage {
+  font-size: 11.5px;
+}
+
+.slim.ant-alert {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  border-radius: 10px;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.sources-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+  background: var(--fill);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  cursor: default;
+}
+
+.source-n {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- input ---- */
+.composer {
+  padding: 10px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: linear-gradient(to bottom, transparent, var(--bg) 22px);
+}
+
+.composer-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.composer .ant-sender {
+  background: var(--panel);
+  box-shadow: 0 6px 24px rgba(15, 15, 40, 0.08);
+  border-radius: 18px;
+}
+
+.override {
+  padding: 8px 12px 0;
+}
+
+.hint {
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.jump {
+  position: absolute;
+  right: 20px;
+  bottom: 110px;
+  z-index: 3;
+  box-shadow: 0 4px 16px rgba(15, 15, 40, 0.18);
+}
+
+/* ---- access code ---- */
+.access {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+}
+
+.access-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.access-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px;
+}
+
+.access-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- phones ---- */
+@media (max-width: 575px) {
+  .thread {
+    padding: 18px 14px 8px;
+    gap: 22px;
   }
-  40% {
-    opacity: 1;
+
+  .welcome {
+    padding-top: 2vh;
+  }
+
+  .composer {
+    padding-top: 6px;
+  }
+
+  .jump {
+    bottom: 92px;
+    right: 14px;
+  }
+
+  .access-card .ant-card-body {
+    padding: 22px;
   }
 }
