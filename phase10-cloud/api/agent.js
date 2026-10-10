@@ -9,7 +9,7 @@ import { retrieve, standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 import { replyLanguageRule } from "./replyLanguage.js";
-import { attachmentChunk, attachmentNote } from "./attachments.js";
+import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
 // It runs unconditionally on every question (cheap - one embed call + a
@@ -223,7 +223,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
     ...(summary ? [{ role: "system", content: `Summary of earlier conversation (before the recent messages below): ${summary}` }] : []),
     // Only role/content go to the model - stored turns can also carry our
     // own `fromCompanyDocs` tag (see sessionStore.js).
-    ...history.map(({ role, content }) => ({ role, content })),
+    ...hideOtherFileAnswers(history, attachment).map(({ role, content }) => ({ role, content })),
     { role: "user", content: question },
   ];
 

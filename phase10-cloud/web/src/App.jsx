@@ -78,6 +78,7 @@ export default function App({ themeMode, setThemeMode, isDark }) {
   const scrollRef = useRef(null);
   const nearBottom = useRef(true);
   const [showJump, setShowJump] = useState(false);
+  const [reading, setReading] = useState(null); // name of a file being uploaded and read
 
   // Follow the answer as it streams in - unless the user has scrolled up to
   // read something, then leave them there and offer a jump-down button.
@@ -101,6 +102,9 @@ export default function App({ themeMode, setThemeMode, isDark }) {
   function send(text) {
     const q = text.trim();
     if (!q || state.busy) return;
+    // Found by the user: asked while a new file was still being read, the
+    // question went out with the previous file.
+    if (reading) return message.info(`Still reading ${reading} - send your question in a moment.`);
     nearBottom.current = true;
     ask(q);
     setInput("");
@@ -121,7 +125,6 @@ export default function App({ themeMode, setThemeMode, isDark }) {
   });
 
   // Phase 10, attachments: shrink photos, upload, show "Reading..." meanwhile.
-  const [reading, setReading] = useState(null);
   async function pickFile(file) {
     if (file.type !== "application/pdf" && !file.type.startsWith("image/")) return message.warning("Attach a PDF or a photo.");
     setReading(file.name);

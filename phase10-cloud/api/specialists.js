@@ -12,7 +12,7 @@ import { retrieve } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 import { chat, SPECIALIST_MODEL } from "./llm.js";
 import { replyLanguageRule } from "./replyLanguage.js";
-import { attachmentChunk, attachmentNote } from "./attachments.js";
+import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
 
 // Retrieval plus the same relevance decision the single agent uses - since
 // Phase 9.4 the shared retrieve() step, where the model judges which
@@ -224,7 +224,7 @@ export async function runSpecialist(name, question, history = [], summary, userM
   const res = await chat({
     model: SPECIALIST_MODEL,
     label: name,
-    messages: specialistMessages(prep.systemContent, question, historyFor(name, history), summary, userMessage),
+    messages: specialistMessages(prep.systemContent, question, historyFor(name, hideOtherFileAnswers(history, attachment)), summary, userMessage),
   });
   return {
     answer: res.content,

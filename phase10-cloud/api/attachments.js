@@ -175,6 +175,26 @@ export function nameTheFile(question, att) {
   return question.slice(0, match.index) + `the attached file "${att.name}"` + question.slice(match.index + match[0].length);
 }
 
+// Earlier answers about a DIFFERENT file, as the model sees the history.
+// Found by the user: receipt, then a scanned PDF and "explain this document"
+// - the scan reached the model, but two earlier answers describing the
+// receipt were in the history, and qwen repeated them (the Phase 8c history
+// leak again). Like the company answers hidden from specialists there, they
+// are replaced by a note; the user's own questions stay.
+export function hideOtherFileAnswers(history, att) {
+  if (!att) return history;
+  let otherFile = null;
+  return history.map((m) => {
+    if (m.role === "user") {
+      otherFile = m.usedFile && m.usedFile !== att.name ? m.usedFile : null;
+      return m;
+    }
+    return otherFile
+      ? { ...m, content: `[This earlier answer was about a different file, "${otherFile}", which is no longer attached.]` }
+      : m;
+  });
+}
+
 // For the UI and the router: what is attached, without the text.
 export const attachmentSummary = (att) =>
   att ? { name: att.name, kind: att.kind, pages: att.pages, pagesRead: att.pagesRead ?? att.pages, truncated: att.truncated } : null;
