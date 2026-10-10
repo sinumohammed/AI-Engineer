@@ -5,6 +5,8 @@
 // one (supervisor.js) and the LangGraph one (supervisor-graph.js) - so the
 // comparison between them varies the orchestration and nothing else.
 import { specialists, searchDocs } from "./specialists.js";
+import { replyLanguageRule } from "./replyLanguage.js";
+import { sharesWords } from "./attachments.js";
 
 export const AGENT_NAMES = Object.keys(specialists);
 const MAX_TASKS = 3;
@@ -57,7 +59,9 @@ export const ROUTER_PROMPT =
   "Parts come only from the user's message - never from the excerpt or the earlier conversation.\n" +
   "- Then create exactly one task per part. Choose the agent for each part on its own, as if that part had " +
   "been asked alone - two parts of one message often need different agents.\n" +
-  "- Never send the same question to two agents.\n" +
+  "- Never send the same question to two agents - with one exception: when a file is attached and both the " +
+  "file and the company documents may answer the question, send it to attachment and to company_docs, so the " +
+  "user hears what each says.\n" +
   "- How to use git, a programming language or a command-line tool is a coding question, even when the " +
   "company documents mention related words - unless the excerpt directly answers it (see the next rule).\n" +
   "- Each task's question must be self-contained: keep the user's own wording, and only rewrite it when it " +
@@ -67,7 +71,11 @@ export const ROUTER_PROMPT =
   "company_docs even when the wording does not mention the company, and even when general knowledge or coding " +
   "knowledge could also answer it: the company's own documents take priority over a general answer. If the " +
   "excerpt is only loosely related to a part and does not answer it, ignore the excerpt for that part.\n" +
-  "- A question about this company goes to company_docs even when no excerpt answers it.";
+  "- A question about this company goes to company_docs even when no excerpt answers it.\n" +
+  "- You are told whether the user has attached a file to this chat. A question about that file (\"this " +
+  "document\", \"the photo\", \"the receipt\", \"summarise it\", or anything the file is plainly about) goes " +
+  "to attachment. A question that compares the file with the company's rules has two parts: one for " +
+  "attachment, one for company_docs. With no file attached, never choose attachment.";
 
 // Found by the routing eval: "How are rollbacks done?" has no "our" in it, so
 // a router that only reads the wording sent it to `coding` - yet the company
@@ -97,9 +105,14 @@ async function docEvidence(question) {
 // `searchQuestion`: the message with a follow-up's "it"/"that" resolved
 // (retrieve.js, standaloneQuestion) - Phase 10: the evidence for "And who is
 // eligible for it?" has to be searched as "...eligible for FMLA?".
-export async function routerMessages(question, history = [], searchQuestion = question) {
+// `attachment`: the file attached to this chat, if any - the router sees its
+// name and kind, not its text.
+export async function routerMessages(question, history = [], searchQuestion = question, attachment = null) {
   const recent = history.slice(-ROUTER_HISTORY_MESSAGES);
   const evidence = await docEvidence(searchQuestion);
+  const attached = attachment
+    ? `\n\nAttached file: "${attachment.name}" (${attachment.kind === "image" ? "a photo" : `a ${attachment.pages}-page PDF`}).`
+    : "\n\nNo file is attached to this chat.";
   // The user's message is always labelled, so the router can tell it apart
   // from the excerpt below it. Without the label, a one-question message
   // ("How do I set up a CI build with GitHub Actions?") was split in two: the
@@ -107,6 +120,7 @@ export async function routerMessages(question, history = [], searchQuestion = qu
   const userContent =
     (recent.length ? `Earlier conversation:\n${recent.map((m) => `${m.role}: ${m.content}`).join("\n")}\n\n` : "") +
     `User's message: ${question}` +
+    attached +
     evidence.text;
   return {
     messages: [
@@ -145,6 +159,23 @@ export function validateRoute(parsed, question, history = []) {
   return { reason, tasks, fallback, ...(repeatsDropped ? { repeatsDropped } : {}) };
 }
 
+// Phase 10, attachments:
+// - no file attached: the attachment specialist would only say "there is no
+//   file", so its task goes to general instead;
+// - a file attached and a one-part question sent elsewhere, but sharing
+//   words with the file (sharesWords): the file is asked too, and the
+//   synthesizer says which source says what. Decided in code - the router
+//   instruction to ask both was not followed (qwen).
+export function checkAttachmentTasks(decision, attachment) {
+  if (!attachment) {
+    if (!decision.tasks.some((t) => t.agent === "attachment")) return decision;
+    return { ...decision, tasks: decision.tasks.map((t) => (t.agent === "attachment" ? { ...t, agent: "general" } : t)) };
+  }
+  const [only] = decision.tasks;
+  if (decision.tasks.length !== 1 || only.agent === "attachment" || !sharesWords(only.question, attachment)) return decision;
+  return { ...decision, tasks: [{ ...only, agent: "attachment" }, only], attachmentAdded: true };
+}
+
 // Phase 9.6, found by the citation eval: "Who is eligible for FMLA?" and
 // "Should git commits be cryptographically signed?" were sent to `general`
 // and `coding`, which answered from general knowledge - although the
@@ -169,13 +200,14 @@ export async function applyDocPriority(decision, evidence) {
   if (!DOC_PRIORITY) return decision;
   if (decision.tasks.length === 1) {
     const [only] = decision.tasks;
-    if (!evidence?.isRelevant || only.agent === "company_docs") return decision;
+    // A question about the attached file stays with the file, whatever the handbook says.
+    if (!evidence?.isRelevant || only.agent === "company_docs" || only.agent === "attachment") return decision;
     return { ...decision, tasks: [{ ...only, agent: "company_docs" }], overriddenFrom: only.agent };
   }
   const overridden = [];
   const tasks = await Promise.all(
     decision.tasks.map(async (t) => {
-      if (t.agent === "company_docs") return t;
+      if (t.agent === "company_docs" || t.agent === "attachment") return t;
       const { isRelevant } = await searchDocs(t.question);
       if (!isRelevant) return t;
       overridden.push(t.agent);
@@ -194,7 +226,10 @@ export function synthesizerMessages(question, steps) {
         "message in the order they asked it. Use only what the specialists said: do not add, correct or drop " +
         "facts. If a specialist said it does not have the information, say that plainly for that part. Answer " +
         "the user directly, as one assistant: do not mention specialists, agents or that answers were combined. " +
-        "Keep citation markers such as [1] exactly as they appear, next to the facts they belong to.",
+        "Keep citation markers such as [1] exactly as they appear, next to the facts they belong to. If the " +
+        "attachment specialist and company_docs answered the same question, give both answers and say which is " +
+        "from the attached file and which from the company documents." +
+        replyLanguageRule(question),
     },
     {
       role: "user",

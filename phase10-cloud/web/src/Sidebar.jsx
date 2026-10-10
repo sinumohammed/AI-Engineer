@@ -13,7 +13,7 @@ import { usePwaInstall } from "./usePwaInstall.js";
 const { Text } = Typography;
 
 // `synthesizer` is the step that joins several specialists' answers (8b).
-export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", synthesizer: "Combined" };
+export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", attachment: "Attached file", synthesizer: "Combined" };
 
 const LEVEL_COLORS = { warning: "#d97706", critical: "#dc2626" };
 
@@ -57,7 +57,7 @@ export function Brand({ compact = false }) {
   );
 }
 
-export default function Sidebar({ state, newChat, setMode, setAgent, themeMode, setThemeMode, canSpeak, voiceAutoSend, setVoiceAutoSend, voiceLanguage, setVoiceLanguage, onDone }) {
+export default function Sidebar({ state, newChat, setMode, setAgent, themeMode, setThemeMode, canSpeak, voiceAutoSend, setVoiceAutoSend, voiceLanguage, setVoiceLanguage, hasAttachment, onDone }) {
   const pwa = usePwaInstall();
   const close = (fn) => (...args) => {
     fn(...args);
@@ -109,6 +109,7 @@ export default function Sidebar({ state, newChat, setMode, setAgent, themeMode, 
               { value: "company_docs", label: AGENT_LABELS.company_docs },
               { value: "coding", label: AGENT_LABELS.coding },
               { value: "general", label: AGENT_LABELS.general },
+              ...(hasAttachment ? [{ value: "attachment", label: AGENT_LABELS.attachment }] : []),
             ]}
           />
           {state.agent !== "auto" && (

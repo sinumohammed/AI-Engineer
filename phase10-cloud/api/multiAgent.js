@@ -14,7 +14,7 @@ import { NUM_CTX, contextWarning } from "./agent.js";
 export async function runMultiAgent(
   question,
   history = [],
-  { onRoute, onAgentStart, onAgentDone, summary, forceAgent } = {}
+  { onRoute, onAgentStart, onAgentDone, summary, forceAgent, attachment } = {}
 ) {
   const { answer, usage: totals, fromCompanyDocs, sources } = await runSupervisor(question, history, {
     onRoute,
@@ -22,6 +22,7 @@ export async function runMultiAgent(
     onAgentDone,
     summary,
     forceAgent,
+    attachment,
   });
 
   // The UI's token ring means "how full is the context window". With one

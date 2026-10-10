@@ -15,6 +15,8 @@ import Sidebar, { AGENT_LABELS, Brand } from "./Sidebar.jsx";
 import Message from "./Message.jsx";
 import VoiceBar, { MicButton } from "./VoiceBar.jsx";
 import { useVoiceInput, voiceSupported } from "./useVoiceInput.js";
+import { dayLabel, sameDay } from "./time.js";
+import { AttachButton, AttachmentChip, MAX_UPLOAD, prepareFile } from "./Attachment.jsx";
 
 const { Text } = Typography;
 
@@ -65,7 +67,7 @@ function useStoredFlag(key, initial) {
 }
 
 export default function App({ themeMode, setThemeMode, isDark }) {
-  const { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice: voiceOnServer } = useChatSession();
+  const { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice: voiceOnServer, attach, detach } = useChatSession();
   const { message } = AntApp.useApp();
   const screens = Grid.useBreakpoint();
   const wide = Boolean(screens.lg);
@@ -118,6 +120,23 @@ export default function App({ themeMode, setThemeMode, isDark }) {
     language: voiceLanguage,
   });
 
+  // Phase 10, attachments: shrink photos, upload, show "Reading..." meanwhile.
+  const [reading, setReading] = useState(null);
+  async function pickFile(file) {
+    if (file.type !== "application/pdf" && !file.type.startsWith("image/")) return message.warning("Attach a PDF or a photo.");
+    setReading(file.name);
+    try {
+      const ready = await prepareFile(file);
+      if (ready.size > MAX_UPLOAD) throw new Error("That file is too big - attachments can be up to 4 MB.");
+      const att = await attach(ready);
+      message.success(att.kind === "image" ? "Photo attached - ask about it" : `${att.pages}-page PDF attached - ask about it`);
+    } catch (err) {
+      message.warning(err.message === "Failed to fetch" ? "Connection lost - check your internet and try again." : err.message);
+    } finally {
+      setReading(null);
+    }
+  }
+
   // Phase 10 step 6: the hosted API needs an access code before anything else.
   if (access.needed) return <AccessScreen wrong={access.wrong} onSubmit={submitCode} />;
 
@@ -143,6 +162,7 @@ export default function App({ themeMode, setThemeMode, isDark }) {
       setVoiceAutoSend={setVoiceAutoSend}
       voiceLanguage={voiceLanguage}
       setVoiceLanguage={setVoiceLanguage}
+      hasAttachment={Boolean(state.attachment)}
       onDone={() => setDrawerOpen(false)}
     />
   );
@@ -191,9 +211,18 @@ export default function App({ themeMode, setThemeMode, isDark }) {
               </div>
             )}
             {state.loaded && state.messages.length === 0 && <WelcomeScreen onPick={send} compact={compact} mode={state.mode} />}
-            {state.messages.map((m, i) => (
-              <Message key={i} m={m} streaming={state.busy && i === lastIndex} isDark={isDark} compact={compact} />
-            ))}
+            {state.messages.map((m, i) => {
+              // A "Today" / "Yesterday" / "Fri, 8 Oct" divider where the day
+              // changes (only between messages that have a time).
+              const prevAt = state.messages.slice(0, i).reverse().find((p) => p.at)?.at;
+              const newDay = m.role === "user" && m.at && (!prevAt || !sameDay(prevAt, m.at));
+              return (
+                <div key={i} className="msg">
+                  {newDay && <div className="day-divider"><span>{dayLabel(m.at)}</span></div>}
+                  <Message m={m} streaming={state.busy && i === lastIndex} isDark={isDark} compact={compact} />
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -218,16 +247,20 @@ export default function App({ themeMode, setThemeMode, isDark }) {
               styles={{ input: { fontSize: compact ? 16 : 15 } }}
               suffix={(actions) => (
                 <div className="sender-actions">
+                  <AttachButton onPick={pickFile} disabled={Boolean(reading)} />
                   {canSpeak && <MicButton onClick={voice.start} />}
                   {actions}
                 </div>
               )}
               header={
-                overriding && (
+                (overriding || state.attachment || reading) && (
                   <div className="override">
-                    <Tag color="warning" closable onClose={() => setAgent("auto")}>
-                      Asking {AGENT_LABELS[state.agent]} directly
-                    </Tag>
+                    <AttachmentChip attachment={state.attachment} reading={reading} onRemove={detach} />
+                    {overriding && (
+                      <Tag color="warning" closable onClose={() => setAgent("auto")}>
+                        Asking {AGENT_LABELS[state.agent]} directly
+                      </Tag>
+                    )}
                   </div>
                 )
               }

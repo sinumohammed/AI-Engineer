@@ -8,6 +8,8 @@ import { chat } from "./llmClient.js";
 import { retrieve, standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
+import { replyLanguageRule } from "./replyLanguage.js";
+import { attachmentChunk, attachmentNote } from "./attachments.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
 // It runs unconditionally on every question (cheap - one embed call + a
@@ -121,7 +123,8 @@ function extractToolCalls(msg) {
 // a structural, numeric check doesn't have that failure mode. Now
 // config-driven (config.js / RELEVANCE_THRESHOLD env var) too.
 
-export async function runAgent(question, history = [], { onToolCall, onToolResult, summary } = {}) {
+// `attachment`: the file attached to this chat, if any (attachments.js).
+export async function runAgent(question, history = [], { onToolCall, onToolResult, summary, attachment = null } = {}) {
   const startedAt = Date.now();
   const toolCallLog = []; // every tool call this run made, for the trace record below
 
@@ -176,6 +179,11 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   const outcome = identifierMismatch ? "code not found" : isRelevant ? "used" : "not relevant";
   if (!smallTalk) onToolResult?.("search_company_docs", docResults, { outcome, bestDistance });
 
+  // Phase 10, attachments: the attached file is one more numbered excerpt,
+  // after the handbook's, so a fact from it is cited as the file.
+  const fileChunk = attachment ? attachmentChunk(attachment) : null;
+  const citable = [...(isRelevant ? docResults : []), ...(fileChunk ? [fileChunk] : [])];
+
   let systemContent;
   if (identifierMismatch) {
     systemContent =
@@ -189,7 +197,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       "address the question at all, say plainly that you don't know. " +
       CITE_INSTRUCTION +
       "\n\nCompany document excerpts:\n" +
-      numberedExcerpts(docResults);
+      numberedExcerpts(citable);
   } else {
     systemContent =
       "You are a helpful assistant. If the user asks about something they told you earlier in this " +
@@ -198,9 +206,14 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       "shared with you directly. Only for genuinely general questions unrelated to this conversation, " +
       "answer from your own knowledge.";
   }
+  if (fileChunk) {
+    systemContent += attachmentNote(citable.length);
+    // Without relevant handbook excerpts the file is the only numbered one.
+    if (!isRelevant) systemContent += " " + CITE_INSTRUCTION + "\n\nExcerpts:\n" + numberedExcerpts(citable);
+  }
 
   const messages = [
-    { role: "system", content: systemContent },
+    { role: "system", content: systemContent + replyLanguageRule(question) },
     // Turns older than the sliding window (see sessionStore.js) are folded
     // into this short running summary instead of being fully forgotten -
     // the model at least keeps the gist of anything beyond the last 10 turns.
@@ -248,7 +261,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       // the prompt. Stored with the turn so the multi-agent specialists
       // that cannot see documents are not shown it later (Phase 8c).
       // sources (Phase 9.6): the excerpts the answer cited by number.
-      const sources = isRelevant ? citedSources(msg.content, docResults) : [];
+      const sources = citable.length ? citedSources(msg.content, citable) : [];
       return { answer: msg.content, usage, fromCompanyDocs: isRelevant, sources };
     }
 

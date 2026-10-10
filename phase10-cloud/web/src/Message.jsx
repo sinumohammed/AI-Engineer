@@ -10,6 +10,8 @@ import {
   WarningFilled,
 } from "@ant-design/icons";
 import { AGENT_LABELS } from "./Sidebar.jsx";
+import { shortTime, fullTime } from "./time.js";
+import { FileTag } from "./Attachment.jsx";
 
 const { Text, Paragraph } = Typography;
 
@@ -100,6 +102,18 @@ function Usage({ usage }) {
   );
 }
 
+// The time a message was sent, small and faint; the full date on hover or tap.
+function Stamp({ at, align }) {
+  if (!at) return null;
+  return (
+    <Tooltip title={fullTime(at)} trigger={["hover", "click"]}>
+      <time className={`stamp ${align ?? ""}`} dateTime={new Date(at).toISOString()}>
+        {shortTime(at)}
+      </time>
+    </Tooltip>
+  );
+}
+
 export default function Message({ m, streaming, isDark, compact }) {
   const { token } = theme.useToken();
   const { message } = AntApp.useApp();
@@ -111,6 +125,9 @@ export default function Message({ m, streaming, isDark, compact }) {
         shape="corner"
         content={m.text}
         styles={{ content: { background: token.colorPrimary, color: "#fff", whiteSpace: "pre-wrap", maxWidth: compact ? "88vw" : 640 } }}
+        header={m.attachment ? <FileTag name={m.attachment} /> : undefined}
+        footer={<Stamp at={m.at} align="end" />}
+        footerPlacement="outer-end"
       />
     );
   }
@@ -156,6 +173,7 @@ export default function Message({ m, streaming, isDark, compact }) {
               <Alert key={text} type="info" showIcon icon={<MinusCircleOutlined />} title={text} className="slim" />
             ))}
             <div className="answer-actions">
+              <Stamp at={m.at} />
               {m.text && !streaming && (
                 <Tooltip title="Copy answer">
                   <Button type="text" size="small" icon={<CopyOutlined />} onClick={copy} aria-label="Copy answer" />

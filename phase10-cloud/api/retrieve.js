@@ -23,6 +23,7 @@
 import { toolImpls } from "./tools.js";
 import { chat } from "./llmClient.js";
 import { RELEVANCE_THRESHOLD, JUDGE_MODEL, JUDGE_REASONING_EFFORT } from "./config.js";
+import { looksNonEnglish, NON_LATIN_LETTER } from "./replyLanguage.js";
 
 // How many search results the model judges. Phase 10: 10 instead of 12 -
 // every candidate is ~90 tokens of the judging prompt on every question, and
@@ -148,14 +149,9 @@ export function isSmallTalk(message) {
 // the translation; the agent still answers the message as written, so it
 // replies in the user's language.
 // Whether to translate is decided in code, so English questions cost no
-// extra call: a letter outside the Latin script (Malayalam, Hindi, Arabic...),
-// or three or more words with none of these common English words.
+// extra call (looksNonEnglish, replyLanguage.js).
 // TRANSLATE_SEARCH=0 turns it off, to compare.
 const TRANSLATE_SEARCH = process.env.TRANSLATE_SEARCH !== "0";
-const NON_LATIN_LETTER = /(?=\p{L})\P{Script=Latin}/u;
-const ENGLISH_WORDS = new Set(
-  "the is are was do does did what how when where who which why can could should will would must my our your i we you they to of for and with it be have has get there this that".split(" ")
-);
 const TRANSLATE_SCHEMA = {
   type: "object",
   properties: { english: { type: "string" } },
@@ -165,12 +161,6 @@ const TRANSLATE_PROMPT =
   "Translate the user's question into English, for searching English documents. Keep names, acronyms, codes " +
   "and numbers exactly as written. Translate only - do not answer, explain or add anything. If it is already " +
   "English, return it unchanged.";
-
-function looksNonEnglish(text) {
-  if (NON_LATIN_LETTER.test(text)) return true;
-  const words = text.toLowerCase().match(/\p{L}+/gu) ?? [];
-  return words.length >= 3 && !words.some((w) => ENGLISH_WORDS.has(w));
-}
 
 async function englishForSearch(question) {
   if (!TRANSLATE_SEARCH || !looksNonEnglish(question)) return question;

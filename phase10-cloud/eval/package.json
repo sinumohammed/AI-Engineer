@@ -11,6 +11,7 @@
     "eval:public": "node --env-file=../.env public-url.js",
     "eval:citations": "node --env-file=../.env citation-eval.js",
     "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js",
-    "eval:multilingual": "node --env-file=../.env multilingual-eval.js"
+    "eval:multilingual": "node --env-file=../.env multilingual-eval.js",
+    "eval:reply-language": "node --env-file=../.env reply-language-eval.js"
   }
 }

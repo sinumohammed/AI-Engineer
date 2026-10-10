@@ -8,9 +8,10 @@ import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
 import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
+import { readAttachment, attachmentSummary, AttachmentError } from "./attachments.js";
 import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
-import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED } from "./sessionStore.js";
+import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED, saveAttachment, getAttachment, removeAttachment } from "./sessionStore.js";
 
 const app = express();
 app.use(cors(ALLOWED_ORIGIN ? { origin: ALLOWED_ORIGIN } : undefined));
@@ -51,13 +52,14 @@ function memoryInfo(history, summary) {
 // even though Redis still has the real conversation.
 app.get("/api/chat/session/:sessionId", async (req, res) => {
   const sessionId = req.params.sessionId;
-  const [history, usage, summary] = await Promise.all([getHistory(sessionId), getUsage(sessionId), getSummary(sessionId)]);
-  res.json({ history, usage, summary, memory: memoryInfo(history, summary) });
+  const [history, usage, summary, attachment] = await Promise.all([getHistory(sessionId), getUsage(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
+  res.json({ history, usage, summary, memory: memoryInfo(history, summary), attachment: attachmentSummary(attachment) });
 });
 
 app.get("/api/chat/stream", async (req, res) => {
   const question = req.query.q;
   const sessionId = req.query.sessionId;
+  const askedAt = new Date().toISOString();
   if (!question || !sessionId) {
     res.status(400).json({ error: "Missing ?q= or ?sessionId= query param" });
     return;
@@ -82,7 +84,7 @@ app.get("/api/chat/stream", async (req, res) => {
   const mode = req.query.mode === "multi" ? "multi" : "single";
 
   try {
-    const [history, summary] = await Promise.all([getHistory(sessionId), getSummary(sessionId)]);
+    const [history, summary, attachment] = await Promise.all([getHistory(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
     // Sessions, memory, summaries and the answer/usage/memory events below
     // are identical for both modes - only the progress events differ: the
     // single agent reports tool calls, the supervisor reports its routing
@@ -99,6 +101,7 @@ app.get("/api/chat/stream", async (req, res) => {
             // Manual override: `?agent=coding` skips the router. Absent or
             // unrecognized means the router decides (validated in supervisor.js).
             forceAgent: req.query.agent,
+            attachment,
           })
         : runAgent(question, history, {
             onToolCall: (name, args) => send("tool_call", { name, args }),
@@ -106,12 +109,13 @@ app.get("/api/chat/stream", async (req, res) => {
             // "code not found" - what the search led to, shown on the chip.
             onToolResult: (name, result, { outcome } = {}) => send("tool_result", { name, result, outcome }),
             summary,
+            attachment,
           })
     );
     const { answer, usage, fromCompanyDocs, sources = [] } = result;
     for (const text of notices) send("notice", { text });
 
-    await appendTurn(sessionId, question, answer, { fromCompanyDocs });
+    await appendTurn(sessionId, question, answer, { fromCompanyDocs, askedAt, answeredAt: new Date().toISOString(), attachmentName: attachment?.name });
     await saveUsage(sessionId, usage);
 
     const words = answer.split(" ");
@@ -150,9 +154,37 @@ app.post("/api/transcribe", express.raw({ type: () => true, limit: "4mb" }), asy
     res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });
   }
 });
-// A recording over the limit: express.raw throws before the handler runs.
+// Phase 10, attachments step 1: attach a PDF or a photo to a chat. The file
+// is read into text right away (attachments.js) and kept with the chat in
+// Redis - the text, not the file. One file per chat; a new one replaces it.
+// The web app shrinks photos before upload, so 4 MB is plenty.
+app.post("/api/attachments", express.raw({ type: () => true, limit: "4mb" }), async (req, res) => {
+  const sessionId = req.query.sessionId;
+  if (!sessionId) return res.status(400).json({ error: "Missing ?sessionId=" });
+  try {
+    const name = decodeURIComponent(req.get("x-file-name") ?? "");
+    const att = await readAttachment(req.body, req.get("content-type"), name);
+    if (!(await saveAttachment(sessionId, { ...att, at: new Date().toISOString() }))) {
+      return res.status(503).json({ error: "Could not save the file with this chat - please try again." });
+    }
+    res.json(attachmentSummary(att));
+  } catch (err) {
+    if (!(err instanceof AttachmentError)) console.error("[attachments]", err);
+    res.status(err.status ?? 500).json({ error: err instanceof AttachmentError ? err.message : "Could not read that file." });
+  }
+});
+
+app.delete("/api/attachments", async (req, res) => {
+  if (req.query.sessionId) await removeAttachment(req.query.sessionId);
+  res.json({ ok: true });
+});
+
+// A recording or file over the limit: express.raw throws before the handler runs.
 app.use((err, req, res, next) => {
-  if (err?.type === "entity.too.large") return res.status(413).json({ error: "That recording is too long - keep it under 2 minutes." });
+  if (err?.type === "entity.too.large") {
+    const error = req.path.startsWith("/api/attachments") ? "That file is too big - attachments can be up to 4 MB." : "That recording is too long - keep it under 2 minutes.";
+    return res.status(413).json({ error });
+  }
   next(err);
 });
 

@@ -36,6 +36,9 @@ function historyToMessages(history, lastUsage) {
   const messages = history.map((turn) => ({
     role: turn.role,
     text: turn.content,
+    // Phase 10 UI: when it was sent (stored from now on; older turns have none)
+    at: turn.at ? Date.parse(turn.at) : null,
+    attachment: turn.attachment ?? null, // the file name, if asked with one
     tools: [],
     agents: [],
     route: null,
@@ -49,15 +52,18 @@ function historyToMessages(history, lastUsage) {
 function reducer(state, action) {
   switch (action.type) {
     case "LOAD":
-      return { ...state, messages: action.messages, usage: action.usage, memory: action.memory ?? state.memory, loaded: true };
+      return { ...state, messages: action.messages, usage: action.usage, memory: action.memory ?? state.memory, attachment: action.attachment ?? null, loaded: true };
+    // Phase 10, attachments: the file attached to this chat ({ name, kind, pages, ... })
+    case "ATTACHMENT":
+      return { ...state, attachment: action.attachment };
     case "ASK_START":
       return {
         ...state,
         busy: true,
         messages: [
           ...state.messages,
-          { role: "user", text: action.question },
-          { role: "assistant", text: "", tools: [], agents: [], route: null, usage: null },
+          { role: "user", text: action.question, at: Date.now(), attachment: state.attachment?.name ?? null },
+          { role: "assistant", text: "", tools: [], agents: [], route: null, usage: null, at: null },
         ],
       };
     case "TOOL_CALL":
@@ -116,16 +122,17 @@ function reducer(state, action) {
     case "MEMORY":
       return { ...state, memory: action.memory };
     case "DONE":
-      return { ...state, busy: false };
+      // The answer's time is when it finished arriving.
+      return { ...state, busy: false, messages: updateLast(state.messages, (m) => (m.role === "assistant" && !m.at ? { ...m, at: Date.now() } : m)) };
     case "ERROR":
       return {
         ...state,
         busy: false,
         // Phase 10 UI: kept apart from the answer text, so it shows as a warning.
-        messages: updateLast(state.messages, (m) => ({ ...m, error: action.message })),
+        messages: updateLast(state.messages, (m) => ({ ...m, error: action.message, at: m.at ?? Date.now() })),
       };
     case "RESET":
-      return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId, mode: state.mode, agent: "auto" };
+      return { messages: [], usage: null, memory: null, busy: false, loaded: true, sessionId: action.sessionId, mode: state.mode, agent: "auto", attachment: null };
     default:
       return state;
   }
@@ -153,6 +160,7 @@ export function useChatSession() {
     // across refreshes or new chats - a forgotten override would keep
     // sending later questions to the wrong specialist.
     agent: "auto",
+    attachment: null,
   });
   const esRef = useRef(null);
   // { needed, wrong }: whether to show the access-code form, and whether the
@@ -164,7 +172,7 @@ export function useChatSession() {
   function loadSession() {
     fetch(`${API_BASE}/api/chat/session/${state.sessionId}`, { headers: codeHeaders() })
       .then((r) => r.json())
-      .then(({ history, usage, memory }) => dispatch({ type: "LOAD", messages: historyToMessages(history, usage), usage, memory }))
+      .then(({ history, usage, memory, attachment }) => dispatch({ type: "LOAD", messages: historyToMessages(history, usage), usage, memory, attachment }))
       .catch(() => dispatch({ type: "LOAD", messages: [], usage: null }));
   }
 
@@ -249,6 +257,25 @@ export function useChatSession() {
     });
   }
 
+  // Phase 10, attachments: send a PDF or photo; the server reads it into text
+  // and keeps it with this chat. Throws with the server's message on failure.
+  async function attach(file) {
+    const res = await fetch(`${API_BASE}/api/attachments?sessionId=${state.sessionId}`, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name), ...codeHeaders() },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Could not attach the file (${res.status}).`);
+    dispatch({ type: "ATTACHMENT", attachment: data });
+    return data;
+  }
+
+  async function detach() {
+    dispatch({ type: "ATTACHMENT", attachment: null });
+    await fetch(`${API_BASE}/api/attachments?sessionId=${state.sessionId}`, { method: "DELETE", headers: codeHeaders() }).catch(() => {});
+  }
+
   // Stop waiting for the current answer. The server finishes on its own and
   // still saves the turn; the browser just stops listening.
   function stop() {
@@ -272,5 +299,5 @@ export function useChatSession() {
     dispatch({ type: "SET_AGENT", agent });
   }
 
-  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice };
+  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice, attach, detach };
 }

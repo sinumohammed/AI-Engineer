@@ -3,7 +3,7 @@
 // other agents.
 //
 // A specialist is split into two steps so both supervisors can share it:
-//   prepare(question) -> { systemContent, meta }   what to tell the model
+//   prepare(question, { attachment }) -> { systemContent, meta }   what to tell the model
 //                     or { answer, meta }           an answer decided in code
 //   runSpecialist()   -> prepare + the hand-rolled model call (llm.js)
 // The LangGraph supervisor calls prepare() and makes the model call itself
@@ -11,6 +11,8 @@
 import { retrieve } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 import { chat, SPECIALIST_MODEL } from "./llm.js";
+import { replyLanguageRule } from "./replyLanguage.js";
+import { attachmentChunk, attachmentNote } from "./attachments.js";
 
 // Retrieval plus the same relevance decision the single agent uses - since
 // Phase 9.4 the shared retrieve() step, where the model judges which
@@ -147,6 +149,33 @@ export const specialists = {
       meta: {},
     }),
   },
+  // Phase 10, attachments step 1: questions about the file attached to this
+  // chat. Its text was read once at upload (attachments.js). With no file
+  // attached the router never picks it; if it is picked anyway, the answer
+  // says so, in code, with no model call.
+  attachment: {
+    description:
+      "Questions about the file the user attached to this chat (a PDF or a photo): what it says, summaries, " +
+      "totals, dates or other facts in it. Only when a file is attached.",
+    prepare: async (question, { attachment } = {}) => {
+      if (!attachment) {
+        return { answer: "There is no file attached to this chat. Use the paperclip next to the message box to attach a PDF or a photo.", meta: {} };
+      }
+      const chunk = attachmentChunk(attachment);
+      return {
+        systemContent:
+          "You are a helpful assistant answering questions about a file the user attached. Answer from the file only. " +
+          "You have no access to this company's internal documents - if the question needs them, say so. " +
+          CITE_INSTRUCTION +
+          attachmentNote(1) +
+          "\n\nExcerpts:\n" +
+          numberedExcerpts([chunk]),
+        meta: { attachment: attachment.name },
+        chunks: [chunk],
+      };
+    },
+    seesCompanyAnswers: false,
+  },
 };
 
 // The conversation history as a given specialist is allowed to see it.
@@ -171,9 +200,11 @@ export function historyFor(name, history) {
 // running summary of turns older than the stored window (if the chat UI
 // passed one - same wording as phase6-ui/server/agent.js), the conversation
 // so far, then the task.
-export function specialistMessages(systemContent, question, history, summary) {
+// `userMessage`: what the user actually wrote - the reply's language follows
+// it, even when `question` is the router's rewording of one part of it.
+export function specialistMessages(systemContent, question, history, summary, userMessage = question) {
   return [
-    { role: "system", content: systemContent },
+    { role: "system", content: systemContent + replyLanguageRule(userMessage) },
     ...(summary
       ? [{ role: "system", content: `Summary of earlier conversation (before the recent messages below): ${summary}` }]
       : []),
@@ -184,15 +215,16 @@ export function specialistMessages(systemContent, question, history, summary) {
 
 // Every specialist returns the same shape, so the supervisor can dispatch to
 // any of them without special cases.
-export async function runSpecialist(name, question, history = [], summary) {
-  const prep = await specialists[name].prepare(question);
+// `attachment`: the file attached to this chat, if any (attachments.js).
+export async function runSpecialist(name, question, history = [], summary, userMessage = question, attachment = null) {
+  const prep = await specialists[name].prepare(question, { attachment });
   if (prep.answer !== undefined) {
     return { answer: prep.answer, llmCalls: 0, promptTokens: 0, completionTokens: 0, meta: prep.meta, sources: [] };
   }
   const res = await chat({
     model: SPECIALIST_MODEL,
     label: name,
-    messages: specialistMessages(prep.systemContent, question, historyFor(name, history), summary),
+    messages: specialistMessages(prep.systemContent, question, historyFor(name, history), summary, userMessage),
   });
   return {
     answer: res.content,

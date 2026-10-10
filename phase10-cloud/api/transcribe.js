@@ -20,9 +20,9 @@
 // So Gemini Flash Lite writes the text, with the language the user picked as
 // a hint, and Whisper takes over if Gemini fails or is out of quota.
 import { TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
+import { geminiText } from "./gemini.js";
 
 const WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
-const GEMINI_URL = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 // Whisper wants a file name whose extension matches the audio format.
 const EXTENSIONS = { "audio/webm": "webm", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/ogg": "ogg", "audio/wav": "wav", "audio/mpeg": "mp3" };
 // Whisper writes a polite sentence ("Thank you.") for silence; segments it
@@ -49,20 +49,10 @@ async function withGemini(audio, type, language) {
     (language ? `The speaker is speaking ${language}, possibly mixing in English words. ` : "") +
     "Transcribe this recording of a spoken question exactly as said, in the language spoken, written in that " +
     "language's own script. Output only the transcript, nothing else. If there is no speech, output nothing.";
-  const res = await fetch(GEMINI_URL(GEMINI_TRANSCRIBE_MODEL), {
-    method: "POST",
-    headers: { "x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: type, data: Buffer.from(audio).toString("base64") } }] }],
-      generationConfig: { temperature: 0 },
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new TranscribeError(`Gemini ${res.status}: ${detail.slice(0, 200)}`, res.status);
-  }
-  const data = await res.json();
-  const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+  const text = await geminiText(GEMINI_TRANSCRIBE_MODEL, [
+    { text: prompt },
+    { inlineData: { mimeType: type, data: Buffer.from(audio).toString("base64") } },
+  ]);
   return { text: text.replace(/^["“]|["”]$/g, ""), language: language ?? null, by: GEMINI_TRANSCRIBE_MODEL };
 }
 

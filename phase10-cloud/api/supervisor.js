@@ -17,9 +17,9 @@ import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
 import { standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
-import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, synthesizerMessages } from "./routing.js";
+import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, checkAttachmentTasks, synthesizerMessages } from "./routing.js";
 
-export async function route(question, history = []) {
+export async function route(question, history = [], attachment = null) {
   const startedAt = Date.now();
   // Phase 10: small talk goes straight to `general` - no evidence search, no
   // judge, no router call (retrieve.js, isSmallTalk).
@@ -35,7 +35,7 @@ export async function route(question, history = []) {
     };
   }
   const searchQuestion = await standaloneQuestion(question, history);
-  const { messages, evidence } = await routerMessages(question, history, searchQuestion);
+  const { messages, evidence } = await routerMessages(question, history, searchQuestion, attachment);
   const res = await chat({ model: ROUTER_MODEL, label: "router", format: ROUTE_SCHEMA, messages });
 
   let parsed = null;
@@ -48,7 +48,7 @@ export async function route(question, history = []) {
   // Phase 10: a task that is the user's follow-up word for word ("And who is
   // eligible for it?") gets the resolved wording, so the specialist's own
   // document search can find what "it" is.
-  const decision = await applyDocPriority(validateRoute(parsed, question, history), evidence);
+  const decision = checkAttachmentTasks(await applyDocPriority(validateRoute(parsed, question, history), evidence), attachment);
   if (searchQuestion !== question) {
     decision.tasks = decision.tasks.map((t) => (t.question.trim() === question.trim() ? { ...t, question: searchQuestion } : t));
   }
@@ -78,7 +78,7 @@ export async function route(question, history = []) {
 export async function runAgent(
   question,
   history = [],
-  { onRoute, onAgentStart, onAgentDone, summary, forceAgent } = {}
+  { onRoute, onAgentStart, onAgentDone, summary, forceAgent, attachment = null } = {}
 ) {
   const startedAt = Date.now();
   // Totals across every model call, plus the largest single call: with
@@ -115,7 +115,7 @@ export async function runAgent(
   if (manual) {
     routing = { reason: "", tasks: [{ agent: forceAgent, question }], fallback: false, evidence: null, latencyMs: 0 };
   } else {
-    routing = await route(question, history);
+    routing = await route(question, history, attachment);
     count(routing);
   }
   onRoute?.({ reason: routing.reason, tasks: routing.tasks, fallback: routing.fallback, manual });
@@ -124,7 +124,7 @@ export async function runAgent(
     routing.tasks.map(async (task, index) => {
       const stepStartedAt = Date.now();
       onAgentStart?.({ index, agent: task.agent, question: task.question });
-      const result = await runSpecialist(task.agent, task.question, history, summary);
+      const result = await runSpecialist(task.agent, task.question, history, summary, question, attachment);
       count(result, result.llmCalls);
       const latencyMs = Date.now() - stepStartedAt;
       onAgentDone?.({ index, agent: task.agent, latencyMs });

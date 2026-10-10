@@ -36,6 +36,12 @@ function summaryKey(sessionId) {
   return `session:${sessionId}:summary`;
 }
 
+// Phase 10: the file attached to this chat (attachments.js) - its text, not
+// the file itself. Lives exactly as long as the conversation.
+function attachmentKey(sessionId) {
+  return `session:${sessionId}:attachment`;
+}
+
 // Every exported function degrades gracefully instead of throwing up to the
 // request handler: if Redis is temporarily unreachable, the CHAT still
 // works (just without memory for that turn) rather than failing the whole
@@ -65,12 +71,16 @@ export async function getSummary(sessionId) {
 // documents. The multi-agent specialists without document access are not
 // shown such answers later (phase8b-multi-agent/specialists.js, historyFor) -
 // otherwise they repeat company facts second-hand from the chat history.
-export async function appendTurn(sessionId, userMsg, assistantMsg, { fromCompanyDocs = false } = {}) {
+// Phase 10 UI: `at` (ISO time) on each message, for the timestamps in the
+// chat. Like `fromCompanyDocs`, it never reaches a model: every path that
+// sends history to one keeps only role and content.
+export async function appendTurn(sessionId, userMsg, assistantMsg, { fromCompanyDocs = false, askedAt, answeredAt, attachmentName } = {}) {
   try {
     const history = await getHistory(sessionId);
     history.push(
-      { role: "user", content: userMsg },
-      { role: "assistant", content: assistantMsg, ...(fromCompanyDocs ? { fromCompanyDocs: true } : {}) }
+      // `attachment`: the name of the file the question was asked with, for the UI.
+      { role: "user", content: userMsg, ...(askedAt ? { at: askedAt } : {}), ...(attachmentName ? { attachment: attachmentName } : {}) },
+      { role: "assistant", content: assistantMsg, ...(fromCompanyDocs ? { fromCompanyDocs: true } : {}), ...(answeredAt ? { at: answeredAt } : {}) }
     );
 
     const maxMessages = MAX_TURNS_STORED * 2;
@@ -86,6 +96,8 @@ export async function appendTurn(sessionId, userMsg, assistantMsg, { fromCompany
 
     const trimmed = history.slice(-maxMessages);
     await client.set(key(sessionId), JSON.stringify(trimmed), { EX: SESSION_TTL_SECONDS });
+    // The attachment stays as long as the conversation it belongs to.
+    await client.expire(attachmentKey(sessionId), SESSION_TTL_SECONDS);
   } catch (err) {
     console.error(`[sessionStore] appendTurn failed, this turn won't be remembered: ${err.message}`);
   }
@@ -114,7 +126,36 @@ export async function clearSession(sessionId) {
     await client.del(key(sessionId));
     await client.del(usageKey(sessionId));
     await client.del(summaryKey(sessionId));
+    await client.del(attachmentKey(sessionId));
   } catch (err) {
     console.error(`[sessionStore] clearSession failed: ${err.message}`);
+  }
+}
+
+export async function saveAttachment(sessionId, attachment) {
+  try {
+    await client.set(attachmentKey(sessionId), JSON.stringify(attachment), { EX: SESSION_TTL_SECONDS });
+    return true;
+  } catch (err) {
+    console.error(`[sessionStore] saveAttachment failed: ${err.message}`);
+    return false;
+  }
+}
+
+export async function getAttachment(sessionId) {
+  try {
+    const raw = await client.get(attachmentKey(sessionId));
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    console.error(`[sessionStore] getAttachment failed: ${err.message}`);
+    return null;
+  }
+}
+
+export async function removeAttachment(sessionId) {
+  try {
+    await client.del(attachmentKey(sessionId));
+  } catch (err) {
+    console.error(`[sessionStore] removeAttachment failed: ${err.message}`);
   }
 }
