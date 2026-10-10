@@ -40,10 +40,15 @@ async function runGroup(name, cases) {
   console.log(`  => answered from docs ${cited}/${n}   cites the answer ${correct}/${n}   answers with stray numbers ${stray}/${n}`);
 }
 
+// Phase 10: GROUPS=paraphrased,original runs only those groups - to finish a
+// run on Groq that stopped at the daily limit without repeating the rest.
+const GROUPS = process.env.GROUPS?.split(",").map((g) => g.trim());
+const wanted = (key) => !GROUPS || GROUPS.includes(key);
+
 console.log(`Citation eval - ${MULTI ? "multi-agent supervisor" : "single agent"}`);
-await runGroup("Direct wording", direct);
-await runGroup("Paraphrased", paraphrased);
-await runGroup("Original sample docs", original);
+if (wanted("direct")) await runGroup("Direct wording", direct);
+if (wanted("paraphrased")) await runGroup("Paraphrased", paraphrased);
+if (wanted("original")) await runGroup("Original sample docs", original);
 // Phase 10: private documents are only in tables embedded by local Ollama.
 if (EMBED_PROVIDER !== "gemini" && DATABASE_IS_LOCAL && existsSync(PRIVATE_CASES)) await runGroup("Private docs (not in git)", JSON.parse(readFileSync(PRIVATE_CASES, "utf-8")));
 process.exit(0);

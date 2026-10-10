@@ -152,18 +152,37 @@ export function validateRoute(parsed, question, history = []) {
 // router was shown that excerpt. A stronger instruction ("the company's own
 // documents take priority") changed none of the three decisions.
 // So it is decided in code: for a one-part message, if the retrieval step
-// judged the documents as answering it, company_docs answers it. Messages
-// with several parts keep the router's split (the evidence was retrieved for
-// the whole message, so it cannot say which part it answers).
+// judged the documents as answering it, company_docs answers it.
+//
+// Phase 10, found by the router comparison on Groq: messages with several
+// parts need the same rule, part by part. "How are rollbacks done, and how do
+// I list git tags?" was split correctly by both gpt-oss models, but the
+// rollback part went to `general` - the evidence was retrieved for the whole
+// message, so it could not show the router which part the handbook answers
+// (20b 22/24, 120b 21/24, qwen 24/24 locally). So each part the router did not
+// send to company_docs is searched on its own, and goes to company_docs if
+// the documents answer it. searchDocs caches, so the specialist reuses it.
 // DOC_PRIORITY=0 turns this off, to compare.
 const DOC_PRIORITY = process.env.DOC_PRIORITY !== "0";
 
-export function applyDocPriority(decision, evidence) {
-  const [only] = decision.tasks;
-  if (!DOC_PRIORITY || decision.tasks.length !== 1 || !evidence?.isRelevant || only.agent === "company_docs") {
-    return decision;
+export async function applyDocPriority(decision, evidence) {
+  if (!DOC_PRIORITY) return decision;
+  if (decision.tasks.length === 1) {
+    const [only] = decision.tasks;
+    if (!evidence?.isRelevant || only.agent === "company_docs") return decision;
+    return { ...decision, tasks: [{ ...only, agent: "company_docs" }], overriddenFrom: only.agent };
   }
-  return { ...decision, tasks: [{ ...only, agent: "company_docs" }], overriddenFrom: only.agent };
+  const overridden = [];
+  const tasks = await Promise.all(
+    decision.tasks.map(async (t) => {
+      if (t.agent === "company_docs") return t;
+      const { isRelevant } = await searchDocs(t.question);
+      if (!isRelevant) return t;
+      overridden.push(t.agent);
+      return { ...t, agent: "company_docs" };
+    })
+  );
+  return overridden.length ? { ...decision, tasks, overriddenFrom: overridden.join(", ") } : decision;
 }
 
 export function synthesizerMessages(question, steps) {

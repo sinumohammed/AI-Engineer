@@ -75,6 +75,8 @@ const routingCases = [
   },
 ];
 
+// Phase 10: gpt-oss writes "10 a.m." and "don't have any information" -
+// correct answers, new wording (the same phrasings single-agent-eval.js accepts).
 const endToEndCases = [
   {
     question: "What is our rollback process, and how do I list all git tags from the command line?",
@@ -82,7 +84,7 @@ const endToEndCases = [
   },
   {
     question: "What is the capital of France, and when does our on-call rotation hand off?",
-    mustContain: ["paris", "monday", ["10am", "10 am", "10:00 am"]],
+    mustContain: ["paris", "monday", ["10am", "10 am", "10:00 am", "10 a.m."]],
   },
   {
     question: "What is the calibration schedule for XJ-9999, and who wrote Pride and Prejudice?",
@@ -93,6 +95,8 @@ const endToEndCases = [
         "do not have information",
         "don't have that information",
         "do not have that information",
+        "don't have any information",
+        "do not have any information",
         "don't know",
         "do not know",
       ],
@@ -111,23 +115,27 @@ let failed = 0;
 // own tokens are totalled - to compare router models without spending a
 // day's free quota on the rest.
 const ROUTING_ONLY = process.env.ROUTING_ONLY === "1";
+// SKIP_ROUTING=1 is the other half: the sections after routing only.
+const SKIP_ROUTING = process.env.SKIP_ROUTING === "1";
 const routerTokens = [];
 
-console.log(`Routing: ${routingCases.length} cases\n`);
-let routingPassed = 0;
-for (const c of routingCases) {
-  const r = await route(c.question);
-  routerTokens.push(r.promptTokens + r.completionTokens);
-  const got = r.tasks.map((t) => t.agent);
-  const ok = sameAgents(got, c.expect);
-  if (ok) routingPassed++;
-  else failed++;
-  console.log(`${ok ? "✅ PASS" : "❌ FAIL"}  (${r.latencyMs}ms)  ${c.question}${c.note ? `  [${c.note}]` : ""}`);
-  console.log(`   -> ${got.join(" + ")}${r.fallback ? " (fallback)" : ""}${ok ? "" : `   expected: ${c.expect.join(" + ")}`}`);
-  if (!ok) console.log(`   reason: ${r.reason}`);
+if (!SKIP_ROUTING) {
+  console.log(`Routing: ${routingCases.length} cases\n`);
+  let routingPassed = 0;
+  for (const c of routingCases) {
+    const r = await route(c.question);
+    routerTokens.push(r.promptTokens + r.completionTokens);
+    const got = r.tasks.map((t) => t.agent);
+    const ok = sameAgents(got, c.expect);
+    if (ok) routingPassed++;
+    else failed++;
+    console.log(`${ok ? "✅ PASS" : "❌ FAIL"}  (${r.latencyMs}ms)  ${c.question}${c.note ? `  [${c.note}]` : ""}`);
+    console.log(`   -> ${got.join(" + ")}${r.fallback ? " (fallback)" : ""}${ok ? "" : `   expected: ${c.expect.join(" + ")}`}`);
+    if (!ok) console.log(`   reason: ${r.reason}`);
+  }
+  console.log(`\nRouting: ${routingPassed}/${routingCases.length} passed.\n`);
+  console.log(`Router tokens per question: ${Math.round(routerTokens.reduce((a, b) => a + b, 0) / routerTokens.length)}\n`);
 }
-console.log(`\nRouting: ${routingPassed}/${routingCases.length} passed.\n`);
-console.log(`Router tokens per question: ${Math.round(routerTokens.reduce((a, b) => a + b, 0) / routerTokens.length)}\n`);
 if (ROUTING_ONLY) process.exit(failed ? 1 : 0);
 
 console.log(`End to end (two specialists): ${endToEndCases.length} cases\n`);
