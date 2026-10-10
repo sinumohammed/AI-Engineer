@@ -411,10 +411,13 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   ```
   browser ──(access code)──> API function (Frankfurt)
      │
+  0. "hi"/"thanks" -> answered directly, no search      (small talk, decided in code)
+     "translate that"/"make it shorter" -> reworks the last answer, no search
   1. a follow-up ("who is eligible for it?") gets "it" replaced:  "...for FMLA?"
   2. embed the question inside the function, search Neon ──> 10 candidates
   3. gpt-oss-20b judges which candidates answer it ──> best 4, numbered
-  4. gpt-oss-120b answers and cites [n]   (if its daily limit is used up: 20b answers, with a note)
+  4. gpt-oss-120b answers and cites [n]
+     (20b and 120b stand in for each other when one's daily limit is used up, with a note)
   5. the turn is saved in Upstash
   ```
 - **What changed, each step measured:**
@@ -427,6 +430,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10a.4 | Embeddings without Ollama | Gemini's free tier was too small; the nomic model inside Node gave the same search results |
 | 10a.5 | Neon, Upstash, Groq together | Follow-ups fixed, model split, judging 30% cheaper, fallback when a daily limit runs out |
 | 10b.6 | Deploy on Vercel with an access code | Through the public URL: 12/12, both modes |
+| 10b.7 | Fixes found on the live app and the Groq evals | Two-way fallback, small talk, rework requests, router 24/24 on gpt-oss |
 
 - **Challenges, in plain terms:**
 
@@ -443,6 +447,11 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | Silent failures | A wrong database password looked like "no relevant documents"; a database restart crashed the server | Errors logged; a connection pool that recovers |
 | Deploying | The first Vercel deploy built nothing (framework "Other"): every page was a 404 | The framework is set in `vercel.json` |
 | A public app | Anyone with the URL could spend the free quota | An access code on every request |
+| One-way fallback | With 20b's daily limit used up, every question failed at the judging step: the fallback only covered 120b | Each model stands in for the other |
+| "hi" cost 2,000 tokens | A greeting went through search, judging and the router | Small talk is recognised in code and answered directly |
+| "Tell that in Malayalam" | Searched as a new question: "I don't have information about that" | Requests to translate, shorten or simplify rework the last answer, no search |
+| Broken JSON | gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply | Retried, then the existing safe fallback |
+| Two-part questions on gpt-oss | Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to `general` | Each part is searched on its own; a part the documents answer goes to company_docs |
 
 - **Learned:**
   - "Change the URL" was never the whole job: each new provider brought its own format, characters,
@@ -454,6 +463,10 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
     model (name the thing) plus code (substitute it) worked on both models.
   - Make silent failures loud: a wrong password, mixed embedding models, a dropped connection all
     looked like normal behaviour until checks were added.
+  - Real use finds what evals miss: "tell that in Malayalam" and "hi" were never in a test; both came
+    from using the live app, and both are tests now.
+  - A fallback must cover every model call, not only the answer: the judging step had no fallback,
+    so one used-up limit stopped every question.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app.
@@ -510,6 +523,11 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 42 | 10.5 | A used-up daily limit showed as "connection error" | Fallback model, clear "try again in N minutes" | Tested on a mock and on Groq |
 | 43 | 10.6 | The first deploy built nothing | Framework set in `vercel.json` | Live |
 | 44 | 10.6 | A public app spends the free quota | Access code, allowed origin | No code: refused |
+| 45 | 10.7 | gpt-oss-20b broke the router's JSON format; Groq returned an error | Retry, then the safe fallback | No crash |
+| 46 | 10.7 | 20b's daily limit used up: every question failed | Two-way fallback (20b and 120b) | Answers keep coming, with a note |
+| 47 | 10.7 | "hi" spent 1,000-2,000 tokens | Small talk answered without search | 0 extra tokens |
+| 48 | 10.7 | "Tell that in Malayalam" searched as a new question | Rework the last answer from the conversation | Malayalam and Hindi work live |
+| 49 | 10.7 | Two-part questions: one part sent to `general` on gpt-oss | Document check per part, in code | Routing 22/24 (20b), 21/24 (120b) to 24/24 |
 
 Where things stand (Phase 10 code):
 
@@ -517,12 +535,12 @@ Where things stand (Phase 10 code):
 |---|---|---|
 | Single agent, 8 cases (a follow-up added in Phase 10) | 8/8 | 8/8 |
 | LangChain Version A and B, 7 cases (Phase 8a) | 7/7 each | - |
-| Supervisor routing, 24 cases | 24/24 (hand-written and LangGraph) | not run yet (daily limit) |
-| Supervisor two-part answers / history leak cases | 3/3, 4/4 | not run yet |
+| Supervisor routing, 24 cases | 24/24 (hand-written and LangGraph) | 24/24 (router on gpt-oss-20b or 120b) |
+| Supervisor two-part answers / history leak cases | 3/3, 4/4 | 3/3, 4/4 |
 | Supervisor on the 8 single-agent cases | 8/8 | 8/8 |
 | Retrieval: answer reaches the agent | 34/37 (37 cases, 4 private) | 31/33 (public only, gpt-oss-20b judging) |
 | Retrieval, off-topic questions wrongly treated as relevant | 0/8 | 0/8 |
-| Citations: document answers that cite a source | 37/37 (single and multi-agent) | 13/13 run so far |
+| Citations: document answers that cite a source | 37/37 (single and multi-agent) | 32/33 single, 32/33 multi-agent (public only) |
 | Through the public URL, both modes | - | 12/12 |
 
 ---
@@ -544,7 +562,9 @@ what changed.
 2. **Let code decide when it has a reliable signal, and re-check the signal when the data changes.**
    Relevance by vector distance (Phase 7) was a reliable code rule at 2 chunks and failed at 4,288.
    It was replaced by the model's judgement (9.4), which in turn feeds a code rule
-   (`applyDocPriority`, 9.6).
+   (`applyDocPriority`, 9.6). In Phase 10 the same rule was extended to each part of a two-part
+   question: both gpt-oss models split the question correctly but guessed the wrong specialist for
+   one part, and a per-part document check in code fixed it on every model.
 3. **Remove the wrong option instead of forbidding it.** Unused tools were deleted, not discouraged.
 4. **Prove the bug before fixing it.** Each fix started by reproducing the failure, so the fix could
    be measured.
@@ -656,6 +676,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `15245c6`, `298cd86` | Phase 10a.5: Neon, Upstash, follow-ups, two-model split |
 | `486e74f` | Phase 10a.5: cheaper judging, fallback, clear limit message, router fix |
 | `95da540`, `5c53de8` | Phase 10b.6: access code, deployed on Vercel |
+| `eea812b`, `3d8e436` | Phase 10: JSON retry, two-way model fallback |
+| `12cc872`, `28e86fc` | Phase 10: small talk skips search, rework requests |
 
 Commits up to `eb72eb0` are on `master`. Phase 9 commits are on the `phase9-real-docs` branch, and
 Phase 10 commits on the `phase10-cloud` branch.
