@@ -434,6 +434,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10b.7 | Fixes found on the live app and the Groq evals | Two-way fallback, small talk, rework requests, router 24/24 on gpt-oss |
 | 10b.8 | Search in English for questions in other languages | Malayalam, Hindi, Spanish: 5/18 to 17/18, answers still in the user's language |
 | 10b.9 | New UI with Ant Design X, installable as an app (PWA) | Phone, tablet and desktop layouts; home-screen icon; opens offline; Chrome: 0 installability errors |
+| 10b.10 | Voice input: record in the browser, Gemini writes the text (Groq Whisper as backup) | Works in every browser and the installed app; Malayalam 3/3 in Malayalam script with the language picked, ~1.5 s |
 
 - **Challenges, in plain terms:**
 
@@ -454,6 +455,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | "hi" cost 2,000 tokens | A greeting went through search, judging and the router | Small talk is recognised in code and answered directly |
 | "Tell that in Malayalam" | Searched as a new question: "I don't have information about that" | Requests to translate, shorten or simplify rework the last answer, no search |
 | Broken JSON | gpt-oss-20b sometimes broke the router's JSON format and Groq refused the reply | Retried, then the existing safe fallback |
+| Malayalam voice | Whisper wrote Malayalam speech in Tamil, Gujarati or Gurmukhi script, even when told the language | Gemini 3.5 Flash Lite with the user's language as a hint; Whisper only as a backup |
+| Whisper hears words in silence | A silent recording came back as "Thank you." with full confidence (`no_speech_prob` 0), so the server cannot tell | The browser measures the mic level; a recording that never gets loud is not sent |
 | Answers wider than a phone | One long code line made a whole answer 696 px wide on a 390 px screen | `min-width: 0` on the chat bubbles; code scrolls inside its box |
 | Other languages | The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA" | Translated to English for the search and the judge only; the model answers the original, in the user's language |
 | Two-part questions on gpt-oss | Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to `general` | Each part is searched on its own; a part the documents answer goes to company_docs |
@@ -535,6 +538,8 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 49 | 10.7 | Two-part questions: one part sent to `general` on gpt-oss | Document check per part, in code | Routing 22/24 (20b), 21/24 (120b) to 24/24 |
 | 50 | 10.8 | Questions in other languages missed the English handbook | Translate for the search only; non-English detected in code | 5/18 to 17/18 (16/18 on qwen), off-topic 0/3 |
 | 51 | 10.9 | The UI was one fixed card: cramped on a phone, no app icon | Ant Design X chat components, responsive layout, PWA | Installable, opens offline, checked at 390, 820 and 1440 px |
+| 52 | 10.10 | Typing on a phone is slow; questions in Malayalam or Hindi even more so | Mic button: MediaRecorder + Groq Whisper; the text lands in the box to check | English and Hindi recordings transcribed; silence caught before upload |
+| 53 | 10.10 | "Malayalam voice not taking": Whisper wrote it in other scripts | Gemini 3.5 Flash Lite + a "Voice language" setting as a hint | Malayalam 0/3 to 3/3 in the right script; still finds the handbook passage |
 
 Where things stand (Phase 10 code):
 
