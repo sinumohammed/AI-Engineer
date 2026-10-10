@@ -133,6 +133,27 @@ export function sharesWords(question, att, min = 2) {
   return shared >= min;
 }
 
+// Which questions get the file. Found by the user: the file stayed attached
+// to every later question, so it was read for unrelated ones too (~3,000
+// tokens each, against Groq's 8,000 a minute) and could steer their
+// answers. Now it works like a chat app: the file goes with the message it
+// was attached to, and after that only with follow-ups that look related:
+//   - the question mentions the file ("the PDF", "this photo", "page 2"), or
+//   - it shares two meaningful words with the file, or
+//   - the previous question used the file, and this one points back
+//     ("it", "that") or shares a word with it.
+// Decided in code, so an unrelated question costs nothing extra.
+const MENTIONS_FILE = /\b(attach\w*|file|document|doc|pdf|photo|picture|image|pic|receipt|scan\w*|page|pages|screenshot)\b/i;
+export function fileForQuestion(att, question, history, pointsBack) {
+  if (!att) return null;
+  if (!att.sent) return att; // sent with this message
+  const lastUser = history.filter((m) => m.role === "user").at(-1);
+  const chained = lastUser?.usedFile === att.name;
+  if (MENTIONS_FILE.test(question) || sharesWords(question, att, 2)) return att;
+  if (chained && (pointsBack.test(question) || sharesWords(question, att, 1))) return att;
+  return null;
+}
+
 // For the UI and the router: what is attached, without the text.
 export const attachmentSummary = (att) =>
   att ? { name: att.name, kind: att.kind, pages: att.pages, pagesRead: att.pagesRead ?? att.pages, truncated: att.truncated } : null;

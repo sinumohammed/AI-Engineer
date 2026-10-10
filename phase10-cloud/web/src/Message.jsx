@@ -5,6 +5,7 @@ import {
   CheckCircleFilled,
   CopyOutlined,
   FileSearchOutlined,
+  PaperClipOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
   WarningFilled,
@@ -28,9 +29,15 @@ const OUTCOMES = {
 function ProcessChips({ m }) {
   const tools = m.tools ?? [];
   const agents = m.agents ?? [];
-  if (!tools.length && !agents.length) return null;
+  if (!tools.length && !agents.length && !m.fileUsed) return null;
   return (
     <div className="process">
+      {/* Phase 10: the attached file was read for this answer */}
+      {m.fileUsed && (
+        <Tag variant="filled" color="processing" icon={<PaperClipOutlined />}>
+          Read {m.fileUsed}
+        </Tag>
+      )}
       {tools.map((t, i) => {
         const o = OUTCOMES[t.outcome];
         return (

@@ -74,12 +74,14 @@ export async function getSummary(sessionId) {
 // Phase 10 UI: `at` (ISO time) on each message, for the timestamps in the
 // chat. Like `fromCompanyDocs`, it never reaches a model: every path that
 // sends history to one keeps only role and content.
-export async function appendTurn(sessionId, userMsg, assistantMsg, { fromCompanyDocs = false, askedAt, answeredAt, attachmentName } = {}) {
+export async function appendTurn(sessionId, userMsg, assistantMsg, { fromCompanyDocs = false, askedAt, answeredAt, attachmentName, usedFile } = {}) {
   try {
     const history = await getHistory(sessionId);
     history.push(
       // `attachment`: the name of the file the question was asked with, for the UI.
-      { role: "user", content: userMsg, ...(askedAt ? { at: askedAt } : {}), ...(attachmentName ? { attachment: attachmentName } : {}) },
+      // `usedFile`: the attached file was read for this question - a follow-up
+      // that points back can then use it too (attachments.js, fileForQuestion).
+      { role: "user", content: userMsg, ...(askedAt ? { at: askedAt } : {}), ...(attachmentName ? { attachment: attachmentName } : {}), ...(usedFile ? { usedFile } : {}) },
       { role: "assistant", content: assistantMsg, ...(fromCompanyDocs ? { fromCompanyDocs: true } : {}), ...(answeredAt ? { at: answeredAt } : {}) }
     );
 

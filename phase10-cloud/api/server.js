@@ -8,7 +8,8 @@ import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
 import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
-import { readAttachment, attachmentSummary, AttachmentError } from "./attachments.js";
+import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion } from "./attachments.js";
+import { POINTS_BACK } from "./retrieve.js";
 import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED, saveAttachment, getAttachment, removeAttachment } from "./sessionStore.js";
@@ -53,7 +54,9 @@ function memoryInfo(history, summary) {
 app.get("/api/chat/session/:sessionId", async (req, res) => {
   const sessionId = req.params.sessionId;
   const [history, usage, summary, attachment] = await Promise.all([getHistory(sessionId), getUsage(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
-  res.json({ history, usage, summary, memory: memoryInfo(history, summary), attachment: attachmentSummary(attachment) });
+  // The chip above the message box is only for a file not sent yet; a sent
+  // one shows on its message instead.
+  res.json({ history, usage, summary, memory: memoryInfo(history, summary), attachment: attachment && !attachment.sent ? attachmentSummary(attachment) : null });
 });
 
 app.get("/api/chat/stream", async (req, res) => {
@@ -84,7 +87,11 @@ app.get("/api/chat/stream", async (req, res) => {
   const mode = req.query.mode === "multi" ? "multi" : "single";
 
   try {
-    const [history, summary, attachment] = await Promise.all([getHistory(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
+    const [history, summary, stored] = await Promise.all([getHistory(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
+    // Phase 10: the file goes with the message it was attached to, then only
+    // with follow-ups that look related (attachments.js, fileForQuestion).
+    const attachment = fileForQuestion(stored, question, history, POINTS_BACK);
+    if (attachment) send("file_used", { name: attachment.name, sentWithMessage: !attachment.sent });
     // Sessions, memory, summaries and the answer/usage/memory events below
     // are identical for both modes - only the progress events differ: the
     // single agent reports tool calls, the supervisor reports its routing
@@ -115,7 +122,14 @@ app.get("/api/chat/stream", async (req, res) => {
     const { answer, usage, fromCompanyDocs, sources = [] } = result;
     for (const text of notices) send("notice", { text });
 
-    await appendTurn(sessionId, question, answer, { fromCompanyDocs, askedAt, answeredAt: new Date().toISOString(), attachmentName: attachment?.name });
+    await appendTurn(sessionId, question, answer, {
+      fromCompanyDocs,
+      askedAt,
+      answeredAt: new Date().toISOString(),
+      attachmentName: attachment && !attachment.sent ? attachment.name : undefined,
+      usedFile: attachment?.name,
+    });
+    if (attachment && !attachment.sent) await saveAttachment(sessionId, { ...attachment, sent: true });
     await saveUsage(sessionId, usage);
 
     const words = answer.split(" ");

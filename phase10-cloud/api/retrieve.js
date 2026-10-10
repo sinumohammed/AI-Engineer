@@ -91,7 +91,7 @@ async function selectRelevant(question, candidates) {
 // name" in the instruction did not stop it. The extra words moved the FMLA
 // eligibility section from rank 1 to rank 9, out of the 8 judged candidates.
 const STANDALONE_HISTORY_MESSAGES = 4;
-const POINTS_BACK = /\b(it|its|that|this|these|those|they|them|their|he|she|him|her|his|there|same|above|previous)\b/i;
+export const POINTS_BACK = /\b(it|its|that|this|these|those|they|them|their|he|she|him|her|his|there|same|above|previous)\b/i;
 const REFERS_TO_SCHEMA = {
   type: "object",
   properties: { refers_to: { type: "string" } },

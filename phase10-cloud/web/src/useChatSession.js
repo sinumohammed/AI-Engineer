@@ -60,6 +60,9 @@ function reducer(state, action) {
       return {
         ...state,
         busy: true,
+        // Phase 10: like a chat app, the file goes with this message and the
+        // chip clears; follow-ups can still use it (api/attachments.js).
+        attachment: null,
         messages: [
           ...state.messages,
           { role: "user", text: action.question, at: Date.now(), attachment: state.attachment?.name ?? null },
@@ -106,6 +109,9 @@ function reducer(state, action) {
         })),
       };
     // Phase 9.6: which document sections the answer cited
+    // Phase 10: the answer read the attached file
+    case "FILE_USED":
+      return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, fileUsed: action.name })) };
     case "SOURCES":
       return { ...state, messages: updateLast(state.messages, (m) => ({ ...m, sources: action.sources })) };
     // Phase 10: notes from the server about how this answer was made
@@ -228,6 +234,7 @@ export function useChatSession() {
     es.addEventListener("tool_result", (e) => dispatch({ type: "TOOL_RESULT", ...JSON.parse(e.data) }));
     es.addEventListener("answer_chunk", (e) => dispatch({ type: "ANSWER_CHUNK", ...JSON.parse(e.data) }));
     es.addEventListener("sources", (e) => dispatch({ type: "SOURCES", sources: JSON.parse(e.data) }));
+    es.addEventListener("file_used", (e) => dispatch({ type: "FILE_USED", ...JSON.parse(e.data) }));
     es.addEventListener("usage", (e) => dispatch({ type: "USAGE", usage: JSON.parse(e.data) }));
     es.addEventListener("memory", (e) => dispatch({ type: "MEMORY", memory: JSON.parse(e.data) }));
     es.addEventListener("notice", (e) => dispatch({ type: "NOTICE", ...JSON.parse(e.data) }));
