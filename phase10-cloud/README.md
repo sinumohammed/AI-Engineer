@@ -58,7 +58,14 @@ From `eval/`:
 | `npm run eval:regression:multi` | the same regression cases against the supervisor |
 | `npm run eval:supervisor` | supervisor routing, two-part questions, history |
 | `npm run eval:citations` | citations from the single agent |
-| `npm run eval:citations:multi` | citations from the supervisor |
+| `npm run eval:citations:multi` | citations from the supervisor (`GROUPS=paraphrased,original` runs some groups only) |
+| `npm run eval:multilingual` | the same handbook facts asked in Malayalam, Hindi and Spanish, plus off-topic questions |
+| `npm run eval:reply-language` | is the answer in the question's language (`ONLY=Malayalam`, `MODES=multi` to save Groq quota) |
+| `npm run eval:judge` | relevance judging: tokens per question and quality |
+| `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
+
+`eval:supervisor` takes `ROUTING_ONLY=1` (routing cases only) or `SKIP_ROUTING=1`.
+Sample files for attachments and voice input are in `eval/samples/` (see its README).
 
 ## Steps
 
@@ -244,7 +251,7 @@ the function.
 
 Ollama path after the refactor: retrieval and single agent unchanged.
 
-### 10a.5 Neon and Upstash from the Mac (in progress)
+### 10a.5 Neon and Upstash from the Mac
 
 **Neon** (Frankfurt, pooled connection): the public handbook only - 4,284
 chunks, 0 private, 46 MB - in `chunks_local_q8`, loaded with:
@@ -486,3 +493,23 @@ reworked answer keeps the original's `fromCompanyDocs` tag (Phase 8c).
 - Live: Malayalam and Hindi rework, a new question with "answer in
   Malayalam", and a question written in Malayalam all answered correctly.
   gpt-oss once wrote a Hindi word in Cyrillic letters - a model slip.
+
+### 10b.7 After the deploy: features for daily use (2026-10-08 to 2026-10-10)
+
+All deployed. Details and measurements in `ROADMAP.md` (Phase 10) and the learning guide (rows 10b.7-10b.13).
+
+| Feature | Where | Settings |
+|---|---|---|
+| Two-way model fallback, small talk without search, rework requests ("translate that") | `llmClient.js`, `retrieve.js`, `rework.js` | `FALLBACK_MODEL` (a list) |
+| Per-part document check for two-part questions | `routing.js` (`applyDocPriority`) | `DOC_PRIORITY=0` to compare |
+| Questions in other languages searched in English | `retrieve.js` | `TRANSLATE_SEARCH=0` to compare |
+| Reply in the question's language (non-English messages only) | `replyLanguage.js` | `REPLY_LANGUAGE=0` to compare |
+| New web UI: Ant Design X, phone/tablet/desktop layouts, dark mode, installable (PWA) | `web/src/`, `web/vite.config.js` | icons from `web/public/logo.svg`: `npx pwa-assets-generator` |
+| Voice input: `POST /api/transcribe` (raw audio, `?lang=` hint) | `transcribe.js`, `web/src/useVoiceInput.js` | `GEMINI_API_KEY` (Gemini writes the text), `GEMINI_TRANSCRIBE_MODEL`; Groq Whisper as backup: `TRANSCRIBE_MODEL` |
+| Message timestamps | `sessionStore.js` (`at` on each turn), `web/src/time.js` | - |
+| Attachments, step 1: `POST /api/attachments?sessionId=` (raw file, `x-file-name` header), `DELETE` to remove | `attachments.js`, `gemini.js`, the `attachment` specialist | `GEMINI_API_KEY` for photos and scanned PDFs, `GEMINI_VISION_MODEL` |
+
+Attachments: one file per chat (a new one replaces it); at most ~12,000 characters
+of its text go into the prompt; the file goes with the message it was attached to,
+then only with follow-ups that look related. Searching inside long files is step 2.
+
