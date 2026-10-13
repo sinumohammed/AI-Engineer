@@ -63,6 +63,7 @@ From `eval/`:
 | `npm run eval:reply-language` | is the answer in the question's language (`ONLY=Malayalam`, `MODES=multi` to save Groq quota) |
 | `npm run eval:judge` | relevance judging: tokens per question and quality |
 | `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
+| `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
 
 `eval:supervisor` takes `ROUTING_ONLY=1` (routing cases only) or `SKIP_ROUTING=1`.
 Sample files for attachments and voice input are in `eval/samples/` (see its README).
@@ -513,3 +514,52 @@ Attachments: one file per chat (a new one replaces it); at most ~12,000 characte
 of its text go into the prompt; the file goes with the message it was attached to,
 then only with follow-ups that look related. Searching inside long files is step 2.
 
+
+### 10d.1 JSON `/api/ask` for other apps (2026-10-13)
+
+Other apps ask the same agent with one JSON request and get one JSON answer -
+no stream, no web UI. Each app has its own key instead of the access code.
+
+```bash
+curl https://ai-engineer-api-jet.vercel.app/api/ask \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{"question": "What is our rollback process?"}'
+```
+
+```json
+{ "answer": "...[1]", "sources": [{ "n": 1, "source": "...", "section": "...", "text": "..." }],
+  "fromCompanyDocs": true, "notices": [], "usage": { ... }, "conversationId": null, "mode": "single" }
+```
+
+| Field | |
+|---|---|
+| `question` | required, up to 4,000 characters |
+| `conversationId` | optional; the same id remembers earlier questions (24 hours), as a chat does. Without it every question stands alone |
+| `mode` | `"single"` (default) or `"multi"` (the supervisor) |
+| `agent` | multi only: skip the router, e.g. `"coding"` |
+
+`DELETE /api/ask/conversations/<id>` forgets a conversation. Errors are JSON
+`{ "error": "..." }`: 400 bad request, 401 missing or unknown key, 429 the app's
+daily limit or the model's free quota, 500 anything else.
+
+| Part | Where | Settings |
+|---|---|---|
+| Keys, request checks, the answer | `api/askApi.js` (mounted before the access-code check in `server.js`) | `APP_API_KEYS=crm=ak_...,billing=ak_...` |
+| New key | `api/newAppKey.js` - `npm run new-app-key -- crm` | prints the key once; nothing is stored |
+| Daily limit per app | `sessionStore.js` (`countAppQuestion`, Redis `app:<name>:asks:<day>`) | `APP_DAILY_LIMIT` (default 100) |
+
+- **One key per app**, so one app can be cut off (remove its entry, redeploy)
+  without touching the others. Keys are compared timing-safe, like the access code.
+- **Conversations are kept per app** (`session:app:<name>:<id>`): the same
+  `conversationId` from two apps is two conversations, and an app cannot open
+  the web app's chats.
+- **A daily limit per app**, because every app spends the same free Groq quota
+  as the web app - a looping app should not break the chat for everyone.
+- No `APP_API_KEYS`: open on the Mac (as `local`), off when `ACCESS_CODE` is set.
+- Not in this step: attachments and streaming through `/api/ask`.
+
+Tested on the Mac (Ollama): `eval:ask` 9/9; plus by hand: another app's key with
+the same `conversationId` did not see the first app's question; `mode: "multi"`
+answered with sources; `APP_DAILY_LIMIT=1` gave 429 on the second question; with
+`ACCESS_CODE` set, the access code does not open `/api/ask` and an app key does
+not open the web app's routes.

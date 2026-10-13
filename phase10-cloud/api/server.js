@@ -10,7 +10,8 @@ import { collectNotices } from "./llmClient.js";
 import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
 import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, nameTheFile } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
+import { askApi } from "./askApi.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED, saveAttachment, getAttachment, removeAttachment } from "./sessionStore.js";
 
@@ -32,7 +33,10 @@ function hasAccess(req) {
 // a dropped connection.
 // `voice`: whether the mic button can work (transcribe.js needs a Gemini or Groq key).
 app.get("/api/access", (req, res) => res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req), voice: voiceAvailable }));
-app.use("/api", (req, res, next) => (hasAccess(req) ? next() : res.status(401).json({ error: "Access code required" })));
+// Phase 10d: other apps, with their own keys instead of the access code -
+// so it is mounted before the access-code check below.
+app.use("/api/ask", askApi);
+app.use("/api",(req, res, next) => (hasAccess(req) ? next() : res.status(401).json({ error: "Access code required" })));
 
 // How many turns are stored, and whether older ones have been folded into a
 // summary yet (see summarize.js) - this is what the UI shows near the token
@@ -234,4 +238,6 @@ function logServices(firstLine) {
   const voiceBy = [GEMINI_API_KEY && `Gemini ${GEMINI_TRANSCRIBE_MODEL}`, GROQ_API_KEY && `Groq ${TRANSCRIBE_MODEL}`].filter(Boolean);
   console.log(`  voice:      ${voiceBy.length ? voiceBy.join(", then ") : "off (no GEMINI_API_KEY or GROQ_API_KEY)"}`);
   console.log(`  access:     ${ACCESS_CODE ? "code required" : "open (no ACCESS_CODE)"}${ALLOWED_ORIGIN ? `, browser calls only from ${ALLOWED_ORIGIN}` : ""}`);
+  const askAccess = APP_API_KEYS.length ? `keys for ${APP_API_KEYS.map((a) => a.name).join(", ")}` : ACCESS_CODE ? "off (no APP_API_KEYS)" : "open (no APP_API_KEYS)";
+  console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app`);
 }

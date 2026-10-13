@@ -62,6 +62,22 @@ export const TRACE_TO = process.env.TRACE_TO ?? (process.env.VERCEL ? "console" 
 // call the API from a browser (CORS). Both unset = open, as on the Mac.
 export const ACCESS_CODE = process.env.ACCESS_CODE || null;
 export const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null;
+// Phase 10d: other apps ask through POST /api/ask (askApi.js) with their own
+// key instead of the access code. APP_API_KEYS="crm=ak_...,billing=ak_..." -
+// one name=key pair per app (keys from `npm run new-app-key`). The name says
+// which app asked, keeps its conversations apart, and has its own daily
+// limit, APP_DAILY_LIMIT questions (default 100) - all apps share the same
+// free model quota as the web app.
+export const APP_API_KEYS = (process.env.APP_API_KEYS ?? "")
+  .split(",")
+  .map((pair) => pair.trim())
+  .filter(Boolean)
+  .map((pair) => {
+    const [name, key] = pair.split("=").map((s) => s?.trim());
+    if (!name || !key || !/^[a-z0-9-]+$/.test(name)) throw new Error(`Invalid APP_API_KEYS entry "${name}=..." - use name=key, name in a-z 0-9 -`);
+    return { name, key };
+  });
+export const APP_DAILY_LIMIT = Number(process.env.APP_DAILY_LIMIT ?? 100);
 // Phase 10 UI: voice input (transcribe.js). Gemini writes the text when
 // GEMINI_API_KEY is set (Whisper could not write Malayalam), Groq's Whisper
 // when it is not, or when Gemini fails. Hosted services even when answers

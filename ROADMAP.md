@@ -324,7 +324,7 @@ Original picks (Windows laptop):
 
 - **Next - candidates after Phase 10** (written 2026-10-12; pick one before starting)
   1. **Attachments step 2 - long files:** cut a long PDF into chunks, embed them in the function (the nomic model is already there), search them per question like the handbook - fits Groq's 8,000 tokens a minute and keeps page citations. Today a file is cut at ~12,000 characters.
-  2. **JSON `/api/ask` endpoint with per-app API keys,** so other apps can ask questions (no streaming UI needed).
+  2. 🔨 **JSON `/api/ask` endpoint with per-app API keys,** so other apps can ask questions (no streaming UI needed). **Started 2026-10-13 as step 10d.1** (`phase10-cloud/README.md`): `api/askApi.js` - `Authorization: Bearer <key>` from `APP_API_KEYS` (one `name=key` per app, `npm run new-app-key`), optional `conversationId` stored per app (`session:app:<name>:<id>`), `mode` single/multi, JSON errors (400/401/429/500), a daily limit per app (`APP_DAILY_LIMIT`, default 100) because all apps share the web app's Groq quota. Mac (Ollama): new `eval:ask` 9/9, plus isolation, multi mode, the limit and access-code separation by hand. Not deployed yet.
   3. **Real documents:** decide which documents may go to hosted services (Groq, Google, Neon) and which stay with the local Ollama setup.
   4. **Per-application specialist agents** that call each app's API - read-only first, permissions by user identity, possibly as MCP servers.
   5. **A WhatsApp or Telegram channel** for the same agent.
