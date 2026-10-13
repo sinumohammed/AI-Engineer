@@ -13,7 +13,8 @@ phase10-cloud/
 ├── api/        the API server and everything it imports - one package.json
 ├── web/        the React app
 ├── scripts/    ingest.js - loads the handbook into Postgres
-└── eval/       every eval, pointed at api/
+├── eval/       every eval, pointed at api/
+└── examples/   ask-client.js - how another app calls POST /api/ask
 ```
 
 ## Where each file came from
@@ -557,6 +558,15 @@ daily limit or the model's free quota, 500 anything else.
   as the web app - a looping app should not break the chat for everyone.
 - No `APP_API_KEYS`: open on the Mac (as `local`), off when `ACCESS_CODE` is set.
 - Not in this step: attachments and streaming through `/api/ask`.
+
+**Using it from another app:** `examples/ask-client.js` is the code to copy into
+that app's backend - one `fetch`, no dependencies. Try it from `examples/` with
+`ASK_API_KEY` in `.env`: `npm run ask -- "What is our rollback process?"` (one
+question), or `npm run ask` alone for a conversation (empty line to stop;
+`MODE=multi`, `API_URL=http://localhost:3002` for the Mac). Call it from a
+server, never from browser code - the key would be visible to anyone, and the
+API only accepts browser calls from the web app's own site anyway. Use one
+`conversationId` per user of that app.
 
 Tested on the Mac (Ollama): `eval:ask` 9/9; plus by hand: another app's key with
 the same `conversationId` did not see the first app's question; `mode: "multi"`
