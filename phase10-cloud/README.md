@@ -562,4 +562,5 @@ Tested on the Mac (Ollama): `eval:ask` 9/9; plus by hand: another app's key with
 the same `conversationId` did not see the first app's question; `mode: "multi"`
 answered with sources; `APP_DAILY_LIMIT=1` gave 429 on the second question; with
 `ACCESS_CODE` set, the access code does not open `/api/ask` and an app key does
-not open the web app's routes.
+not open the web app's routes. Live (Groq): `eval:ask` 9/9 - a cold start ~6 s,
+then ~1.4 s a question.
