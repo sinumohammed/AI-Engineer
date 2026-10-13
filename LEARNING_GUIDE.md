@@ -70,9 +70,9 @@ The same app deployed (Phase 10, a copy in `phase10-cloud/`):
 
 ```
 Browser ──> web app on Vercel (static files)
-   │  question + access code
-   ▼
-API server: one Vercel function in Frankfurt
+   │  question + access code           Other apps' servers (Phase 10d)
+   ▼                                      │  POST /api/ask + app key
+API server: one Vercel function in Frankfurt <┘
    ├── embeds the question itself (the nomic model runs inside the function)
    ├── Neon, Frankfurt ──── Postgres + pgvector: the public handbook
    ├── Upstash, Frankfurt ─ Redis: chat history
@@ -116,6 +116,7 @@ API server: one Vercel function in Frankfurt
 | **Cold start** | The extra time for the first request after a serverless function was stopped. |
 | **Fallback** | A second option used automatically when the first fails, e.g. a smaller model when the bigger one's daily limit is used up. |
 | **Access code / CORS** | A shared code the API requires, and the browser rule that only the app's own website may call the API. |
+| **API key (per app)** | A secret string one app sends with each request (`Authorization: Bearer <key>`), so the API knows which app is asking and can cut off one app without the others. |
 
 ---
 
@@ -438,6 +439,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10b.11 | Reply in the language of the question | A Malayalam question after English turns was answered in English; now in Malayalam. English prompts unchanged |
 | 10b.12 | Date and time on every message | Small time under each message, full date on tap, "Today" / "Yesterday" dividers; stored with the history |
 | 10b.13 | Attach a PDF or a photo (step 1: short files) | Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source |
+| 10d.1 | Other apps can ask: `POST /api/ask`, JSON in and out, one key per app | Live: 9/9 (keys, bad requests, a question, a conversation); ~1.4 s a question after a ~6 s cold start |
 
 - **Challenges, in plain terms:**
 
@@ -465,6 +467,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | Whisper hears words in silence | A silent recording came back as "Thank you." with full confidence (`no_speech_prob` 0), so the server cannot tell | The browser measures the mic level; a recording that never gets loud is not sent |
 | Answers wider than a phone | One long code line made a whole answer 696 px wide on a 390 px screen | `min-width: 0` on the chat bubbles; code scrolls inside its box |
 | Other languages | The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA" | Translated to English for the search and the judge only; the model answers the original, in the user's language |
+| Other apps asking | The API only spoke the web app's stream and its single access code | `POST /api/ask` with one key per app; each app's conversations kept apart; 100 questions a day per app, because every app spends the same free Groq quota as the web app |
+| An empty secret? | Vercel's edit box showed the new key as empty after saving | Normal: a Sensitive value is never shown again. The real problem was the name: saved as `eval` instead of `APP_API_KEYS`; `npx vercel env ls` shows the names |
 | Two-part questions on gpt-oss | Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to `general` | Each part is searched on its own; a part the documents answer goes to company_docs |
 
 - **Learned:**
@@ -481,9 +485,21 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
     from using the live app, and both are tests now.
   - A fallback must cover every model call, not only the answer: the judging step had no fallback,
     so one used-up limit stopped every question.
+- **Other apps (10d.1):** an app's backend sends one request and gets one JSON answer:
+  ```
+  other app's server ──POST /api/ask──> API function
+     Authorization: Bearer <that app's key>       1. which app? (key -> name), else 401
+     { question, conversationId? }                2. today's count for that app, over 100 -> 429
+                                                  3. history of "app:<name>:<conversationId>"
+                                                  4. the same agent as the chat (single or multi)
+     <── { answer, sources, notices, usage }     5. the turn saved under that app's conversation
+  ```
+  The key stays on the app's server, never in browser code. `phase10-cloud/examples/ask-client.js`
+  is the code to copy: one `fetch`, no packages. Not yet: attachments or streaming through it.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
-  `cd eval && npm run eval:public` to test the deployed app.
+  `cd eval && npm run eval:public` to test the deployed app. Another app's view:
+  `cd phase10-cloud/examples && npm run ask -- "What is our rollback process?"`.
 
 ---
 
@@ -552,6 +568,9 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 57 | 10.13 | The file stayed attached to every later question (found by the user) | Like a chat app: it goes with its message; later only with related follow-ups, decided in code | Paris and "And in London?" read the file; "git tags" did not |
 | 58 | 10.13 | Receipt, then a scanned PDF + "explain it": the receipt was explained (found by the user) | With a new file, skip the "it" rewrite, route to the file, and put the file's name in place of a bare "it" | "Explain it" and "What is this?" explain the new file, both modes |
 | 59 | 10.13 | Still the receipt: earlier answers about it were in the history and qwen repeated them; a question sent mid-upload went with the old file | Earlier answers about a different file hidden from the model (as in 8c); no sending while a file is read | Receipt twice, then the scan: the scan is explained, both modes |
+| 60 | 10d.1 | Other apps could not use the agent: only the web app's stream and one shared access code | `POST /api/ask`: JSON in and out, one key per app, conversations per app | Mac 9/9, live 9/9; another app's key with the same conversation id saw nothing |
+| 61 | 10d.1 | A looping app could use up the free Groq quota the web app needs | A daily limit per app, counted in Redis | Limit 1: the second question got 429 with a clear message |
+| 62 | 10d.1 | Piped questions into the example client: the follow-up was lost | Read lines in order instead of asking one at a time | Both questions answered, the follow-up with the first one's context |
 
 Where things stand (Phase 10 code):
 
@@ -567,6 +586,7 @@ Where things stand (Phase 10 code):
 | Retrieval in Malayalam, Hindi, Spanish (18 cases, 3 off-topic) | 16/18, 0/3 | 17/18, 0/3 |
 | Citations: document answers that cite a source | 37/37 (single and multi-agent) | 32/33 single, 32/33 multi-agent (public only) |
 | Through the public URL, both modes | - | 12/12 |
+| `POST /api/ask` for other apps (keys, bad requests, a question, a conversation) | 9/9 | 9/9 |
 
 ---
 
@@ -663,6 +683,9 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Judging cost and quality | `cd phase10-cloud/eval && npm run eval:judge` |
 | Questions in other languages | `cd phase10-cloud/eval && npm run eval:multilingual` |
 | Test the deployed app | `cd phase10-cloud/eval && npm run eval:public` |
+| Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
+| A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
+| Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
 
 ---
@@ -704,6 +727,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `95da540`, `5c53de8` | Phase 10b.6: access code, deployed on Vercel |
 | `eea812b`, `3d8e436` | Phase 10: JSON retry, two-way model fallback |
 | `12cc872`, `28e86fc` | Phase 10: small talk skips search, rework requests |
+| `0675f45`, `400f491` | Phase 10d.1: `POST /api/ask` for other apps, deployed |
+| `fe6e3f6` | Phase 10d.1: example client for other apps |
 
-Commits up to `eb72eb0` are on `master`. Phase 9 commits are on the `phase9-real-docs` branch, and
-Phase 10 commits on the `phase10-cloud` branch.
+Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
+branch, and `master` is fast-forwarded to it after each shipped step.

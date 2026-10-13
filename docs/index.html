@@ -297,6 +297,7 @@
         <div><dt>Serverless function</dt><dd>Code the host starts when a request arrives and stops when idle. The first request after a stop is slower: a cold start.</dd></div>
         <div><dt>Fallback</dt><dd>A second option used automatically when the first fails, like a smaller model when the bigger one's daily limit is used up.</dd></div>
         <div><dt>Access code, CORS</dt><dd>A shared code the API requires, and the browser rule that only the app's own website may call the API.</dd></div>
+        <div><dt>API key (per app)</dt><dd>A secret string one app sends with each request (<code>Authorization: Bearer &lt;key&gt;</code>), so the API knows which app is asking and can cut off one app without the others.</dd></div>
       </dl>
     </section>
 
@@ -839,6 +840,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10b.11</td><td>Reply in the language of the question</td><td class="res">A Malayalam question after English turns was answered in English; now in Malayalam. English prompts unchanged</td></tr>
                 <tr><td class="n">10b.12</td><td>Date and time on every message</td><td class="res">Small time under each message, full date on tap, "Today" / "Yesterday" dividers</td></tr>
                 <tr><td class="n">10b.13</td><td>Attach a PDF or a photo (step 1: short files)</td><td class="res">Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source</td></tr>
+                <tr><td class="n">10d.1</td><td>Other apps can ask: <code>POST /api/ask</code>, JSON in and out, one key per app</td><td class="res">Live: 9/9 (keys, bad requests, a question, a conversation); about 1.4 s a question after a 6 s cold start</td></tr>
               </tbody>
             </table>
           </div>
@@ -868,10 +870,47 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td>Whisper hears words in silence</td><td>A silent recording came back as "Thank you." with full confidence, so the server cannot tell</td><td class="res">The browser measures the mic level; a recording that never gets loud is not sent</td></tr>
                 <tr><td>Answers wider than a phone</td><td>One long code line made a whole answer 696 px wide on a 390 px screen</td><td class="res"><code>min-width: 0</code> on the chat bubbles; code scrolls inside its box</td></tr>
                 <tr><td>Other languages</td><td>The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA"</td><td class="res">Translated to English for the search and the judge only; the model answers the original, in the user's language</td></tr>
+                <tr><td>Other apps asking</td><td>The API only spoke the web app's stream and its single access code</td><td class="res"><code>POST /api/ask</code> with one key per app; each app's conversations kept apart; 100 questions a day per app, because every app spends the same free Groq quota as the web app</td></tr>
+                <tr><td>An empty secret?</td><td>Vercel's edit box showed the new key as empty after saving</td><td class="res">Normal: a Sensitive value is never shown again. The real problem was the name, <code>eval</code> instead of <code>APP_API_KEYS</code>; <code>npx vercel env ls</code> shows the names</td></tr>
                 <tr><td>Two-part questions on gpt-oss</td><td>Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to <code>general</code></td><td class="res">Each part searched on its own; a part the documents answer goes to company_docs</td></tr>
               </tbody>
             </table>
           </div>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 250" role="img" aria-label="Another app's server sends POST /api/ask with its own key. The API finds which app the key belongs to, or answers 401; counts today's questions for that app, over the daily limit answers 429; loads that app's conversation history; and runs the same agent as the chat. The answer comes back as one JSON reply with the sources.">
+                <defs><marker id="a10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <rect class="b" x="20" y="16" width="200" height="56" rx="6"/>
+                <text class="t" x="120" y="39" text-anchor="middle">Another app's server</text>
+                <text class="s" x="120" y="57" text-anchor="middle">the key stays here, not in a browser</text>
+                <line class="ln" x1="221" y1="44" x2="309" y2="44" marker-end="url(#a10)"/>
+                <text class="s" x="265" y="36" text-anchor="middle">POST</text>
+                <rect class="ba" x="310" y="10" width="390" height="70" rx="6"/>
+                <text class="t" x="505" y="31" text-anchor="middle">/api/ask · the same Vercel function</text>
+                <text class="m" x="505" y="50" text-anchor="middle">Authorization: Bearer &lt;key&gt;</text>
+                <text class="m" x="505" y="68" text-anchor="middle">{ question, conversationId? }</text>
+                <path class="ln" d="M505,80 V96 H100 V111" marker-end="url(#a10)"/>
+                <rect class="b" x="20" y="112" width="160" height="58" rx="6"/>
+                <text class="t" x="100" y="134" text-anchor="middle">1. Which app?</text>
+                <text class="s" x="100" y="152" text-anchor="middle">key → name, else 401</text>
+                <line class="ln" x1="181" y1="141" x2="195" y2="141" marker-end="url(#a10)"/>
+                <rect class="bw" x="196" y="112" width="160" height="58" rx="6"/>
+                <text class="t" x="276" y="134" text-anchor="middle">2. Today's count</text>
+                <text class="s" x="276" y="152" text-anchor="middle">over 100 → 429</text>
+                <line class="ln" x1="357" y1="141" x2="371" y2="141" marker-end="url(#a10)"/>
+                <rect class="b" x="372" y="112" width="160" height="58" rx="6"/>
+                <text class="t" x="452" y="134" text-anchor="middle">3. History</text>
+                <text class="m" x="452" y="153" text-anchor="middle">app:&lt;name&gt;:&lt;id&gt;</text>
+                <line class="ln" x1="533" y1="141" x2="547" y2="141" marker-end="url(#a10)"/>
+                <rect class="b" x="548" y="112" width="160" height="58" rx="6"/>
+                <text class="t" x="628" y="134" text-anchor="middle">4. The same agent</text>
+                <text class="s" x="628" y="152" text-anchor="middle">single or multi</text>
+                <path class="ln" d="M628,170 V214 H8 V52 H19" marker-end="url(#a10)"/>
+                <text class="s" x="374" y="232" text-anchor="middle">one JSON reply: answer, sources, notices, usage</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.1. The web app keeps its stream and access code; other apps get one request and one JSON answer, each with its own key, its own conversations and its own daily limit. <code>phase10-cloud/examples/ask-client.js</code> is the code to copy into that app's backend.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -883,7 +922,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>A fallback must cover every model call, not only the answer: the judging step had none, so one used-up limit stopped every question.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
-npm run eval:public</pre><button type="button">Copy</button></div></dd>
+npm run eval:public</pre><button type="button">Copy</button></div> Asked the way another app asks: <div class="cmd"><pre>cd phase10-cloud/examples
+npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</button></div></dd>
           </dl>
         </article>
       </div>
@@ -955,6 +995,9 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td class="n">57</td><td class="n">10.13</td><td>The file stayed attached to every later question (found by the user)</td><td>It goes with its message; later only with related follow-ups, decided in code</td><td class="res">Follow-ups read the file; unrelated questions do not</td></tr>
             <tr><td class="n">58</td><td class="n">10.13</td><td>Receipt, then a scanned PDF and "explain it": the receipt was explained (found by the user)</td><td>With a new file: no "it" rewrite from history, route to the file, the file's name in place of a bare "it"</td><td class="res">"Explain it" explains the new file, both modes</td></tr>
             <tr><td class="n">59</td><td class="n">10.13</td><td>Still the receipt: earlier answers about it were in the history and qwen repeated them; a question sent mid-upload went with the old file</td><td>Earlier answers about a different file hidden from the model, as in 8c; no sending while a file is read</td><td class="res">The scan is explained, both modes</td></tr>
+            <tr><td class="n">60</td><td class="n">10d.1</td><td>Other apps could not use the agent: only the web app's stream and one shared access code</td><td><code>POST /api/ask</code>: JSON in and out, one key per app, conversations per app</td><td class="res">Mac 9/9, live 9/9; another app's key with the same conversation id saw nothing</td></tr>
+            <tr><td class="n">61</td><td class="n">10d.1</td><td>A looping app could use up the free Groq quota the web app needs</td><td>A daily limit per app, counted in Redis</td><td class="res">Limit 1: the second question got 429 with a clear message</td></tr>
+            <tr><td class="n">62</td><td class="n">10d.1</td><td>Piped questions into the example client: the follow-up was lost</td><td>Read lines in order instead of asking one at a time</td><td class="res">Both answered, the follow-up with the first one's context</td></tr>
           </tbody>
         </table>
       </div>
@@ -973,6 +1016,7 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td>Retrieval in Malayalam, Hindi, Spanish (18 cases, 3 off-topic)</td><td class="n">16/18, 0/3</td><td class="n">17/18, 0/3</td></tr>
             <tr><td>Document answers that cite a source</td><td class="n">37/37</td><td class="n">32/33 public, single and multi-agent</td></tr>
             <tr><td>Through the public URL, both modes</td><td class="n">-</td><td class="n">12/12</td></tr>
+            <tr><td><code>POST /api/ask</code> for other apps (keys, bad requests, a question, a conversation)</td><td class="n">9/9</td><td class="n">9/9</td></tr>
           </tbody>
         </table>
       </div>
@@ -1042,6 +1086,9 @@ npm run eval:public</pre><button type="button">Copy</button></div></dd>
             <tr><td>Judging cost and quality</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:judge</code></td></tr>
             <tr><td>Questions in other languages</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:multilingual</code></td></tr>
             <tr><td>Test the deployed app</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:public</code></td></tr>
+            <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
+            <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
+            <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>
           </tbody>
         </table>
