@@ -5,6 +5,12 @@ import { join } from "node:path";
 import pg from "pg";
 import { embedQuery, EMBED_LABEL, UNLABELLED_TABLE } from "./embed.js";
 import { DATABASE_URL, DOCS_TABLE, RELEVANCE_THRESHOLD } from "./config.js";
+import { HIDDEN_PREFIXES } from "./dataPolicy.js";
+
+// Phase 10 #3: chunks the model may not see (confidential documents when the
+// model is hosted, dataPolicy.js) are left out in the query itself, so no
+// later step can pass them on.
+const HIDDEN_LIKE = HIDDEN_PREFIXES.map((p) => `${p}%`);
 
 const TOP_K = 4;
 
@@ -54,9 +60,10 @@ export async function vectorSearch(query, { k = 10, table = DOCS_TABLE } = {}) {
   const { rows } = await db.query(
     `SELECT source, chunk_index, content, embedding <=> $1 AS distance
      FROM ${table}
+     WHERE NOT (source LIKE ANY($3::text[]))
      ORDER BY distance ASC
      LIMIT $2`,
-    [`[${queryEmbedding.join(",")}]`, k]
+    [`[${queryEmbedding.join(",")}]`, k, HIDDEN_LIKE]
   );
   return rows;
 }
@@ -163,9 +170,10 @@ export const toolImpls = {
         db.query(
           `SELECT source, chunk_index, content, embedding <=> $1 AS distance
            FROM ${DOCS_TABLE}
+           WHERE NOT (source LIKE ANY($3::text[]))
            ORDER BY distance ASC
            LIMIT $2`,
-          [`[${queryEmbedding.join(",")}]`, k]
+          [`[${queryEmbedding.join(",")}]`, k, HIDDEN_LIKE]
         ),
         // websearch_to_tsquery lexes a hyphenated code like "XJ-2200" as a
         // phrase ('xj' <-> '-2200'), ANDed with the query's other terms - so
@@ -176,9 +184,10 @@ export const toolImpls = {
                   ts_rank(content_tsv, websearch_to_tsquery('english', $1)) AS rank
            FROM ${DOCS_TABLE}
            WHERE content_tsv @@ websearch_to_tsquery('english', $1)
+             AND NOT (source LIKE ANY($3::text[]))
            ORDER BY rank DESC
            LIMIT $2`,
-          [query, k]
+          [query, k, HIDDEN_LIKE]
         ),
       ]);
 

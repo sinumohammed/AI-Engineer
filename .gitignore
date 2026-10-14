@@ -10,6 +10,8 @@ logs/
 # Private documents for the RAG pipeline: ingested locally, never pushed.
 # (The public corpus lives in phase5-rag/docs/ and IS committed.)
 phase5-rag/docs-private/
+# Phase 10 #3: internal business documents - may be stored on Neon, not in git.
+phase10-cloud/docs-internal/
 
 # Vercel project links (phase10-cloud/api, phase10-cloud/web)
 .vercel/

@@ -29,11 +29,19 @@ export async function prepareFile(file) {
   }
 }
 
-export function AttachButton({ onPick, disabled }) {
+// Phase 10 #3: where the file goes, from the server's data policy
+// (api/dataPolicy.js) - said before upload, not only after.
+function whereFilesGo(filesGoTo) {
+  if (!filesGoTo) return "It is sent to the AI service to be read - don't attach anything confidential.";
+  if (!filesGoTo.length) return "It is read on this computer and not sent to any AI service.";
+  return `It is sent to ${filesGoTo.join(" and ")} to be read - don't attach anything confidential.`;
+}
+
+export function AttachButton({ onPick, disabled, filesGoTo }) {
   const input = useRef(null);
   return (
     <>
-      <Tooltip title="Attach a PDF or a photo">
+      <Tooltip title={`Attach a PDF or a photo. ${whereFilesGo(filesGoTo)}`}>
         <Button
           type="text"
           shape="circle"
@@ -60,7 +68,7 @@ export function AttachButton({ onPick, disabled }) {
 }
 
 // Above the message box: the attached file, or "Reading..." while uploading.
-export function AttachmentChip({ attachment, reading, onRemove }) {
+export function AttachmentChip({ attachment, reading, onRemove, filesGoTo }) {
   if (reading) {
     return (
       <div className="attach-chip">
@@ -74,7 +82,7 @@ export function AttachmentChip({ attachment, reading, onRemove }) {
   const detail = attachment.kind === "image" ? "photo" : `${attachment.pages} page${attachment.pages === 1 ? "" : "s"}`;
   return (
     <div className="attach-chip">
-      <Tooltip title="Questions in this chat can use this file. It was sent to the AI service to be read - don't attach anything private.">
+      <Tooltip title={`Questions in this chat can use this file. ${whereFilesGo(filesGoTo)}`}>
         <Tag icon={icon} closable onClose={onRemove} color="processing" variant="filled" className="attach-tag">
           <span className="attach-name">{attachment.name}</span> · {detail}
         </Tag>

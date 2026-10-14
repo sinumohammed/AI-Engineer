@@ -7,6 +7,7 @@
 // - Two roots: ./docs (public, committed) and ./docs-private (ignored by git,
 //   never pushed). Private chunks get a "private/" source prefix so they stay
 //   identifiable after ingestion.
+//   (Phase 10 #3 adds docs-internal, prefix "internal/" - see dataPolicy.js.)
 // - Chunk size/overlap and the target table come from the environment, so
 //   chunking experiments can be ingested side by side and compared without
 //   touching the table the chat app reads.
@@ -19,7 +20,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { DATABASE_URL, DATABASE_IS_LOCAL, DOCS_TABLE, EMBED_PROVIDER, EMBED_PREFIX } from "../api/config.js";
+import { DATABASE_URL, DOCS_TABLE, EMBED_PROVIDER, EMBED_PREFIX } from "../api/config.js";
+import { ingestPlan } from "../api/dataPolicy.js";
 import { embedDocuments, EMBED_LABEL, UNLABELLED_TABLE } from "../api/embed.js";
 import { cleanDocument } from "./cleanText.js";
 import { chunkFixed, chunkSections } from "./chunker.js";
@@ -30,11 +32,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // in-process model - a hosted provider like Gemini receives every text it
 // embeds) and stored here (a hosted database like Neon holds the text itself).
 // Decided in code from the settings, not by a setting of its own.
-const PRIVATE_ALLOWED = EMBED_PROVIDER !== "gemini" && DATABASE_IS_LOCAL;
-const ROOTS = [
-  { dir: join(HERE, "../../phase5-rag/docs"), prefix: "" },
-  ...(PRIVATE_ALLOWED ? [{ dir: join(HERE, "../../phase5-rag/docs-private"), prefix: "private/" }] : []),
-];
+// Phase 10 #3: a third level, internal (docs-internal, not in git) - may be
+// stored on Neon, never embedded by Gemini. The rules: api/dataPolicy.js.
+const PLAN = ingestPlan();
+const ROOTS = PLAN.filter((l) => l.allowed);
 // Defaults are the settings Phase 9.3 measured best (see
 // phase9-real-docs/PHASE9_NOTES.md): cleaned text, cut at headings, each
 // chunk labelled "Page > Section", 500-character chunks, nomic task
@@ -97,9 +98,7 @@ if (existingLabel && existingLabel !== EMBED_LABEL) {
   process.exit(1);
 }
 await db.query(`COMMENT ON TABLE ${TABLE} IS '${EMBED_LABEL}'`);
-if (!PRIVATE_ALLOWED) {
-  console.log(`Skipping docs-private: ${DATABASE_IS_LOCAL ? `${EMBED_PROVIDER} is a hosted embedding provider` : "the database is not on this machine"}.`);
-}
+for (const l of PLAN.filter((l) => !l.allowed)) console.log(`Skipping ${l.level} documents (${relative(HERE, l.dir)}): ${l.why}.`);
 
 const docs = ROOTS.flatMap(({ dir, prefix }) =>
   listDocs(dir).map((file) => ({ path: join(dir, file), source: prefix + file.split("\\").join("/") }))

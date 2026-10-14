@@ -14,7 +14,8 @@ phase10-cloud/
 ├── web/        the React app
 ├── scripts/    ingest.js - loads the handbook into Postgres
 ├── eval/       every eval, pointed at api/
-└── examples/   ask-client.js - how another app calls POST /api/ask
+├── examples/   ask-client.js - how another app calls POST /api/ask
+└── docs-internal/  internal business documents (gitignored; see 10d.3)
 ```
 
 ## Where each file came from
@@ -65,6 +66,7 @@ From `eval/`:
 | `npm run eval:judge` | relevance judging: tokens per question and quality |
 | `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
 | `npm run eval:long-file` | a 59-page PDF attachment: does the right page reach the prompt, which later questions get the file; `ANSWERS=1` also asks the agent (`AGENT=multi` for the supervisor) |
+| `npm run eval:policy` | the data policy (10d.3): confidential chunks only reach a local model, what ingest takes, Gemini for files - no model calls |
 | `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
 
 `eval:supervisor` takes `ROUTING_ONLY=1` (routing cases only) or `SKIP_ROUTING=1`.
@@ -645,3 +647,56 @@ Found while building it, each first reproduced:
   numbered headings of its own. 0/3 to 3/3 in both modes (`ANSWERS=1 npm run
   eval:long-file`, part 4); the same file cited by two parts of a split
   question is listed once. Citation eval unchanged: 37/37, 32/37, 0.
+
+### 10d.3 Real documents: which may go where (2026-10-14)
+
+Before real documents are added, a rule for which ones may go to the hosted
+services. Decided with the user; enforced in code (`api/dataPolicy.js`), from
+the settings - a wrong `.env` cannot send a confidential file anywhere.
+
+| Level | Folder (none of the non-public ones in git) | Stored in | Read by |
+|---|---|---|---|
+| public | `phase5-rag/docs` | any database (Neon too) | any model |
+| internal | `phase10-cloud/docs-internal`, source prefix `internal/` | any database (Neon too) | local models or Groq - never embedded by Gemini |
+| confidential | `phase5-rag/docs-private`, source prefix `private/` | Postgres on this machine only | local models only |
+
+Why Groq but not Gemini, as checked on 2026-10-14: Groq does not train on API
+data and keeps no prompts by default (abuse logs up to 30 days - off with Zero
+Data Retention in Groq's console, which the user is turning on). Gemini's free
+tier may use prompts to improve Google's products, and human reviewers may
+read them.
+
+What changed:
+
+| Part | Before | Now |
+|---|---|---|
+| Search (`tools.js`) | returned any chunk in the table | leaves out `private/` chunks in the SQL itself whenever the model is not local (`MODEL_IS_LOCAL`: the model's URL is on this machine) |
+| Ingest (`scripts/ingest.js`) | public + private (private only into a local database, not embedded by Gemini) | three levels from `ingestPlan()`; it prints which it skipped and why |
+| Attachments (`attachments.js`) | photos, scans and long-file overviews went to Gemini wherever its key was set - also on the Mac with Ollama answering | only where `GEMINI_FILES` allows: `1`/`0`, unset = on on Vercel only. Off: photos and scans are refused (501, with the reason), the overview is the start of page 1 |
+| Attach button (web) | "it was sent to the AI service" after upload | before upload too, from the server (`/api/access` → `filesGoTo`): "sent to Groq and Google Gemini" live, "read on this computer" on the Mac with Ollama |
+| Startup log | - | a `data:` line: what answers may see, what ingest takes, Gemini for files on/off |
+| Evals with private cases | ran them when the database was local - with `LLM_PROVIDER=groq`, private excerpts went to Groq | only when the model is local too |
+
+Voice input is unchanged: a spoken question goes to Gemini (Whisper on Groq
+as backup), as typing it goes to the answer model.
+
+**The gap it closed:** "private documents never leave this machine" only
+covered where they were *stored*. On the Mac with `LLM_PROVIDER=groq` and the
+local table, the salary-band excerpts of the (made-up) private sample were
+sent to Groq for judging and answering - including during earlier Groq eval
+runs against the local table.
+
+**Measured** (`npm run eval:policy` - no model calls, no quota; each setup in
+its own process):
+
+| Check | Result |
+|---|---|
+| Salary and escalation questions, Ollama: private document found | ✅ (4 of 40 results) |
+| Same questions, `LLM_PROVIDER=groq`, same local table | ✅ 0 private results |
+| Ingest plan: Mac / Neon / Gemini embeddings / both | ✅ 4/4 |
+| Attachments on the Mac by default: photo and scan refused, text PDF read | ✅ |
+| `GEMINI_FILES` defaults and overrides (Vercel on, `=0` off, Mac `=1` on) | ✅ 3/3 |
+| What the attach button says (Mac, live, Groq on the Mac) | ✅ 3/3 |
+| Total | 15/15 |
+| Single-agent regression on the Mac (Ollama) | 10/10 |
+| Retrieval eval on the Mac (Ollama, local table): direct, paraphrased, original, private, off-topic | 20/20, 7/10, 3/3, 4/4, 0/8 - unchanged |

@@ -8,6 +8,7 @@ import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
 import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
+import { FILES_GO_TO, describePolicy } from "./dataPolicy.js";
 import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, nameTheFile } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { askApi } from "./askApi.js";
@@ -32,7 +33,11 @@ function hasAccess(req) {
 // and whether the one it has is right - so a wrong code shows a prompt, not
 // a dropped connection.
 // `voice`: whether the mic button can work (transcribe.js needs a Gemini or Groq key).
-app.get("/api/access", (req, res) => res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req), voice: voiceAvailable }));
+// `filesGoTo`: the hosted services an attached file is sent to (dataPolicy.js),
+// so the attach button can say so before upload; empty = it stays here.
+app.get("/api/access", (req, res) =>
+  res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req), voice: voiceAvailable, filesGoTo: FILES_GO_TO })
+);
 // Phase 10d: other apps, with their own keys instead of the access code -
 // so it is mounted before the access-code check below.
 app.use("/api/ask", askApi);
@@ -234,6 +239,7 @@ function logServices(firstLine) {
   console.log(`  embeddings: ${EMBED_PROVIDER} ${EMBED_MODEL} ${embedWhere}, table ${DOCS_TABLE}`);
   console.log(`  documents:  ${describeUrl(DATABASE_URL)}`);
   console.log(`  sessions:   ${describeUrl(REDIS_URL)}`);
+  console.log(`  data:       ${describePolicy()}`);
   console.log(`  traces:     ${TRACE_TO === "console" ? "console" : "logs/traces.jsonl"}`);
   const voiceBy = [GEMINI_API_KEY && `Gemini ${GEMINI_TRANSCRIBE_MODEL}`, GROQ_API_KEY && `Groq ${TRANSCRIBE_MODEL}`].filter(Boolean);
   console.log(`  voice:      ${voiceBy.length ? voiceBy.join(", then ") : "off (no GEMINI_API_KEY or GROQ_API_KEY)"}`);

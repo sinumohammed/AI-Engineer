@@ -18,7 +18,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { vectorSearch, countChunksContaining } from "../api/tools.js";
 import { retrieve, RERANK } from "../api/retrieve.js";
-import { RELEVANCE_THRESHOLD, DOCS_TABLE, EMBED_PROVIDER, DATABASE_IS_LOCAL } from "../api/config.js";
+import { RELEVANCE_THRESHOLD, DOCS_TABLE } from "../api/config.js";
+import { ingestPlan, MODEL_IS_LOCAL } from "../api/dataPolicy.js";
 import { direct, paraphrased, original, offTopic } from "./cases.js";
 
 // Phase 10: defaults to the table the app searches (DOCS_TABLE), and the full
@@ -91,9 +92,11 @@ const all = [
   ...(await runGroup("Paraphrased", paraphrased)),
   ...(await runGroup("Original sample docs", original)),
 ];
-// Phase 10: private documents are only in tables embedded by local Ollama.
-if (EMBED_PROVIDER === "gemini" || !DATABASE_IS_LOCAL) {
-  console.log(`\nPrivate docs: only in tables on this machine embedded here (scripts/ingest.js), skipped.`);
+// Phase 10: private documents are only in tables on this machine, and only a
+// local model may read them - the search hides them otherwise (dataPolicy.js).
+const confidential = ingestPlan().find((l) => l.level === "confidential");
+if (!confidential.allowed || !MODEL_IS_LOCAL) {
+  console.log(`\nPrivate docs: skipped - ${confidential.why ?? "the model is not local, so the search hides them"}.`);
 } else if (existsSync(PRIVATE_CASES)) {
   await runGroup("Private docs (not in git)", JSON.parse(readFileSync(PRIVATE_CASES, "utf-8")));
 } else {

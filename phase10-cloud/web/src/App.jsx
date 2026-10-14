@@ -67,7 +67,7 @@ function useStoredFlag(key, initial) {
 }
 
 export default function App({ themeMode, setThemeMode, isDark }) {
-  const { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice: voiceOnServer, attach, detach } = useChatSession();
+  const { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice: voiceOnServer, filesGoTo, attach, detach } = useChatSession();
   const { message } = AntApp.useApp();
   const screens = Grid.useBreakpoint();
   const wide = Boolean(screens.lg);
@@ -250,7 +250,7 @@ export default function App({ themeMode, setThemeMode, isDark }) {
               styles={{ input: { fontSize: compact ? 16 : 15 } }}
               suffix={(actions) => (
                 <div className="sender-actions">
-                  <AttachButton onPick={pickFile} disabled={Boolean(reading)} />
+                  <AttachButton onPick={pickFile} disabled={Boolean(reading)} filesGoTo={filesGoTo} />
                   {canSpeak && <MicButton onClick={voice.start} />}
                   {actions}
                 </div>
@@ -258,7 +258,7 @@ export default function App({ themeMode, setThemeMode, isDark }) {
               header={
                 (overriding || state.attachment || reading) && (
                   <div className="override">
-                    <AttachmentChip attachment={state.attachment} reading={reading} onRemove={detach} />
+                    <AttachmentChip attachment={state.attachment} reading={reading} onRemove={detach} filesGoTo={filesGoTo} />
                     {overriding && (
                       <Tag color="warning" closable onClose={() => setAgent("auto")}>
                         Asking {AGENT_LABELS[state.agent]} directly

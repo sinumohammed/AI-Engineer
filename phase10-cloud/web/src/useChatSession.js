@@ -174,6 +174,8 @@ export function useChatSession() {
   const [access, setAccess] = useState({ needed: false, wrong: false });
   // Phase 10 UI: whether the server can turn speech into text (GROQ_API_KEY).
   const [voice, setVoice] = useState(false);
+  // Phase 10 #3: the hosted services an attached file is sent to (null until known).
+  const [filesGoTo, setFilesGoTo] = useState(null);
 
   function loadSession() {
     fetch(`${API_BASE}/api/chat/session/${state.sessionId}`, { headers: codeHeaders() })
@@ -187,8 +189,9 @@ export function useChatSession() {
   async function checkAccess() {
     try {
       const r = await fetch(`${API_BASE}/api/access`, { headers: codeHeaders() });
-      const { ok, voice } = await r.json();
+      const { ok, voice, filesGoTo } = await r.json();
       setVoice(Boolean(voice));
+      setFilesGoTo(Array.isArray(filesGoTo) ? filesGoTo : null);
       return ok;
     } catch {
       return true; // unreachable API: let the normal connection error show
@@ -306,5 +309,5 @@ export function useChatSession() {
     dispatch({ type: "SET_AGENT", agent });
   }
 
-  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice, attach, detach };
+  return { state, ask, stop, newChat, setMode, setAgent, access, submitCode, voice, filesGoTo, attach, detach };
 }

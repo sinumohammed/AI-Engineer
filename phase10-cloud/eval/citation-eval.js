@@ -6,7 +6,7 @@
 // AGENT=multi runs the multi-agent supervisor instead of the single agent.
 import { existsSync, readFileSync } from "node:fs";
 import { direct, paraphrased, original } from "./cases.js";
-import { EMBED_PROVIDER, DATABASE_IS_LOCAL } from "../api/config.js";
+import { ingestPlan, MODEL_IS_LOCAL } from "../api/dataPolicy.js";
 
 const MULTI = process.env.AGENT === "multi";
 const { runAgent } = await import(MULTI ? "../api/supervisor.js" : "../api/agent.js");
@@ -49,6 +49,8 @@ console.log(`Citation eval - ${MULTI ? "multi-agent supervisor" : "single agent"
 if (wanted("direct")) await runGroup("Direct wording", direct);
 if (wanted("paraphrased")) await runGroup("Paraphrased", paraphrased);
 if (wanted("original")) await runGroup("Original sample docs", original);
-// Phase 10: private documents are only in tables embedded by local Ollama.
-if (EMBED_PROVIDER !== "gemini" && DATABASE_IS_LOCAL && existsSync(PRIVATE_CASES)) await runGroup("Private docs (not in git)", JSON.parse(readFileSync(PRIVATE_CASES, "utf-8")));
+// Phase 10: private documents are only in tables on this machine, and only a
+// local model may read them (dataPolicy.js).
+const privateAllowed = MODEL_IS_LOCAL && ingestPlan().find((l) => l.level === "confidential").allowed;
+if (privateAllowed && existsSync(PRIVATE_CASES)) await runGroup("Private docs (not in git)", JSON.parse(readFileSync(PRIVATE_CASES, "utf-8")));
 process.exit(0);

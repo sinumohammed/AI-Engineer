@@ -18,6 +18,7 @@ import { geminiText } from "./gemini.js";
 import { withRetry } from "./retry.js";
 import { chunkPages, embedChunks, searchFile, sharesTopicWords, contentWords } from "./fileSearch.js";
 import { GEMINI_API_KEY, GEMINI_VISION_MODEL } from "./config.js";
+import { GEMINI_FILES } from "./dataPolicy.js";
 
 export const MAX_CHARS = 12000;
 // A PDF page with fewer characters than this has no real text layer: scanned.
@@ -41,6 +42,9 @@ const READ_PROMPT =
 
 async function readWithGemini(buffer, mimeType) {
   if (!GEMINI_API_KEY) throw new AttachmentError("Reading photos and scanned PDFs needs GEMINI_API_KEY on the server.", 501);
+  // Phase 10 #3: files go to Gemini's free tier (human reviewers may read
+  // them) only where GEMINI_FILES allows - by default the live app only.
+  if (!GEMINI_FILES) throw new AttachmentError("Reading photos and scanned PDFs is off here, so files stay off Google's servers (GEMINI_FILES=1 turns it on).", 501);
   try {
     return await geminiText(GEMINI_VISION_MODEL, [{ text: READ_PROMPT }, { inlineData: { mimeType, data: Buffer.from(buffer).toString("base64") } }], { thinking: "low" });
   } catch (err) {
@@ -55,7 +59,8 @@ async function readWithGemini(buffer, mimeType) {
 // Step 2: a few sentences on what a long file is and where its parts are, so
 // "what is this document about?" works when the search only brings 4 chunks.
 // Written once at upload by Gemini (its free quota, not Groq's); without a
-// key, the start of the first page stands in.
+// key, or with GEMINI_FILES off (dataPolicy.js), the start of the first page
+// stands in.
 const OVERVIEW_PROMPT =
   "Below is the start of each page of a document. In at most 150 words, say what it is, who it is for, and its " +
   "main parts with their page numbers. Plain sentences, in the document's language. Output only the overview.";
@@ -67,7 +72,7 @@ const OVERVIEW_PAGE_CHARS = 1500;
 const OVERVIEW_INPUT_CHARS = 100000;
 async function overviewOf(pages) {
   const fallback = pages[0].replace(/\s+/g, " ").trim().slice(0, 800);
-  if (!GEMINI_API_KEY) return fallback;
+  if (!GEMINI_FILES) return fallback;
   const text = pages
     .map((t, i) => `--- Page ${i + 1} ---\n${t.trim().slice(0, OVERVIEW_PAGE_CHARS)}`)
     .join("\n\n")
