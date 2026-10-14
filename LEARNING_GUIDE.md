@@ -440,6 +440,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10b.12 | Date and time on every message | Small time under each message, full date on tap, "Today" / "Yesterday" dividers; stored with the history |
 | 10b.13 | Attach a PDF or a photo (step 1: short files) | Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source |
 | 10d.1 | Other apps can ask: `POST /api/ask`, JSON in and out, one key per app | Live: 9/9 (keys, bad requests, a question, a conversation); ~1.4 s a question after a ~6 s cold start |
+| 10d.2 | Long attachments: chunks searched per question, like the handbook | 59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s |
 
 - **Challenges, in plain terms:**
 
@@ -469,6 +470,10 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | Other languages | The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA" | Translated to English for the search and the judge only; the model answers the original, in the user's language |
 | Other apps asking | The API only spoke the web app's stream and its single access code | `POST /api/ask` with one key per app; each app's conversations kept apart; 100 questions a day per app, because every app spends the same free Groq quota as the web app |
 | An empty secret? | Vercel's edit box showed the new key as empty after saving | Normal: a Sensitive value is never shown again. The real problem was the name: saved as `eval` instead of `APP_API_KEYS`; `npx vercel env ls` shows the names |
+| A long file | Only the first ~12,000 characters were read: about 3 pages of a 59-page tax guide | Cut into page-labelled chunks at upload, embedded inside the function; each question gets the 4 best chunks and a short overview |
+| Which questions get a long file | "Two words in common with the file" matched almost any question for a 59-page file | Two of the file's topic words (on 5%+ of its chunks) in one chunk: 9/9 |
+| The router's rewording | The supervisor split and reworded questions, and the file was searched with the reworded part: the page with the answer dropped out (5/8) | Search the file with the user's own message: 8/8 |
+| A slow helper service | Gemini, asked for the overview, was overloaded all day; one upload waited 273 s, close to Vercel's 300 s limit | A time limit per try and less text to read; the upload goes on without the overview |
 | Two-part questions on gpt-oss | Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to `general` | Each part is searched on its own; a part the documents answer goes to company_docs |
 
 - **Learned:**
@@ -496,6 +501,18 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   ```
   The key stays on the app's server, never in browser code. `phase10-cloud/examples/ask-client.js`
   is the code to copy: one `fetch`, no packages. Not yet: attachments or streaming through it.
+- **Long attachments (10d.2):** the same RAG idea as the handbook (Step 5), but for one file and
+  inside the function, with no database:
+  ```
+  upload:    PDF pages -> chunks of ~1,200 characters, each with its page number
+             -> one vector per chunk (the same nomic model as the handbook) -> kept with the chat in Redis
+             + a short overview of the file (Gemini; the start of page 1 if Gemini is down)
+  question:  question vector vs every chunk + exact words and figures ("$1 million", "6.2%")
+             -> best 4 chunks, in page order -> one excerpt: overview + those pages -> the model cites the file
+  ```
+  A file that fits ~12,000 characters still goes in whole. Try it with
+  `phase10-cloud/eval/samples/irs-pub15-employers-tax-guide.pdf` (59 pages): "When do I have to start
+  withholding Additional Medicare Tax?" is answered from page 30.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -571,6 +588,10 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 60 | 10d.1 | Other apps could not use the agent: only the web app's stream and one shared access code | `POST /api/ask`: JSON in and out, one key per app, conversations per app | Mac 9/9, live 9/9; another app's key with the same conversation id saw nothing |
 | 61 | 10d.1 | A looping app could use up the free Groq quota the web app needs | A daily limit per app, counted in Redis | Limit 1: the second question got 429 with a clear message |
 | 62 | 10d.1 | Piped questions into the example client: the follow-up was lost | Read lines in order instead of asking one at a time | Both questions answered, the follow-up with the first one's context |
+| 63 | 10d.2 | A long PDF was read only to page 3 | Chunks, vectors and an overview at upload; the best 4 chunks per question | Fact reaches the model 4/8 to 8/8; ~1,260 tokens instead of up to 3,000 |
+| 64 | 10d.2 | Every later question got the long file | Two topic words of the file in one chunk, instead of two words anywhere | 9/9 (6 unrelated without, 3 tax questions with) |
+| 65 | 10d.2 | Supervisor searched the file with the router's reworded part | Search with the user's own message | 5/8 to 8/8 |
+| 66 | 10d.2 | Gemini overloaded: an upload waited 273 s | 20 s per try, 2 tries, only the start of each page; go on without it | Mac upload ~20 s; live 95 s (embedding on Vercel's CPU) |
 
 Where things stand (Phase 10 code):
 
@@ -587,6 +608,7 @@ Where things stand (Phase 10 code):
 | Citations: document answers that cite a source | 37/37 (single and multi-agent) | 32/33 single, 32/33 multi-agent (public only) |
 | Through the public URL, both modes | - | 12/12 |
 | `POST /api/ask` for other apps (keys, bad requests, a question, a conversation) | 9/9 | 9/9 |
+| Long attachment, 59 pages: fact reaches the model / answers single, multi / which questions get it | 8/8 / 8/8, 8/8 / 9/9 | 4/4 live questions right |
 
 ---
 
@@ -683,6 +705,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Judging cost and quality | `cd phase10-cloud/eval && npm run eval:judge` |
 | Questions in other languages | `cd phase10-cloud/eval && npm run eval:multilingual` |
 | Test the deployed app | `cd phase10-cloud/eval && npm run eval:public` |
+| Test a long attachment | `cd phase10-cloud/eval && npm run eval:long-file` (`ANSWERS=1` asks the agent too, `AGENT=multi` the supervisor) |
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
 | A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
@@ -729,6 +752,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `12cc872`, `28e86fc` | Phase 10: small talk skips search, rework requests |
 | `0675f45`, `400f491` | Phase 10d.1: `POST /api/ask` for other apps, deployed |
 | `fe6e3f6` | Phase 10d.1: example client for other apps |
+| `4ee670b`, `7ab27af` | Phase 10d.2: long attachments, deployed |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

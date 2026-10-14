@@ -841,6 +841,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10b.12</td><td>Date and time on every message</td><td class="res">Small time under each message, full date on tap, "Today" / "Yesterday" dividers</td></tr>
                 <tr><td class="n">10b.13</td><td>Attach a PDF or a photo (step 1: short files)</td><td class="res">Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source</td></tr>
                 <tr><td class="n">10d.1</td><td>Other apps can ask: <code>POST /api/ask</code>, JSON in and out, one key per app</td><td class="res">Live: 9/9 (keys, bad requests, a question, a conversation); about 1.4 s a question after a 6 s cold start</td></tr>
+                <tr><td class="n">10d.2</td><td>Long attachments: chunks searched per question, like the handbook</td><td class="res">59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s</td></tr>
               </tbody>
             </table>
           </div>
@@ -872,6 +873,10 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td>Other languages</td><td>The handbook and the embedding model are English: a Malayalam question found its passage only when it named "FMLA"</td><td class="res">Translated to English for the search and the judge only; the model answers the original, in the user's language</td></tr>
                 <tr><td>Other apps asking</td><td>The API only spoke the web app's stream and its single access code</td><td class="res"><code>POST /api/ask</code> with one key per app; each app's conversations kept apart; 100 questions a day per app, because every app spends the same free Groq quota as the web app</td></tr>
                 <tr><td>An empty secret?</td><td>Vercel's edit box showed the new key as empty after saving</td><td class="res">Normal: a Sensitive value is never shown again. The real problem was the name, <code>eval</code> instead of <code>APP_API_KEYS</code>; <code>npx vercel env ls</code> shows the names</td></tr>
+                <tr><td>A long file</td><td>Only the first ~12,000 characters were read: about 3 pages of a 59-page tax guide</td><td class="res">Cut into page-labelled chunks at upload, embedded inside the function; each question gets the best 4 chunks and a short overview</td></tr>
+                <tr><td>Which questions get a long file</td><td>"Two words in common with the file" matched almost any question for a 59-page file</td><td class="res">Two of the file's topic words (on 5% or more of its chunks) in one chunk: 9/9</td></tr>
+                <tr><td>The router's rewording</td><td>The supervisor split and reworded questions, and the file was searched with the reworded part: the page with the answer dropped out (5/8)</td><td class="res">Search the file with the user's own message: 8/8</td></tr>
+                <tr><td>A slow helper service</td><td>Gemini, asked for the overview, was overloaded all day; one upload waited 273 s, close to Vercel's 300 s limit</td><td class="res">A time limit per try and less text to read; the upload goes on without the overview</td></tr>
                 <tr><td>Two-part questions on gpt-oss</td><td>Both gpt-oss models split "How are rollbacks done, and how do I list git tags?" correctly, then sent the rollback part to <code>general</code></td><td class="res">Each part searched on its own; a part the documents answer goes to company_docs</td></tr>
               </tbody>
             </table>
@@ -910,6 +915,51 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               </svg>
             </div>
             <figcaption>Step 10d.1. The web app keeps its stream and access code; other apps get one request and one JSON answer, each with its own key, its own conversations and its own daily limit. <code>phase10-cloud/examples/ask-client.js</code> is the code to copy into that app's backend.</figcaption>
+          </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 250" role="img" aria-label="Upload: the PDF's pages are cut into chunks of about 1,200 characters, each with its page number; each chunk gets a vector from the same model as the handbook, inside the function; chunks and vectors are kept with the chat in Redis, with a short overview from Gemini. Question: the question's vector is compared with every chunk, together with exact words and figures; the best 4 chunks and the overview go to the model, which cites the file and its pages.">
+                <defs><marker id="a11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">UPLOAD · ONCE PER FILE</text>
+                <rect class="b" x="20" y="34" width="150" height="50" rx="6"/>
+                <text class="t" x="95" y="55" text-anchor="middle">PDF</text>
+                <text class="s" x="95" y="72" text-anchor="middle">59 pages, 300,000 chars</text>
+                <line class="ln" x1="170" y1="59" x2="199" y2="59" marker-end="url(#a11)"/>
+                <rect class="b" x="200" y="34" width="150" height="50" rx="6"/>
+                <text class="t" x="275" y="55" text-anchor="middle">312 chunks</text>
+                <text class="s" x="275" y="72" text-anchor="middle">~1,200 chars, one page each</text>
+                <line class="ln" x1="350" y1="59" x2="379" y2="59" marker-end="url(#a11)"/>
+                <rect class="b" x="380" y="34" width="150" height="50" rx="6"/>
+                <text class="t" x="455" y="55" text-anchor="middle">A vector each</text>
+                <text class="s" x="455" y="72" text-anchor="middle">nomic, inside the function</text>
+                <line class="ln" x1="530" y1="59" x2="559" y2="59" marker-end="url(#a11)"/>
+                <rect class="ba" x="560" y="34" width="140" height="50" rx="6"/>
+                <text class="t" x="630" y="55" text-anchor="middle">Redis</text>
+                <text class="s" x="630" y="72" text-anchor="middle">with the chat, 660 KB</text>
+                <rect class="bw" x="380" y="98" width="150" height="34" rx="6"/>
+                <text class="s" x="455" y="119" text-anchor="middle">+ overview (Gemini)</text>
+                <path class="ln" d="M530,115 H630 V85" marker-end="url(#a11)"/>
+
+                <text class="k" x="20" y="164">QUESTION · EVERY TIME</text>
+                <rect class="b" x="20" y="176" width="150" height="50" rx="6"/>
+                <text class="t" x="95" y="205" text-anchor="middle">Question</text>
+                <line class="ln" x1="170" y1="201" x2="199" y2="201" marker-end="url(#a11)"/>
+                <rect class="b" x="200" y="176" width="150" height="50" rx="6"/>
+                <text class="t" x="275" y="197" text-anchor="middle">Match all chunks</text>
+                <text class="s" x="275" y="214" text-anchor="middle">vectors + exact figures</text>
+                <line class="ln" x1="350" y1="201" x2="379" y2="201" marker-end="url(#a11)"/>
+                <rect class="ba" x="380" y="176" width="150" height="50" rx="6"/>
+                <text class="t" x="455" y="197" text-anchor="middle">Best 4 + overview</text>
+                <text class="s" x="455" y="214" text-anchor="middle">~1,260 tokens</text>
+                <line class="ln" x1="530" y1="201" x2="559" y2="201" marker-end="url(#a11)"/>
+                <rect class="b" x="560" y="176" width="140" height="50" rx="6"/>
+                <text class="t" x="630" y="197" text-anchor="middle">Model answers</text>
+                <text class="s" x="630" y="214" text-anchor="middle">cites the file, pages</text>
+                <path class="ln" style="stroke-dasharray: 4 4" d="M680,85 V152 H275 V175" marker-end="url(#a11)"/>
+                <text class="s" x="610" y="146" text-anchor="middle">stored chunks</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.2. The handbook's RAG (step 5), for one file and with no database: a few hundred vectors are compared in about a millisecond. A file that fits about 12,000 characters still goes to the model whole.</figcaption>
           </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
@@ -998,6 +1048,10 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">60</td><td class="n">10d.1</td><td>Other apps could not use the agent: only the web app's stream and one shared access code</td><td><code>POST /api/ask</code>: JSON in and out, one key per app, conversations per app</td><td class="res">Mac 9/9, live 9/9; another app's key with the same conversation id saw nothing</td></tr>
             <tr><td class="n">61</td><td class="n">10d.1</td><td>A looping app could use up the free Groq quota the web app needs</td><td>A daily limit per app, counted in Redis</td><td class="res">Limit 1: the second question got 429 with a clear message</td></tr>
             <tr><td class="n">62</td><td class="n">10d.1</td><td>Piped questions into the example client: the follow-up was lost</td><td>Read lines in order instead of asking one at a time</td><td class="res">Both answered, the follow-up with the first one's context</td></tr>
+            <tr><td class="n">63</td><td class="n">10d.2</td><td>A long PDF was read only to page 3</td><td>Chunks, vectors and an overview at upload; the best 4 chunks per question</td><td class="res">Fact reaches the model 4/8 to 8/8; ~1,260 tokens instead of up to 3,000</td></tr>
+            <tr><td class="n">64</td><td class="n">10d.2</td><td>Every later question got the long file</td><td>Two topic words of the file in one chunk, instead of two words anywhere</td><td class="res">9/9</td></tr>
+            <tr><td class="n">65</td><td class="n">10d.2</td><td>Supervisor searched the file with the router's reworded part</td><td>Search with the user's own message</td><td class="res">5/8 to 8/8</td></tr>
+            <tr><td class="n">66</td><td class="n">10d.2</td><td>Gemini overloaded: an upload waited 273 s</td><td>20 s per try, 2 tries, only the start of each page; go on without it</td><td class="res">Mac upload ~20 s; live 95 s</td></tr>
           </tbody>
         </table>
       </div>
@@ -1017,6 +1071,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Document answers that cite a source</td><td class="n">37/37</td><td class="n">32/33 public, single and multi-agent</td></tr>
             <tr><td>Through the public URL, both modes</td><td class="n">-</td><td class="n">12/12</td></tr>
             <tr><td><code>POST /api/ask</code> for other apps (keys, bad requests, a question, a conversation)</td><td class="n">9/9</td><td class="n">9/9</td></tr>
+            <tr><td>Long attachment, 59 pages: fact found / answers single, multi / which questions get it</td><td class="n">8/8 / 8/8, 8/8 / 9/9</td><td class="n">4/4 live</td></tr>
           </tbody>
         </table>
       </div>
@@ -1086,6 +1141,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Judging cost and quality</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:judge</code></td></tr>
             <tr><td>Questions in other languages</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:multilingual</code></td></tr>
             <tr><td>Test the deployed app</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:public</code></td></tr>
+            <tr><td>Test a long attachment</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:long-file</code> (<code>ANSWERS=1</code> asks the agent too)</td></tr>
             <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
