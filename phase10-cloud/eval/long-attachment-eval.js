@@ -7,6 +7,7 @@
 //   2. which questions get the file: unrelated questions must not
 //   3. answers (ANSWERS=1): the agent answers from the file
 //      (AGENT=multi for the supervisor; ONLY=<text> runs matching cases)
+//   4. (with ANSWERS=1) a short file is still cited as itself
 //
 // Embeddings come from EMBED_PROVIDER in .env (Ollama on the Mac). Part 3
 // costs model quota; parts 1-2 do not.
@@ -105,5 +106,19 @@ if (process.env.ANSWERS === "1") {
     if (!ok) console.log(`     ${answer.slice(0, 300).replace(/\n/g, " ")}`);
   }
   console.log(`   ${passed}/${asked} answered`);
+
+  // A short file still goes in whole, and is cited as itself. Found
+  // 2026-10-14: with no handbook match the file is excerpt [1], and qwen cited
+  // its heading "3. Hotels" as [3], so no source was listed (citations.js).
+  console.log(`\n4. Short file (travel-policy.pdf): answer and its source (${multi ? "supervisor" : "single agent"})`);
+  const short = await readAttachment(readFileSync(new URL("./samples/travel-policy.pdf", import.meta.url)), "application/pdf", "travel-policy.pdf");
+  let cited = 0;
+  for (let i = 0; i < 3; i++) {
+    const { answer, sources } = await (multi ? runMultiAgent : runAgent)("What is the hotel limit in Paris?", [], { attachment: short });
+    const ok = answer.includes("220") && sources.some((s) => s.source === "travel-policy.pdf");
+    cited += ok;
+    console.log(`${ok ? "✅" : "❌"} ${answer.slice(0, 90).replace(/\n/g, " ")} | sources: ${sources.map((s) => `[${s.n}] ${s.source}`).join(", ") || "none"}`);
+  }
+  console.log(`   ${cited}/3 cite the file`);
 }
 process.exit(0);

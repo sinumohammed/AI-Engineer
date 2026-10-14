@@ -336,7 +336,8 @@ Original picks (Windows laptop):
      - Needed from the user to start: which app, its endpoints or OpenAPI file, how it authenticates, 3-5 example questions (they become the eval).
   - **Order agreed 2026-10-13:** #1 → #3 → #4 → #5.
   5. **A WhatsApp or Telegram channel** for the same agent.
-  - Small known issues: with a short PDF and no handbook excerpt, qwen cites the PDF's heading number ("3. Hotels" -> [3]) instead of [1], so no source is listed (seen 2026-10-14, before and after step 10d.2); when the attachment and the handbook both answer, the synthesizer can put a handbook number on a fact from the file; an answer about a scanned file once called it "the company's internal document"; this Mac's DNS sometimes fails for `api.groq.com` only (local runs; check with `--resolve` and an IP from 8.8.8.8).
+  - ✅ Fixed 2026-10-14: with a short PDF and no handbook excerpt, qwen cited the PDF's heading number ("3. Hotels" -> [3]) instead of [1], so no source was listed - now a number that matches no excerpt becomes the file's, in code (`fixFileCitations`); 0/3 to 3/3 both modes.
+- Small known issues: when the attachment and the handbook both answer, the synthesizer can put a handbook number on a fact from the file; an answer about a scanned file once called it "the company's internal document"; this Mac's DNS sometimes fails for `api.groq.com` only (local runs; check with `--resolve` and an IP from 8.8.8.8).
 
 - **Moved to Mac** (2026-09-30)
   Cloned from GitHub onto an M1 Max. Installed Node v24 (in `~/.local`), Ollama, Docker Desktop; Postgres+pgvector (`phase5-rag`) and Redis (`phase6-ui`) running via `docker compose up -d`; docs re-ingested; `phase5-rag/.env` recreated (gitignored - `npm start` in `phase6-ui/server` and `npm run agent-a` fail without it, since they use `node --env-file`).

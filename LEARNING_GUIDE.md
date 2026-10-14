@@ -592,6 +592,7 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 64 | 10d.2 | Every later question got the long file | Two topic words of the file in one chunk, instead of two words anywhere | 9/9 (6 unrelated without, 3 tax questions with) |
 | 65 | 10d.2 | Supervisor searched the file with the router's reworded part | Search with the user's own message | 5/8 to 8/8 |
 | 66 | 10d.2 | Gemini overloaded: an upload waited 273 s | 20 s per try, 2 tries, only the start of each page; go on without it | Mac upload ~20 s; live 95 s (embedding on Vercel's CPU) |
+| 67 | 10d.2 | A short PDF's heading "3. Hotels" cited as [3] when the file was excerpt [1]: no source shown (row 56's fix had stopped holding) | In code: a number that matches no excerpt becomes the file's | 0/3 to 3/3, both modes; handbook citations unchanged |
 
 Where things stand (Phase 10 code):
 

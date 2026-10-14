@@ -636,6 +636,12 @@ Found while building it, each first reproduced:
 - 95 s is long to wait, and 400 chunks (the cap) would be ~2 minutes - under
   Vercel's 300 s, but a next step could cut it: fewer, larger chunks, or
   embedding in the background while the chat goes on.
-- Not from this step: with the short travel policy and no handbook excerpt,
-  qwen cites "[3]" (the PDF's heading "3. Hotels") instead of [1], so no source
-  is listed. Same before and after this change.
+- Not from this step, fixed right after it (2026-10-14): with the short travel
+  policy and no handbook excerpt, qwen cited "[3]" - the PDF's heading "3.
+  Hotels" - instead of [1], so no source was listed, 3 runs out of 3, before
+  and after 10d.2. The prompt already said heading numbers are not excerpt
+  numbers. Now `fixFileCitations` (citations.js) turns a number that matches
+  no excerpt into the file's, when a file is attached: only the file has
+  numbered headings of its own. 0/3 to 3/3 in both modes (`ANSWERS=1 npm run
+  eval:long-file`, part 4); the same file cited by two parts of a split
+  question is listed once. Citation eval unchanged: 37/37, 32/37, 0.

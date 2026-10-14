@@ -160,12 +160,13 @@ export async function readAttachment(buffer, contentType, name) {
 export async function attachmentChunk(att, question) {
   const what = att.kind === "image" ? "photo - its visible text and a description" : `${att.pages}-page PDF`;
   if (!att.long) {
-    return { source: att.name, content: `Attached file: ${att.name}\n(${what}${att.truncated ? `, first ${att.pagesRead} pages only` : ""})\n${att.text}` };
+    return { source: att.name, file: true, content: `Attached file: ${att.name}\n(${what}${att.truncated ? `, first ${att.pagesRead} pages only` : ""})\n${att.text}` };
   }
   const parts = await searchFile(att, question);
   const limit = att.truncated ? `; only pages 1-${att.pagesRead} were read` : "";
   return {
     source: att.name,
+    file: true,
     pages: parts.map((c) => c.page),
     content:
       // The first line becomes the source label under the answer (citations.js).

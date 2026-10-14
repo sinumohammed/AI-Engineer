@@ -188,8 +188,10 @@ export async function runAgent(
   const fromCompanyDocs = steps.some((s) => s.agent === "company_docs" && s.meta.isRelevant);
   // Phase 9.6: the document excerpts the answer cited. Only company_docs
   // cites; with two company_docs tasks their numbers can overlap - rare, and
-  // left as a known limitation.
-  const sources = steps.flatMap((s) => s.sources ?? []);
+  // left as a known limitation. The same excerpt cited by two tasks (a
+  // question split into two parts about one attached file) is listed once.
+  const seen = new Set();
+  const sources = steps.flatMap((s) => s.sources ?? []).filter((src) => !seen.has(`${src.source}\n${src.text}`) && seen.add(`${src.source}\n${src.text}`));
 
   return { answer, usage, trace, fromCompanyDocs, sources };
 }

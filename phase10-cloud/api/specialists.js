@@ -9,7 +9,7 @@
 // The LangGraph supervisor calls prepare() and makes the model call itself
 // through ChatOllama, so the prompts and retrieval stay identical.
 import { retrieve, POINTS_BACK } from "./retrieve.js";
-import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
+import { CITE_INSTRUCTION, numberedExcerpts, citedSources, fixFileCitations } from "./citations.js";
 import { chat, SPECIALIST_MODEL } from "./llm.js";
 import { replyLanguageRule } from "./replyLanguage.js";
 import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
@@ -235,12 +235,14 @@ export async function runSpecialist(name, question, history = [], summary, userM
     label: name,
     messages: specialistMessages(prep.systemContent, question, historyFor(name, hideOtherFileAnswers(history, attachment)), summary, userMessage),
   });
+  // A file heading cited as a number becomes the file's number (citations.js).
+  const answer = prep.chunks ? fixFileCitations(res.content, prep.chunks) : res.content;
   return {
-    answer: res.content,
+    answer,
     llmCalls: 1,
     promptTokens: res.promptTokens,
     completionTokens: res.completionTokens,
     meta: prep.meta,
-    sources: sourcesFor(prep, res.content),
+    sources: sourcesFor(prep, answer),
   };
 }

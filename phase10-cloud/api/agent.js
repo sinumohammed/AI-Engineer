@@ -7,7 +7,7 @@ import { logTrace } from "./tracer.js";
 import { chat } from "./llmClient.js";
 import { retrieve, standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
-import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
+import { CITE_INSTRUCTION, numberedExcerpts, citedSources, fixFileCitations } from "./citations.js";
 import { replyLanguageRule } from "./replyLanguage.js";
 import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
 
@@ -265,9 +265,11 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       // fromCompanyDocs: this answer was written with a document excerpt in
       // the prompt. Stored with the turn so the multi-agent specialists
       // that cannot see documents are not shown it later (Phase 8c).
-      // sources (Phase 9.6): the excerpts the answer cited by number.
-      const sources = citable.length ? citedSources(msg.content, citable) : [];
-      return { answer: msg.content, usage, fromCompanyDocs: isRelevant, sources };
+      // sources (Phase 9.6): the excerpts the answer cited by number - after
+      // a file heading cited as a number is turned into the file's (citations.js).
+      const answer = fixFileCitations(msg.content, citable);
+      const sources = citable.length ? citedSources(answer, citable) : [];
+      return { answer, usage, fromCompanyDocs: isRelevant, sources };
     }
 
     msg.tool_calls = toolCalls;

@@ -26,6 +26,22 @@ function sectionLabel(chunk) {
   return chunk.source.split("/").pop().replace(/\.(md|txt)$/, "");
 }
 
+// Phase 10: a citation number no excerpt has, in an answer that had the
+// attached file as an excerpt, is the file's. Found 2026-10-14: with the
+// travel policy as the only excerpt [1] and no handbook match, qwen answered
+// "220 euros per night [3]" - "3. Hotels" is the PDF's own heading - so no
+// source was listed, on every run. The prompt already said section numbers
+// inside the file are not excerpt numbers (attachmentNote); a prompt is
+// advice, so this is decided in code. Only the file has numbered headings of
+// its own, so a number outside the excerpt list can only have come from it.
+export function fixFileCitations(answer, chunks) {
+  const fileN = chunks.findIndex((c) => c.file) + 1;
+  if (!fileN) return answer;
+  return answer
+    .replace(/\[(\d+)\]/g, (m, n) => (Number(n) >= 1 && Number(n) <= chunks.length ? m : `[${fileN}]`))
+    .replace(new RegExp(`(\\[${fileN}\\])(\\s*\\[${fileN}\\])+`, "g"), "$1");
+}
+
 // The excerpts an answer cited, in the order of their numbers.
 export function citedSources(answer, chunks) {
   const numbers = new Set([...answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
