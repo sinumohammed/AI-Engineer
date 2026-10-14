@@ -8,7 +8,7 @@
 //   runSpecialist()   -> prepare + the hand-rolled model call (llm.js)
 // The LangGraph supervisor calls prepare() and makes the model call itself
 // through ChatOllama, so the prompts and retrieval stay identical.
-import { retrieve } from "./retrieve.js";
+import { retrieve, POINTS_BACK } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources } from "./citations.js";
 import { chat, SPECIALIST_MODEL } from "./llm.js";
 import { replyLanguageRule } from "./replyLanguage.js";
@@ -157,11 +157,20 @@ export const specialists = {
     description:
       "Questions about the file the user attached to this chat (a PDF or a photo): what it says, summaries, " +
       "totals, dates or other facts in it. Only when a file is attached.",
-    prepare: async (question, { attachment } = {}) => {
+    prepare: async (question, { attachment, userMessage = question } = {}) => {
       if (!attachment) {
         return { answer: "There is no file attached to this chat. Use the paperclip next to the message box to attach a PDF or a photo.", meta: {} };
       }
-      const chunk = attachmentChunk(attachment);
+      // A long file is searched with the user's own message, not the router's
+      // part: split from "What is the FUTA tax rate for 2026, and on how much
+      // of each employee's wages?", the part "On how much of each employee's
+      // wages?" found the social security pages, not FUTA's; reworded as
+      // "This document explains when to start withholding Additional Medicare
+      // Tax.", the page with the $200,000 threshold dropped out. Only a
+      // message pointing back ("and for that?") adds the router's wording,
+      // which names what it points to.
+      const searchWith = question !== userMessage && POINTS_BACK.test(userMessage) ? `${userMessage}\n${question}` : userMessage;
+      const chunk = await attachmentChunk(attachment, searchWith);
       return {
         systemContent:
           "You are a helpful assistant answering questions about a file the user attached. Answer from the file only. " +
@@ -217,7 +226,7 @@ export function specialistMessages(systemContent, question, history, summary, us
 // any of them without special cases.
 // `attachment`: the file attached to this chat, if any (attachments.js).
 export async function runSpecialist(name, question, history = [], summary, userMessage = question, attachment = null) {
-  const prep = await specialists[name].prepare(question, { attachment });
+  const prep = await specialists[name].prepare(question, { attachment, userMessage });
   if (prep.answer !== undefined) {
     return { answer: prep.answer, llmCalls: 0, promptTokens: 0, completionTokens: 0, meta: prep.meta, sources: [] };
   }

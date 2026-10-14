@@ -183,8 +183,10 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   if (!smallTalk) onToolResult?.("search_company_docs", docResults, { outcome, bestDistance });
 
   // Phase 10, attachments: the attached file is one more numbered excerpt,
-  // after the handbook's, so a fact from it is cited as the file.
-  const fileChunk = attachment ? attachmentChunk(attachment) : null;
+  // after the handbook's, so a fact from it is cited as the file. A long file
+  // is searched with the same question as the handbook (in English if it was
+  // translated).
+  const fileChunk = attachment ? await attachmentChunk(attachment, retrieval.searchedAs ?? searchQuery) : null;
   const citable = [...(isRelevant ? docResults : []), ...(fileChunk ? [fileChunk] : [])];
 
   let systemContent;

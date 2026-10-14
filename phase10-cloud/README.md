@@ -64,6 +64,7 @@ From `eval/`:
 | `npm run eval:reply-language` | is the answer in the question's language (`ONLY=Malayalam`, `MODES=multi` to save Groq quota) |
 | `npm run eval:judge` | relevance judging: tokens per question and quality |
 | `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
+| `npm run eval:long-file` | a 59-page PDF attachment: does the right page reach the prompt, which later questions get the file; `ANSWERS=1` also asks the agent (`AGENT=multi` for the supervisor) |
 | `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
 
 `eval:supervisor` takes `ROUTING_ONLY=1` (routing cases only) or `SKIP_ROUTING=1`.
@@ -511,9 +512,10 @@ All deployed. Details and measurements in `ROADMAP.md` (Phase 10) and the learni
 | Message timestamps | `sessionStore.js` (`at` on each turn), `web/src/time.js` | - |
 | Attachments, step 1: `POST /api/attachments?sessionId=` (raw file, `x-file-name` header), `DELETE` to remove | `attachments.js`, `gemini.js`, the `attachment` specialist | `GEMINI_API_KEY` for photos and scanned PDFs, `GEMINI_VISION_MODEL` |
 
-Attachments: one file per chat (a new one replaces it); at most ~12,000 characters
-of its text go into the prompt; the file goes with the message it was attached to,
-then only with follow-ups that look related. Searching inside long files is step 2.
+Attachments: one file per chat (a new one replaces it); the file goes with the
+message it was attached to, then only with follow-ups that look related. A file
+whose text fits ~12,000 characters goes into the prompt whole; a longer one is
+searched per question (step 10d.2).
 
 
 ### 10d.1 JSON `/api/ask` for other apps (2026-10-13)
@@ -574,3 +576,58 @@ answered with sources; `APP_DAILY_LIMIT=1` gave 429 on the second question; with
 `ACCESS_CODE` set, the access code does not open `/api/ask` and an app key does
 not open the web app's routes. Live (Groq): `eval:ask` 9/9 - a cold start ~6 s,
 then ~1.4 s a question.
+
+### 10d.2 Long attachments (2026-10-14)
+
+Step 1 put a file's whole text in the prompt, cut at ~12,000 characters - about
+3 pages of a dense PDF, because Groq's free tier allows 8,000 tokens a minute.
+Now a longer file is searched per question, like the handbook but inside the
+function (`api/fileSearch.js`):
+
+```
+upload:    pages -> chunks of ~1,200 characters (never across a page, so each has one page number)
+           -> one vector per chunk (the handbook's embedding model, embed.js) -> Redis, with the chat
+           + a short overview by Gemini (what the file is, its parts with page numbers)
+question:  the question's vector against every chunk + exact words and figures ("$1 million", "6.2%")
+           -> the best 4 chunks, in page order -> one excerpt: overview + those pages
+```
+
+| Part | Where | Notes |
+|---|---|---|
+| Chunks, vectors, search | `fileSearch.js` | in-process cosine + keyword match, merged by rank (RRF) as in `tools.js`; vectors stored as int8 (768 bytes a chunk) |
+| Long or short | `attachments.js` (`readAttachment`, `attachmentChunk`) | under ~12,000 characters: unchanged (whole text); text PDFs and long scans (Gemini's transcript, split at its page lines) |
+| Overview | `attachments.js` (`overviewOf`) | Gemini, the first 1,500 characters of each page, 20 s a try, 2 tries; without Gemini, the start of page 1 |
+| Which later questions get the file | `fileSearch.js` (`sharesTopicWords`) | two of the file's topic words (on 5%+ of its chunks) in one chunk |
+| Search words in the supervisor | `specialists.js` (attachment) | the user's own message, not the router's rewording |
+
+Limits: at most 400 chunks (~480,000 characters, ~100 dense pages); past that,
+the later pages are not read and the chip says so. Upload is the existing 4 MB.
+
+**Measured** (`npm run eval:long-file`, IRS Publication 15, 59 pages, 312 chunks):
+
+| | Result |
+|---|---|
+| Fact on the right page reaches the prompt | 8/8 (step 1: 4/8, only facts repeated in "What's New" on page 2) |
+| Later questions: 6 handbook/general ones without the file, 3 tax ones with it | 9/9 |
+| Answers on the Mac (qwen3-coder), single agent / supervisor | 8/8 / 8/8 |
+| Prompt size for the file | ~1,260 tokens (step 1: up to ~3,000) |
+| Upload, Mac (Ollama embeddings) | ~20-23 s; 660 KB kept in Redis |
+| Regression evals on the Mac (single, supervisor) | 10/10, 10/10 |
+
+Found while building it, each first reproduced:
+- "Any two words of the question in the file" sent every question to a 59-page
+  file. Rare words only (on <15% of chunks) missed "What is the social security
+  wage base?"; any two words in one chunk let in "How much paid parental leave
+  do I get?". Two topic words in one chunk got all 9 right.
+- The supervisor's router splits and rewords questions. The attachment
+  specialist searched with "On how much of each employee's wages?" (FUTA
+  dropped) and "This document explains when to start withholding Additional
+  Medicare Tax." (the page with $200,000 dropped out): 5/8. Searching with the
+  user's own message: 8/8.
+- Gemini answered 503 "high demand" all day (2026-10-14). With the whole
+  300,000 characters and retries, one upload waited 273 s, near Vercel's 300 s
+  limit. Now only the start of each page goes to Gemini, with a 20 s limit per
+  try, and the upload goes on without it.
+- Not from this step: with the short travel policy and no handbook excerpt,
+  qwen cites "[3]" (the PDF's heading "3. Hotels") instead of [1], so no source
+  is listed. Same before and after this change.

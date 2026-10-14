@@ -10,6 +10,7 @@
     "eval:judge": "node --env-file=../.env judge-cost.js",
     "eval:public": "node --env-file=../.env public-url.js",
     "eval:ask": "node --env-file=../.env api-ask.js",
+    "eval:long-file": "node --env-file=../.env long-attachment-eval.js",
     "eval:citations": "node --env-file=../.env citation-eval.js",
     "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js",
     "eval:multilingual": "node --env-file=../.env multilingual-eval.js",
