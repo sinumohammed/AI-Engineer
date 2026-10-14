@@ -842,6 +842,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10b.13</td><td>Attach a PDF or a photo (step 1: short files)</td><td class="res">Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source</td></tr>
                 <tr><td class="n">10d.1</td><td>Other apps can ask: <code>POST /api/ask</code>, JSON in and out, one key per app</td><td class="res">Live: 9/9 (keys, bad requests, a question, a conversation); about 1.4 s a question after a 6 s cold start</td></tr>
                 <tr><td class="n">10d.2</td><td>Long attachments: chunks searched per question, like the handbook</td><td class="res">59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s</td></tr>
+                <tr><td class="n">10d.3</td><td>Which documents may go to which services: public, internal, confidential</td><td class="res">Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota</td></tr>
               </tbody>
             </table>
           </div>
@@ -961,6 +962,42 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.2. The handbook's RAG (step 5), for one file and with no database: a few hundred vectors are compared in about a millisecond. A file that fits about 12,000 characters still goes to the model whole.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 260" role="img" aria-label="Search: a question goes to the search, which checks whether the model is local. With a local model every level of document can be returned; with a hosted model the confidential chunks are left out in the SQL itself. Attached file: a PDF or photo goes through the GEMINI_FILES setting, on by default on Vercel only. On: Gemini reads photos and scans and writes the overview. Off: only PDFs with text are read, on the server itself.">
+                <defs><marker id="a12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">QUESTION · EVERY SEARCH</text>
+                <rect class="b" x="20" y="44" width="150" height="50" rx="6"/>
+                <text class="t" x="95" y="73" text-anchor="middle">Question</text>
+                <line class="ln" x1="170" y1="69" x2="199" y2="69" marker-end="url(#a12)"/>
+                <rect class="b" x="200" y="44" width="150" height="50" rx="6"/>
+                <text class="t" x="275" y="65" text-anchor="middle">Search</text>
+                <text class="s" x="275" y="82" text-anchor="middle">is the model local?</text>
+                <path class="ln" d="M350,69 H375 V51 H399" marker-end="url(#a12)"/>
+                <path class="ln" d="M375,69 V95 H399" marker-end="url(#a12)"/>
+                <rect class="ba" x="400" y="34" width="300" height="34" rx="6"/>
+                <text class="t" x="550" y="56" text-anchor="middle">Local: every level</text>
+                <rect class="bw" x="400" y="78" width="300" height="34" rx="6"/>
+                <text class="t" x="550" y="100" text-anchor="middle">Hosted: no confidential chunks</text>
+
+                <text class="k" x="20" y="150">ATTACHED FILE · AT UPLOAD</text>
+                <rect class="b" x="20" y="172" width="150" height="50" rx="6"/>
+                <text class="t" x="95" y="193" text-anchor="middle">PDF or photo</text>
+                <text class="s" x="95" y="210" text-anchor="middle">attached to a chat</text>
+                <line class="ln" x1="170" y1="197" x2="199" y2="197" marker-end="url(#a12)"/>
+                <rect class="b" x="200" y="172" width="150" height="50" rx="6"/>
+                <text class="m" x="275" y="193" text-anchor="middle">GEMINI_FILES</text>
+                <text class="s" x="275" y="210" text-anchor="middle">default: Vercel only</text>
+                <path class="ln" d="M350,197 H375 V179 H399" marker-end="url(#a12)"/>
+                <path class="ln" d="M375,197 V223 H399" marker-end="url(#a12)"/>
+                <rect class="ba" x="400" y="162" width="300" height="34" rx="6"/>
+                <text class="t" x="550" y="184" text-anchor="middle">On: Gemini reads photos, scans</text>
+                <rect class="bw" x="400" y="206" width="300" height="34" rx="6"/>
+                <text class="t" x="550" y="228" text-anchor="middle">Off: text PDFs only, read here</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.3. Three levels: public (<code>phase5-rag/docs</code>, anywhere), internal (<code>phase10-cloud/docs-internal</code>: Neon and Groq, never Gemini), confidential (<code>phase5-rag/docs-private</code>: this Mac and local models only). Decided in code (<code>api/dataPolicy.js</code>) from the settings. Groq keeps no prompts by default; Gemini's free tier may let human reviewers read them. The attach button says where a file goes before you upload it.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -970,6 +1007,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Make silent failures loud: a wrong password, mixed embedding models and a dropped connection all looked normal until checks were added.</li>
               <li>Real use finds what evals miss: "tell that in Malayalam" and "hi" were never in a test; both came from using the live app, and both are tests now.</li>
               <li>A fallback must cover every model call, not only the answer: the judging step had none, so one used-up limit stopped every question.</li>
+              <li>Where data is stored and where it is sent are different rules: private documents were never stored on a hosted database, yet a hosted model read their excerpts whenever it answered on the Mac.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
 npm run eval:public</pre><button type="button">Copy</button></div> Asked the way another app asks: <div class="cmd"><pre>cd phase10-cloud/examples
@@ -1053,6 +1091,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">65</td><td class="n">10d.2</td><td>Supervisor searched the file with the router's reworded part</td><td>Search with the user's own message</td><td class="res">5/8 to 8/8</td></tr>
             <tr><td class="n">66</td><td class="n">10d.2</td><td>Gemini overloaded: an upload waited 273 s</td><td>20 s per try, 2 tries, only the start of each page; go on without it</td><td class="res">Mac upload ~20 s; live 95 s</td></tr>
             <tr><td class="n">67</td><td class="n">10d.2</td><td>A short PDF's heading "3. Hotels" cited as [3] when the file was excerpt [1]: no source shown (row 56's fix had stopped holding)</td><td>In code: a number that matches no excerpt becomes the file's</td><td class="res">0/3 to 3/3, both modes</td></tr>
+            <tr><td class="n">68</td><td class="n">10d.3</td><td>"Private documents never leave this Mac" only covered where they were stored: with <code>LLM_PROVIDER=groq</code> and the local table, salary-band excerpts went to Groq</td><td>Search leaves out <code>private/</code> chunks in SQL whenever the model is not local</td><td class="res">4 private results with Ollama, 0 with Groq; retrieval unchanged</td></tr>
+            <tr><td class="n">69</td><td class="n">10d.3</td><td>On the Mac, every photo, scan and long-file overview went to Gemini's free tier, even with Ollama answering</td><td><code>GEMINI_FILES</code>: on by default on Vercel only; off = photos and scans refused with the reason</td><td class="res">Photo and scan refused, text PDF still read; the attach button names the services</td></tr>
           </tbody>
         </table>
       </div>
@@ -1073,6 +1113,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Through the public URL, both modes</td><td class="n">-</td><td class="n">12/12</td></tr>
             <tr><td><code>POST /api/ask</code> for other apps (keys, bad requests, a question, a conversation)</td><td class="n">9/9</td><td class="n">9/9</td></tr>
             <tr><td>Long attachment, 59 pages: fact found / answers single, multi / which questions get it</td><td class="n">8/8 / 8/8, 8/8 / 9/9</td><td class="n">4/4 live</td></tr>
+            <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
           </tbody>
         </table>
       </div>
@@ -1096,6 +1137,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Different models fail differently.</strong> A lenient model can pass by luck: qwen kept a vague follow-up working with four loose matches; strict gpt-oss exposed the weakness, and an old router bug with it.</li>
         <li><strong>Free tiers have limits you only find by hitting them.</strong> Per minute, per day, per request or per text, different for every service: Gemini counts each embedded text, 1,000 a day; Groq counts tokens per day per model. The limits shaped the design.</li>
         <li><strong>Make silent failures loud.</strong> A wrong database password looked like "no documents found", a framework ignored a misspelt option, and mixed embedding models would give plausible wrong results. Each now fails with a clear message.</li>
+        <li><strong>Where data is stored and where it is sent are two different rules.</strong> Private documents were never stored on a hosted database, yet their excerpts were sent to a hosted model every time one answered (10d.3). Follow the data through every call, not only to where it rests.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1144,6 +1186,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Test the deployed app</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:public</code></td></tr>
             <tr><td>Test a long attachment</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:long-file</code> (<code>ANSWERS=1</code> asks the agent too)</td></tr>
             <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
+            <tr><td>Check which documents may go where</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:policy</code> (no model calls)</td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>

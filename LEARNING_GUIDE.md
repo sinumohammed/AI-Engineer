@@ -441,6 +441,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10b.13 | Attach a PDF or a photo (step 1: short files) | Text PDFs read on the server, photos and scans by Gemini; the file is cited like a handbook source |
 | 10d.1 | Other apps can ask: `POST /api/ask`, JSON in and out, one key per app | Live: 9/9 (keys, bad requests, a question, a conversation); ~1.4 s a question after a ~6 s cold start |
 | 10d.2 | Long attachments: chunks searched per question, like the handbook | 59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s |
+| 10d.3 | Which documents may go to which services: public, internal, confidential | Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota |
 
 - **Challenges, in plain terms:**
 
@@ -513,6 +514,22 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   A file that fits ~12,000 characters still goes in whole. Try it with
   `phase10-cloud/eval/samples/irs-pub15-employers-tax-guide.pdf` (59 pages): "When do I have to start
   withholding Additional Medicare Tax?" is answered from page 30.
+- **Which documents may go where (10d.3):** before real documents are added, a rule, enforced in
+  code (`phase10-cloud/api/dataPolicy.js`) from the settings, so a wrong `.env` cannot break it:
+  ```
+  level          folder                         stored in          read by
+  public         phase5-rag/docs (in git)       anywhere (Neon)    any model
+  internal       phase10-cloud/docs-internal    anywhere (Neon)    local models or Groq, never Gemini
+  confidential   phase5-rag/docs-private        this Mac only      local models only
+
+  question -> search ──(model is local?)── yes: every level
+                                       └── no:  confidential chunks left out in the SQL itself
+  attached file -> Gemini? only where GEMINI_FILES allows (default: the live app only)
+  ```
+  Why Groq but not Gemini: Groq does not train on API data and keeps no prompts by default (Zero
+  Data Retention turns off even its abuse logs); Gemini's free tier may let human reviewers read
+  prompts. The attach button now says where a file goes before you upload it. Check it with
+  `cd phase10-cloud/eval && npm run eval:policy` (no model calls).
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -593,6 +610,8 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 65 | 10d.2 | Supervisor searched the file with the router's reworded part | Search with the user's own message | 5/8 to 8/8 |
 | 66 | 10d.2 | Gemini overloaded: an upload waited 273 s | 20 s per try, 2 tries, only the start of each page; go on without it | Mac upload ~20 s; live 95 s (embedding on Vercel's CPU) |
 | 67 | 10d.2 | A short PDF's heading "3. Hotels" cited as [3] when the file was excerpt [1]: no source shown (row 56's fix had stopped holding) | In code: a number that matches no excerpt becomes the file's | 0/3 to 3/3, both modes; handbook citations unchanged |
+| 68 | 10d.3 | "Private documents never leave this Mac" only covered where they were stored: with `LLM_PROVIDER=groq` and the local table, salary-band excerpts went to Groq | Search leaves out `private/` chunks in SQL whenever the model is not local | Same questions: 4 private results with Ollama, 0 with Groq; retrieval eval unchanged (20/20, 7/10, 3/3, 4/4, 0/8) |
+| 69 | 10d.3 | On the Mac, every photo, scan and long-file overview went to Gemini's free tier, even with Ollama answering | `GEMINI_FILES`: on by default on Vercel only; off = photos and scans refused with the reason, overview from page 1 | Photo and scan refused, text PDF still read; the attach button names the services before upload |
 
 Where things stand (Phase 10 code):
 
@@ -610,6 +629,7 @@ Where things stand (Phase 10 code):
 | Through the public URL, both modes | - | 12/12 |
 | `POST /api/ask` for other apps (keys, bad requests, a question, a conversation) | 9/9 | 9/9 |
 | Long attachment, 59 pages: fact reaches the model / answers single, multi / which questions get it | 8/8 / 8/8, 8/8 / 9/9 | 4/4 live questions right |
+| Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 
 ---
 
@@ -662,6 +682,9 @@ what changed.
 14. **Make silent failures loud.** A wrong database password looked like "no documents found", a
     framework ignored a misspelt option, and two embedding models mixed in one table would give
     plausible wrong results. Each now fails with a clear message.
+15. **Where data is stored and where it is sent are two different rules.** Private documents were
+    never stored on a hosted database, yet their excerpts were sent to a hosted model every time
+    one answered (10d.3). Follow the data through every call, not only to where it rests.
 
 ### What changed when the data got real (Phase 9)
 
@@ -708,6 +731,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Test the deployed app | `cd phase10-cloud/eval && npm run eval:public` |
 | Test a long attachment | `cd phase10-cloud/eval && npm run eval:long-file` (`ANSWERS=1` asks the agent too, `AGENT=multi` the supervisor) |
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
+| Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
 | A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
@@ -754,6 +778,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `0675f45`, `400f491` | Phase 10d.1: `POST /api/ask` for other apps, deployed |
 | `fe6e3f6` | Phase 10d.1: example client for other apps |
 | `4ee670b`, `7ab27af` | Phase 10d.2: long attachments, deployed |
+| `6e005c0` | Phase 10d.3: data policy - which documents may go to which services |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
