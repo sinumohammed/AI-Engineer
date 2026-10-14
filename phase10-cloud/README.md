@@ -613,6 +613,8 @@ the later pages are not read and the chip says so. Upload is the existing 4 MB.
 | Prompt size for the file | ~1,260 tokens (step 1: up to ~3,000) |
 | Upload, Mac (Ollama embeddings) | ~20-23 s; 660 KB kept in Redis |
 | Regression evals on the Mac (single, supervisor) | 10/10, 10/10 |
+| **Live** (Vercel, Groq): upload of the 59-page PDF | **95 s** (in-process q8 embeddings on Vercel's CPU, ~4x the Mac); 660 KB saved in Upstash |
+| **Live**: Medicare threshold, FUTA follow-up, $100,000 rule (multi), rollback without the file | 4/4 right, pages cited (30; 44; 33-35); `eval:public` 12/12 |
 
 Found while building it, each first reproduced:
 - "Any two words of the question in the file" sent every question to a 59-page
@@ -628,6 +630,12 @@ Found while building it, each first reproduced:
   300,000 characters and retries, one upload waited 273 s, near Vercel's 300 s
   limit. Now only the start of each page goes to Gemini, with a 20 s limit per
   try, and the upload goes on without it.
+- Live, Gemini timed out on every try (also a plain "Say OK."), so the overview
+  was the start of page 1; the answers did not need it. While Gemini is down,
+  photos and scanned PDFs cannot be read either.
+- 95 s is long to wait, and 400 chunks (the cap) would be ~2 minutes - under
+  Vercel's 300 s, but a next step could cut it: fewer, larger chunks, or
+  embedding in the background while the chat goes on.
 - Not from this step: with the short travel policy and no handbook excerpt,
   qwen cites "[3]" (the PDF's heading "3. Hotels") instead of [1], so no source
   is listed. Same before and after this change.
