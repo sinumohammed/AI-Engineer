@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node --env-file=../.env server.js",
     "ask": "node --env-file=../.env supervisor.js",
-    "new-app-key": "node newAppKey.js"
+    "new-app-key": "node newAppKey.js",
+    "app": "node --env-file=../.env appAdmin.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",

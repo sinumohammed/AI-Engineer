@@ -2,6 +2,7 @@ import { Alert, App as AntApp, Avatar, Button, Tag, Tooltip, Typography, theme }
 import { Bubble } from "@ant-design/x";
 import XMarkdown from "@ant-design/x-markdown";
 import {
+  ApiOutlined,
   CheckCircleFilled,
   CopyOutlined,
   FileSearchOutlined,
@@ -39,6 +40,22 @@ function ProcessChips({ m }) {
         </Tag>
       )}
       {tools.map((t, i) => {
+        // Phase 10 #4: a call to a connected app (api/apps.js).
+        if (t.name === "connected_app") {
+          const app = t.args?.app ?? "app";
+          const failed = t.outcome === "app failed";
+          return (
+            <Tooltip key={`t${i}`} title={`${t.args?.operation ?? ""}${t.args?.args && Object.keys(t.args.args).length ? ` ${JSON.stringify(t.args.args)}` : ""}`}>
+              <Tag
+                variant="filled"
+                color={t.status === "calling" ? "processing" : failed ? "warning" : "success"}
+                icon={t.status === "calling" ? <LoadingOutlined /> : <ApiOutlined />}
+              >
+                {t.status === "calling" ? `Asking ${app}…` : failed ? `${app} did not answer` : `Read from ${app}`}
+              </Tag>
+            </Tooltip>
+          );
+        }
         const o = OUTCOMES[t.outcome];
         return (
           <Tag

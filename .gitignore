@@ -15,3 +15,5 @@ phase10-cloud/docs-internal/
 
 # Vercel project links (phase10-cloud/api, phase10-cloud/web)
 .vercel/
+# Phase 10 #4: an app entry may hold a pasted token - only the examples are committed.
+phase10-cloud/apps/masjid.json

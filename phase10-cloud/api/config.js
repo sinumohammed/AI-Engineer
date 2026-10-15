@@ -78,6 +78,15 @@ export const APP_API_KEYS = (process.env.APP_API_KEYS ?? "")
     return { name, key };
   });
 export const APP_DAILY_LIMIT = Number(process.env.APP_DAILY_LIMIT ?? 100);
+// Phase 10 #4: connected apps (appRegistry.js, apps.js). ADMIN_KEY protects
+// /api/admin/apps, where apps are added, refreshed and removed - unset, the
+// admin API is off. APP_SECRETS_KEY (32 random bytes, base64) encrypts each
+// app's access token in Redis; without it, apps that need a token cannot be
+// added. Both are set once; adding an app later needs no deployment.
+export const ADMIN_KEY = process.env.ADMIN_KEY || null;
+export const APP_SECRETS_KEY = process.env.APP_SECRETS_KEY || null;
+// The Redis key holding the registry - the eval uses its own.
+export const APPS_KEY = process.env.APPS_KEY ?? "apps:registry";
 // Phase 10 UI: voice input (transcribe.js). Gemini writes the text when
 // GEMINI_API_KEY is set (Whisper could not write Malayalam), Groq's Whisper
 // when it is not, or when Gemini fails. Hosted services even when answers

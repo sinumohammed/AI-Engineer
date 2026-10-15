@@ -12,7 +12,9 @@ import { FILES_GO_TO, describePolicy } from "./dataPolicy.js";
 import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, nameTheFile } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { askApi } from "./askApi.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
+import { adminApi } from "./adminApi.js";
+import { listApps } from "./appRegistry.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, ADMIN_KEY, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED, saveAttachment, getAttachment, removeAttachment } from "./sessionStore.js";
 
@@ -41,6 +43,8 @@ app.get("/api/access", (req, res) =>
 // Phase 10d: other apps, with their own keys instead of the access code -
 // so it is mounted before the access-code check below.
 app.use("/api/ask", askApi);
+// Phase 10 #4: connected apps are managed here, with ADMIN_KEY instead of the access code.
+app.use("/api/admin", adminApi);
 app.use("/api",(req, res, next) => (hasAccess(req) ? next() : res.status(401).json({ error: "Access code required" })));
 
 // How many turns are stored, and whether older ones have been folded into a
@@ -246,4 +250,7 @@ function logServices(firstLine) {
   console.log(`  access:     ${ACCESS_CODE ? "code required" : "open (no ACCESS_CODE)"}${ALLOWED_ORIGIN ? `, browser calls only from ${ALLOWED_ORIGIN}` : ""}`);
   const askAccess = APP_API_KEYS.length ? `keys for ${APP_API_KEYS.map((a) => a.name).join(", ")}` : ACCESS_CODE ? "off (no APP_API_KEYS)" : "open (no APP_API_KEYS)";
   console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app`);
+  listApps().then((apps) =>
+    console.log(`  apps:       ${apps.length ? apps.map((a) => `${a.name} (${a.operations.length} operations, ${a.dataLevel})`).join(", ") : "none connected"}; admin API ${ADMIN_KEY ? "on" : "off (no ADMIN_KEY)"}`)
+  );
 }

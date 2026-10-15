@@ -1,0 +1,14 @@
+{
+  "name": "masjid",
+  "description": "Masjid management: daily duty schedule and swaps, members, pending dues, transactions, announcements",
+  "openapi": "https://angular-session.onrender.com/api/ai/openapi.json",
+  "token": "$MASJID_AI_TOKEN",
+  "dataLevel": "internal",
+  "timezone": "Asia/Kolkata",
+  "timeoutMs": 60000,
+  "examples": [
+    "Who is on duty today?",
+    "Which members have pending dues?",
+    "What were the transactions last week?"
+  ]
+}

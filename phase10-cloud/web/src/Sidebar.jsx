@@ -13,7 +13,7 @@ import { usePwaInstall } from "./usePwaInstall.js";
 const { Text } = Typography;
 
 // `synthesizer` is the step that joins several specialists' answers (8b).
-export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", attachment: "Attached file", synthesizer: "Combined" };
+export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", attachment: "Attached file", connected_apps: "Connected apps", synthesizer: "Combined" };
 
 const LEVEL_COLORS = { warning: "#d97706", critical: "#dc2626" };
 

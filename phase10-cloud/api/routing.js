@@ -8,6 +8,8 @@ import { specialists, searchDocs } from "./specialists.js";
 import { replyLanguageRule } from "./replyLanguage.js";
 import { sharesWords, MENTIONS_FILE } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
+import { listApps } from "./appRegistry.js";
+import { appAllowed } from "./dataPolicy.js";
 
 export const AGENT_NAMES = Object.keys(specialists);
 const MAX_TASKS = 3;
@@ -76,7 +78,19 @@ export const ROUTER_PROMPT =
   "- You are told whether the user has attached a file to this chat. A question about that file (\"this " +
   "document\", \"the photo\", \"the receipt\", \"summarise it\", or anything the file is plainly about) goes " +
   "to attachment. A question that compares the file with the company's rules has two parts: one for " +
-  "attachment, one for company_docs. With no file attached, never choose attachment.";
+  "attachment, one for company_docs. With no file attached, never choose attachment.\n" +
+  "- A question about data kept in one of the connected applications listed below (their records, schedules, " +
+  "people, amounts) goes to connected_apps, even when it sounds like a company question. A question about the " +
+  "company's written policies stays with company_docs. With no application listed, never choose connected_apps.";
+
+// Phase 10 #4: the connected apps are added without a deployment, so the
+// router is told which exist at question time, not in ROUTER_PROMPT.
+export async function connectedAppsText() {
+  const apps = (await listApps()).filter(appAllowed);
+  return apps.length
+    ? "\n\nConnected applications (for connected_apps):\n" + apps.map((a) => `- ${a.name}: ${a.description}`).join("\n")
+    : "\n\nConnected applications: none.";
+}
 
 // Found by the routing eval: "How are rollbacks done?" has no "our" in it, so
 // a router that only reads the wording sent it to `coding` - yet the company
@@ -126,7 +140,7 @@ export async function routerMessages(question, history = [], searchQuestion = qu
     evidence.text;
   return {
     messages: [
-      { role: "system", content: ROUTER_PROMPT },
+      { role: "system", content: ROUTER_PROMPT + (await connectedAppsText()) },
       { role: "user", content: userContent },
     ],
     evidence: evidence.meta,
@@ -193,6 +207,14 @@ export function checkAttachmentTasks(decision, attachment) {
   return { ...decision, tasks: [{ ...only, agent: "attachment" }, only], attachmentAdded: true };
 }
 
+// Phase 10 #4: with no connected app (or none this model may read), a task
+// sent to connected_apps goes to general, as attachment tasks do without a file.
+export async function checkAppTasks(decision) {
+  if (!decision.tasks.some((t) => t.agent === "connected_apps")) return decision;
+  if ((await listApps()).some(appAllowed)) return decision;
+  return { ...decision, tasks: decision.tasks.map((t) => (t.agent === "connected_apps" ? { ...t, agent: "general" } : t)) };
+}
+
 // Phase 9.6, found by the citation eval: "Who is eligible for FMLA?" and
 // "Should git commits be cryptographically signed?" were sent to `general`
 // and `coding`, which answered from general knowledge - although the
@@ -217,14 +239,14 @@ export async function applyDocPriority(decision, evidence) {
   if (!DOC_PRIORITY) return decision;
   if (decision.tasks.length === 1) {
     const [only] = decision.tasks;
-    // A question about the attached file stays with the file, whatever the handbook says.
-    if (!evidence?.isRelevant || only.agent === "company_docs" || only.agent === "attachment") return decision;
+    // A question about the attached file or an app's data stays there, whatever the handbook says.
+    if (!evidence?.isRelevant || ["company_docs", "attachment", "connected_apps"].includes(only.agent)) return decision;
     return { ...decision, tasks: [{ ...only, agent: "company_docs" }], overriddenFrom: only.agent };
   }
   const overridden = [];
   const tasks = await Promise.all(
     decision.tasks.map(async (t) => {
-      if (t.agent === "company_docs" || t.agent === "attachment") return t;
+      if (["company_docs", "attachment", "connected_apps"].includes(t.agent)) return t;
       const { isRelevant } = await searchDocs(t.question);
       if (!isRelevant) return t;
       overridden.push(t.agent);

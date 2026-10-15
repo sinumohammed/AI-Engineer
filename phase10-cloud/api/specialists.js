@@ -13,6 +13,7 @@ import { CITE_INSTRUCTION, numberedExcerpts, citedSources, fixFileCitations } fr
 import { chat, SPECIALIST_MODEL } from "./llm.js";
 import { replyLanguageRule } from "./replyLanguage.js";
 import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
+import { appContext, appNote } from "./apps.js";
 
 // Retrieval plus the same relevance decision the single agent uses - since
 // Phase 9.4 the shared retrieve() step, where the model judges which
@@ -185,6 +186,37 @@ export const specialists = {
     },
     seesCompanyAnswers: false,
   },
+  // Phase 10 #4: live data from the connected apps (apps.js, appRegistry.js).
+  // The apps themselves are listed to the router at question time
+  // (routing.js), since they are added without a deployment. When the
+  // planner finds nothing to fetch, the answer says so in code, with no
+  // further model call - like company_docs with nothing relevant.
+  connected_apps: {
+    description:
+      "Questions about live data kept in the user's connected applications (listed below with what each holds): " +
+      "their records, schedules, people, amounts and dates. Only when an application is listed.",
+    prepare: async (question) => {
+      const data = await appContext(question);
+      if (!data.apps) return { answer: "No applications are connected yet, so I cannot look that up.", meta: { appCalls: [] } };
+      if (!data.chunks.length) {
+        return { answer: "None of the connected applications has data for that question.", meta: { appCalls: [] }, usage: data.usage };
+      }
+      return {
+        systemContent:
+          "You are a helpful assistant answering from live data fetched from the user's connected applications. " +
+          "Answer from that data only. You have no access to this company's internal documents - if the question " +
+          "needs them, say so. " +
+          CITE_INSTRUCTION +
+          appNote(data.chunks) +
+          "\n\nExcerpts:\n" +
+          numberedExcerpts(data.chunks),
+        meta: { appCalls: data.calls, appAnswered: data.chunks.some((c) => !c.error) },
+        chunks: data.chunks,
+        usage: data.usage,
+      };
+    },
+    seesCompanyAnswers: true,
+  },
 };
 
 // The conversation history as a given specialist is allowed to see it.
@@ -227,8 +259,10 @@ export function specialistMessages(systemContent, question, history, summary, us
 // `attachment`: the file attached to this chat, if any (attachments.js).
 export async function runSpecialist(name, question, history = [], summary, userMessage = question, attachment = null) {
   const prep = await specialists[name].prepare(question, { attachment, userMessage });
+  // Model calls made while preparing (the connected-apps planner) count too.
+  const pre = prep.usage ? { llmCalls: 1, promptTokens: prep.usage.promptTokens, completionTokens: prep.usage.completionTokens } : { llmCalls: 0, promptTokens: 0, completionTokens: 0 };
   if (prep.answer !== undefined) {
-    return { answer: prep.answer, llmCalls: 0, promptTokens: 0, completionTokens: 0, meta: prep.meta, sources: [] };
+    return { answer: prep.answer, ...pre, meta: prep.meta, sources: [] };
   }
   const res = await chat({
     model: SPECIALIST_MODEL,
@@ -239,9 +273,9 @@ export async function runSpecialist(name, question, history = [], summary, userM
   const answer = prep.chunks ? fixFileCitations(res.content, prep.chunks) : res.content;
   return {
     answer,
-    llmCalls: 1,
-    promptTokens: res.promptTokens,
-    completionTokens: res.completionTokens,
+    llmCalls: 1 + pre.llmCalls,
+    promptTokens: res.promptTokens + pre.promptTokens,
+    completionTokens: res.completionTokens + pre.completionTokens,
     meta: prep.meta,
     sources: sourcesFor(prep, answer),
   };

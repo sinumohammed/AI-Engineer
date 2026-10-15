@@ -80,3 +80,10 @@ export function describePolicy() {
     `files to Gemini ${GEMINI_FILES ? "on" : "off"}`,
   ].join("; ");
 }
+
+// Phase 10 #4: a connected app's data goes to the answer model like a
+// document of its level (appRegistry.js): a confidential app only with a
+// local model. Internal and public apps may use Groq (Zero Data Retention on).
+export function appAllowed(app) {
+  return app.dataLevel !== "confidential" || MODEL_IS_LOCAL;
+}

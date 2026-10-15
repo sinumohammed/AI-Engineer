@@ -10,6 +10,7 @@ import { isRework, answerRework } from "./rework.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources, fixFileCitations } from "./citations.js";
 import { replyLanguageRule } from "./replyLanguage.js";
 import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
+import { appContext, appNote } from "./apps.js";
 
 // Always-retrieve RAG: search_company_docs is no longer a model-chosen tool.
 // It runs unconditionally on every question (cheap - one embed call + a
@@ -171,7 +172,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   const retrieval = smallTalk
     ? { chunks: [], isRelevant: false, identifierMismatch: false, bestDistance: null }
     : await retrieve(searchQuery);
-  const { identifierMismatch, isRelevant, bestDistance } = retrieval;
+  const { isRelevant, bestDistance } = retrieval;
   const docResults = retrieval.chunks;
 
   // Phase 9: report what the search led to, not just that it ran. The search
@@ -179,15 +180,31 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   // for a company question and for "capital of France". With the handbook
   // loaded, the relevance check now gets general questions wrong, and the UI
   // had no way to show it. Reported after the decision, so it is the real one.
-  const outcome = identifierMismatch ? "code not found" : isRelevant ? "used" : "not relevant";
+  const outcome = retrieval.identifierMismatch ? "code not found" : isRelevant ? "used" : "not relevant";
   if (!smallTalk) onToolResult?.("search_company_docs", docResults, { outcome, bestDistance });
+
+  // Phase 10 #4: live data from connected apps (apps.js) - a planner call
+  // when any app is registered, then the app's own API. Each result is a
+  // numbered excerpt like a handbook page. Asked with the self-contained
+  // question; nothing for small talk.
+  const appData = smallTalk
+    ? { chunks: [], calls: [] }
+    : await appContext(searchQuery, {
+        onCall: (c) => trackedOnToolCall("connected_app", c),
+        onResult: (r) => onToolResult?.("connected_app", r, { outcome: r.ok ? "app answered" : "app failed" }),
+      });
+  const appChunks = appData.chunks;
+  const appAnswered = appChunks.some((c) => !c.error);
+  // A code the handbook does not have ("order ORD-1042") may be an app's: with
+  // app data, the "no such code" answer is not given.
+  const identifierMismatch = retrieval.identifierMismatch && !appAnswered;
 
   // Phase 10, attachments: the attached file is one more numbered excerpt,
   // after the handbook's, so a fact from it is cited as the file. A long file
   // is searched with the same question as the handbook (in English if it was
   // translated).
   const fileChunk = attachment ? await attachmentChunk(attachment, retrieval.searchedAs ?? searchQuery) : null;
-  const citable = [...(isRelevant ? docResults : []), ...(fileChunk ? [fileChunk] : [])];
+  const citable = [...(isRelevant ? docResults : []), ...appChunks, ...(fileChunk ? [fileChunk] : [])];
 
   let systemContent;
   if (identifierMismatch) {
@@ -211,10 +228,11 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       "shared with you directly. Only for genuinely general questions unrelated to this conversation, " +
       "answer from your own knowledge.";
   }
-  if (fileChunk) {
-    systemContent += attachmentNote(citable.length, freshFile);
-    // Without relevant handbook excerpts the file is the only numbered one.
-    if (!isRelevant) systemContent += " " + CITE_INSTRUCTION + "\n\nExcerpts:\n" + numberedExcerpts(citable);
+  systemContent += appNote(citable);
+  if (fileChunk) systemContent += attachmentNote(citable.length, freshFile);
+  // Without relevant handbook excerpts, the app results and the file are the only numbered ones.
+  if (!isRelevant && (fileChunk || appChunks.length)) {
+    systemContent += " " + CITE_INSTRUCTION + "\n\nExcerpts:\n" + numberedExcerpts(citable);
   }
 
   const messages = [
@@ -269,7 +287,9 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
       // a file heading cited as a number is turned into the file's (citations.js).
       const answer = fixFileCitations(msg.content, citable);
       const sources = citable.length ? citedSources(answer, citable) : [];
-      return { answer, usage, fromCompanyDocs: isRelevant, sources };
+      // App data counts as company facts too: the specialists that cannot
+      // see documents or apps are not shown it later.
+      return { answer, usage, fromCompanyDocs: isRelevant || appAnswered, sources, appCalls: appData.calls };
     }
 
     msg.tool_calls = toolCalls;

@@ -20,6 +20,9 @@ client.on("error", (err) => {
 });
 
 await client.connect();
+// Phase 10 #4: the connected-apps registry (appRegistry.js) keeps its entries in
+// the same Redis, through this one connection.
+export const redis = client;
 
 export const MAX_TURNS_STORED = 10; // 10 user+assistant pairs = 20 messages
 const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h - sessions expire automatically if unused

@@ -15,6 +15,7 @@ phase10-cloud/
 ├── scripts/    ingest.js - loads the handbook into Postgres
 ├── eval/       every eval, pointed at api/
 ├── examples/   ask-client.js - how another app calls POST /api/ask
+├── apps/       connected-app entries and how an app makes itself connectable (10d.4)
 └── docs-internal/  internal business documents (gitignored; see 10d.3)
 ```
 
@@ -66,6 +67,7 @@ From `eval/`:
 | `npm run eval:judge` | relevance judging: tokens per question and quality |
 | `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
 | `npm run eval:long-file` | a 59-page PDF attachment: does the right page reach the prompt, which later questions get the file; `ANSWERS=1` also asks the agent (`AGENT=multi` for the supervisor) |
+| `npm run eval:apps` | connected apps (10d.4) against the demo app: registration, safety; `ANSWERS=1` planner and answers (`MODES=`, `ONLY=`) |
 | `npm run eval:policy` | the data policy (10d.3): confidential chunks only reach a local model, what ingest takes, Gemini for files - no model calls |
 | `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
 
@@ -700,3 +702,64 @@ its own process):
 | Total | 15/15 |
 | Single-agent regression on the Mac (Ollama) | 10/10 |
 | Retrieval eval on the Mac (Ollama, local table): direct, paraphrased, original, private, off-topic | 20/20, 7/10, 3/3, 4/4, 0/8 - unchanged |
+
+### 10d.4 Connected apps: answers from other applications' live data (2026-10-15)
+
+The reverse of `/api/ask` (10d.1): ask in the chat, and the agent reads another
+application's data through its API. One generic connector for every app - an
+app is **configuration in Redis, not code**, added with one command and no
+deployment of this service. How an app makes itself connectable (read-only
+endpoints, an access token, `openapi.json`): `apps/README.md`.
+
+```
+npm run app -- add ../apps/<app>.json      (admin API, ADMIN_KEY)
+   -> its openapi.json is read: GET operations stored with the entry, token encrypted (APP_SECRETS_KEY)
+
+question -> planner (one call, judge model): which operations, which parameters? none if not about the apps
+         -> checked in code against the stored operations
+         -> GET <app>/<path>, Bearer token, time limit -> JSON
+         -> one numbered excerpt per call ("hall API: GET /ai/duty?date=2026-10-16"), cited like a handbook page
+```
+
+| Part | Where | Notes |
+|---|---|---|
+| Registry | `api/appRegistry.js` | Redis hash `apps:registry`; validation; token AES-256-GCM; read cached 30 s per instance |
+| OpenAPI | `api/openapiTools.js` | OpenAPI 3; GET only, `$ref` parameters, relative `servers` URL; at most 15 operations; optional `allow` list |
+| Planner + calls | `api/apps.js` | structured output (operation from an enum, args as name/value pairs), no tool loop; at most 3 calls; dates from "today" in the app's time zone |
+| Single agent | `api/agent.js` | app results join the numbered excerpts; an unknown "code" is not refused when an app answered |
+| Supervisor | `specialists.js` (`connected_apps`), `routing.js` | the router is told the apps at question time; no apps -> `general`; the handbook-priority rule does not take an app's question |
+| Admin | `api/adminApi.js`, `api/appAdmin.js` (`npm run app`) | list, add, refresh, remove, try; off without `ADMIN_KEY` |
+| Policy | `api/dataPolicy.js` (`appAllowed`) | a confidential app only with a local model |
+| UI | `web/src/Message.jsx` | "Asking hall…" / "Read from hall" / "hall did not answer" chips; "Connected apps" agent label |
+| Demo app | `examples/demo-app/server.js`, `apps/demo-hall.json` | made-up community hall: roster, members, dues, announcements; token-protected; no packages |
+
+Rules in code, whatever an entry says: GET only, only stored operations, the
+URL must stay under the app's base URL (path parameters are encoded),
+https only (http to this machine for tests), redirects refused (the token goes
+nowhere else), a time limit per call, at most ~6,000 characters of a response
+in the prompt. A failed call is an excerpt too, so the answer can say "the app
+did not answer in 60 s" instead of "I don't know".
+
+Cost: with at least one app registered, every question (not small talk) makes
+one more judge-model call (~700 tokens for the demo's 6 operations). With none,
+nothing changes - no call.
+
+**Measured** (`npm run eval:apps`, demo app; `ANSWERS=1` on the Mac, qwen3-coder):
+
+| Check | Result |
+|---|---|
+| Registration: operations read, POST ignored, `$ref`, relative server, token encrypted, bad entries refused (wrong token, http, name, data level), `allow`, update keeps token, remove | 11/11 |
+| Safety: path parameter stays in the path, http only locally, a real call, time limit (1 s on a 3 s app), refused token reported, bad plans dropped | 6/6 |
+| Planner: 4 data questions call the right operation (duty with today's date, pending dues, announcements, members); rollback and "capital of France" call nothing | 6/6 |
+| Answers, single agent / supervisor: right facts, cite "hall API"; the two others cite no app | 6/6 / 6/6 |
+| No apps registered: no planner call | ✅ |
+| Total | 36/36 |
+| End to end through the server: `npm run app -- add/list/try/remove`, no-key refused, `/api/ask` answer from the app with its source; "tomorrow" -> 2026-10-16 (Asia/Kolkata) | ✅ |
+| Regressions with no app (Ollama): single, supervisor, routing | 10/10, 10/10, 24/24 |
+| `eval:policy` | 15/15 |
+
+**To turn it on** (once): `npm run app -- keys`, put `ADMIN_KEY` and
+`APP_SECRETS_KEY` in `.env` and on Vercel, deploy. Then each app is
+`npm run app -- add ...` with `API_URL` pointing at the server - the Mac or
+https://ai-engineer-api-jet.vercel.app. The live app needs the app's API on the
+internet (a Mac-only app works only with the local server).
