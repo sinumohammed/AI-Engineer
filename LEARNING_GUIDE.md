@@ -444,6 +444,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.2 | Long attachments: chunks searched per question, like the handbook | 59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s |
 | 10d.3 | Which documents may go to which services: public, internal, confidential | Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota |
 | 10d.4 | Connected apps: answers from other applications' live data, added as configuration | Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment |
+| 10d.5 | First real app (masjid): who may ask, and as which user | Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23 |
 
 - **Challenges, in plain terms:**
 
@@ -544,6 +545,17 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   The app's side: a few read-only endpoints for the AI, an access token for them, and an
   `openapi.json` describing them (`phase10-cloud/apps/README.md`). Try it with the demo app:
   `cd phase10-cloud/eval && ANSWERS=1 npm run eval:apps`.
+- **Who may ask, and as whom (10d.5):** the service stays generic. Each app names its callers, and
+  the app itself decides what each of its users may see:
+  ```
+  AI web chat ("web")           -> no masjid data (masjid's callers: ["masjid"])
+  masjid app, its own key       -> masjid server mints a 5-minute read-only token for the user
+     guest                      -> duty schedule only; anything else: "log in"
+     member                     -> schedule, announcements, own dues and payments
+     admin                      -> everything
+  ```
+  The user's login token never leaves the masjid server. Every key, where it lives and which way it
+  goes: "Keys at a glance" in `phase10-cloud/README.md`.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -628,6 +640,11 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 69 | 10d.3 | On the Mac, every photo, scan and long-file overview went to Gemini's free tier, even with Ollama answering | `GEMINI_FILES`: on by default on Vercel only; off = photos and scans refused with the reason, overview from page 1 | Photo and scan refused, text PDF still read; the attach button names the services before upload |
 | 70 | 10d.4 | Each new app would need its own specialist code and a deployment | One generic connector; apps as entries in Redis, read from their `openapi.json` | Demo app added, used and removed with one command each, no deployment |
 | 71 | 10d.4 | Letting the model call app APIs as tools risks loops and invented calls | A planner picks from a fixed list (structured output); code checks and makes the calls: GET only, listed paths, time limit | Planner 6/6 (4 data questions call the right operation, 2 others call nothing); bad plans dropped in code |
+| 72 | 10d.5 | "What is the latest announcement?" went to the general agent (supervisor) | A part sent to general, coding or company_docs is also planned; app calls found -> connected_apps | 17/18 to 18/18 |
+| 73 | 10d.5 | With a duty-roster app connected, "on-call rotation" fetched the roster | Planner told the company's own processes are handbook questions; a handbook choice keeps the handbook and asks the app too | Regressions back to 10/10, 24/24 with the app connected |
+| 74 | 10d.5 | Masjid data would be open to every web chat user | `callers` per app; the user passed through; the app filters by role | Web chat and other apps: no masjid data; a member sees only their own dues |
+| 75 | 10d.5 | "Do I have pending dues?" told Fathima she had none ("...Fathima owes 2,100") | The app's "who am I" call added in code for I/me/my | Answered for the asking user |
+| 76 | 10d.5 | A guest's "tomorrow" was asked as "the next 1 day" (today) | A duty-on-date operation in the masjid API | Live: tomorrow's member named |
 
 Where things stand (Phase 10 code):
 
@@ -647,6 +664,7 @@ Where things stand (Phase 10 code):
 | Long attachment, 59 pages: fact reaches the model / answers single, multi / which questions get it | 8/8 / 8/8, 8/8 / 9/9 | 4/4 live questions right |
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
+| Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 
 ---
 
@@ -705,6 +723,9 @@ what changed.
 16. **Make the variable part data, not code.** Each app differs only in its address, its endpoints
     and its token, so those became a configuration entry; the code that calls apps safely is
     written once (10d.4). A new app is a command, not a deployment.
+17. **Who may see data is the data owner's decision, enforced where the data is.** The AI service
+    only says who is asking; the masjid app decides what an admin, a member or a guest sees
+    (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule.
 
 ### What changed when the data got real (Phase 9)
 
@@ -801,6 +822,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `4ee670b`, `7ab27af` | Phase 10d.2: long attachments, deployed |
 | `6e005c0` | Phase 10d.3: data policy - which documents may go to which services |
 | `6019c98` | Phase 10d.4: connected apps - answers from other applications' live data |
+| `63f3258`, `cd00e5f` | Phase 10d.5: routing fixes; callers, users and roles (masjid repo: `c2d7cdb`, `fbb0286`) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

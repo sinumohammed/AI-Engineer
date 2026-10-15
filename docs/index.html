@@ -845,6 +845,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.2</td><td>Long attachments: chunks searched per question, like the handbook</td><td class="res">59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s</td></tr>
                 <tr><td class="n">10d.3</td><td>Which documents may go to which services: public, internal, confidential</td><td class="res">Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota</td></tr>
                 <tr><td class="n">10d.4</td><td>Connected apps: answers from other applications' live data, added as configuration</td><td class="res">Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment</td></tr>
+                <tr><td class="n">10d.5</td><td>First real app (masjid): who may ask, and as which user</td><td class="res">Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23</td></tr>
               </tbody>
             </table>
           </div>
@@ -1049,6 +1050,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>A fallback must cover every model call, not only the answer: the judging step had none, so one used-up limit stopped every question.</li>
               <li>Where data is stored and where it is sent are different rules: private documents were never stored on a hosted database, yet a hosted model read their excerpts whenever it answered on the Mac.</li>
               <li>Make the variable part data, not code: each app differs only in its address, endpoints and token, so a new app is a configuration entry and a command, not new code and a deployment.</li>
+              <li>Who may see data is the data owner's decision, enforced where the data is: the AI only says who is asking, the masjid app decides what an admin, a member or a guest sees.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
 npm run eval:public</pre><button type="button">Copy</button></div> Asked the way another app asks: <div class="cmd"><pre>cd phase10-cloud/examples
@@ -1136,6 +1138,11 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">69</td><td class="n">10d.3</td><td>On the Mac, every photo, scan and long-file overview went to Gemini's free tier, even with Ollama answering</td><td><code>GEMINI_FILES</code>: on by default on Vercel only; off = photos and scans refused with the reason</td><td class="res">Photo and scan refused, text PDF still read; the attach button names the services</td></tr>
             <tr><td class="n">70</td><td class="n">10d.4</td><td>Each new app would need its own specialist code and a deployment</td><td>One generic connector; apps as entries in Redis, read from their <code>openapi.json</code></td><td class="res">Demo app added, used and removed with one command each</td></tr>
             <tr><td class="n">71</td><td class="n">10d.4</td><td>Letting the model call app APIs as tools risks loops and invented calls</td><td>A planner picks from a fixed list; code checks and makes the calls: GET only, listed paths, time limit</td><td class="res">Planner 6/6; bad plans dropped in code</td></tr>
+            <tr><td class="n">72</td><td class="n">10d.5</td><td>"What is the latest announcement?" went to the general agent</td><td>Parts sent elsewhere are also planned; app calls found go to connected_apps</td><td class="res">17/18 to 18/18</td></tr>
+            <tr><td class="n">73</td><td class="n">10d.5</td><td>With a duty-roster app connected, "on-call rotation" fetched the roster</td><td>Planner rule plus code: a handbook choice keeps the handbook and asks the app too</td><td class="res">Regressions back to 10/10, 24/24</td></tr>
+            <tr><td class="n">74</td><td class="n">10d.5</td><td>Masjid data would be open to every web chat user</td><td><code>callers</code> per app; the user passed through; the app filters by role</td><td class="res">Web chat sees none; a member only their own dues</td></tr>
+            <tr><td class="n">75</td><td class="n">10d.5</td><td>"Do I have pending dues?" told Fathima she had none</td><td>The app's "who am I" call added in code for I/me/my</td><td class="res">Answered for the asking user</td></tr>
+            <tr><td class="n">76</td><td class="n">10d.5</td><td>A guest's "tomorrow" was asked as "the next 1 day"</td><td>A duty-on-date operation in the masjid API</td><td class="res">Live: tomorrow's member named</td></tr>
           </tbody>
         </table>
       </div>
@@ -1158,6 +1165,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Long attachment, 59 pages: fact found / answers single, multi / which questions get it</td><td class="n">8/8 / 8/8, 8/8 / 9/9</td><td class="n">4/4 live</td></tr>
             <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
+            <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
           </tbody>
         </table>
       </div>
@@ -1183,6 +1191,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Make silent failures loud.</strong> A wrong database password looked like "no documents found", a framework ignored a misspelt option, and mixed embedding models would give plausible wrong results. Each now fails with a clear message.</li>
         <li><strong>Where data is stored and where it is sent are two different rules.</strong> Private documents were never stored on a hosted database, yet their excerpts were sent to a hosted model every time one answered (10d.3). Follow the data through every call, not only to where it rests.</li>
         <li><strong>Make the variable part data, not code.</strong> Each app differs only in its address, its endpoints and its token, so those became a configuration entry; the code that calls apps safely is written once (10d.4). A new app is a command, not a deployment.</li>
+        <li><strong>Who may see data is the data owner's decision, enforced where the data is.</strong> The AI service only says who is asking; the masjid app decides what an admin, a member or a guest sees (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
