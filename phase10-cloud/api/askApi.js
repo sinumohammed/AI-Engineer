@@ -8,6 +8,8 @@
 //                    "user"?: { "token": "..." } }
 //   -> { answer, sources, fromCompanyDocs, notices, usage, conversationId, mode }
 //   DELETE /api/ask/conversations/:conversationId  - forget a conversation
+//   POST /api/ask/transcribe?lang=Malayalam  (raw audio body) -> { text, language } - voice input
+//       for the app's own chat screen, the same speech-to-text as the web chat (transcribe.js)
 //
 // Without conversationId every question stands alone. With one, earlier
 // questions in it are remembered (Redis, 24 hours), like a chat in the web
@@ -28,6 +30,7 @@ import { collectNotices } from "./llmClient.js";
 import { APP_API_KEYS, APP_DAILY_LIMIT, ACCESS_CODE } from "./config.js";
 import { getHistory, getSummary, appendTurn, clearSession, countAppQuestion } from "./sessionStore.js";
 import { withAccess } from "./appAccess.js";
+import { transcribe, TranscribeError } from "./transcribe.js";
 
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
@@ -92,6 +95,18 @@ askApi.post("/", async (req, res) => {
     // (llmClient.js); anything else is not the caller's fault.
     if (err.status === 429) return res.status(429).json({ error: err.message });
     res.status(500).json({ error: "Could not answer that question - please try again." });
+  }
+});
+
+// Phase 10 #4: voice input for apps - the recording as the raw body (up to
+// 4 MB, Vercel's limit is 4.5 MB), the text back. Not counted as a question:
+// the text is checked by the user, then asked through POST /api/ask.
+askApi.post("/transcribe", express.raw({ type: () => true, limit: "4mb" }), async (req, res) => {
+  try {
+    res.json(await transcribe(req.body, req.get("content-type"), req.query.lang));
+  } catch (err) {
+    if (!(err instanceof TranscribeError)) console.error(`[ask] app=${req.appName} transcribe: ${err.message}`);
+    res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });
   }
 });
 

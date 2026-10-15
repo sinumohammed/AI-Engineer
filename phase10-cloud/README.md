@@ -863,6 +863,14 @@ way: "tomorrow" was planned as duty-schedule `days=1` (today only) -> a
 earlier wrong answers (the Phase 8c history effect) - each guest chat has its
 own random id. Regressions (Ollama): 10/10, 10/10, 24/24, 3/3, 4/4; policy 15/15.
 
+**Voice for apps** (2026-10-15): `POST /api/ask/transcribe` - the recording
+as the raw body, the app's key, `?lang=` as a hint - the same speech-to-text
+as the web chat (Gemini, Whisper as backup); not counted as a question.
+`eval:ask` 11/11 with it (voice without a key 401, the English sample read).
+The masjid app uses it for a mic button; its server also keeps the daily
+question limits per user (members 10, guests 10 per IP, admin none) in its
+own Postgres - the app knows its users, this service only sees the app.
+
 **To turn it on** (once): `npm run app -- keys`, put `ADMIN_KEY` and
 `APP_SECRETS_KEY` in `.env` and on Vercel, deploy. Then each app is
 `npm run app -- add ...` with `API_URL` pointing at the server - the Mac or

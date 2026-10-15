@@ -62,4 +62,16 @@ for (const n of r.body?.notices ?? []) console.log(`     notice: ${n}`);
 const del = await fetch(`${API_URL}/api/ask/conversations/${conversationId}`, { method: "DELETE", headers: { Authorization: `Bearer ${KEY}` } });
 check("forget the conversation", del.ok, `got ${del.status}`);
 
+// Phase 10 #4: voice input for apps - the same speech-to-text as the web chat.
+const { readFileSync } = await import("node:fs");
+const audio = readFileSync(new URL("./samples/voice-english-parental-leave.m4a", import.meta.url));
+const voice = async (key) => {
+  const res = await fetch(`${API_URL}/api/ask/transcribe`, { method: "POST", headers: { "Content-Type": "audio/mp4", ...(key ? { Authorization: `Bearer ${key}` } : {}) }, body: audio });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+};
+const noKey = await voice(null);
+check("voice without a key -> 401", noKey.status === 401, `got ${noKey.status}`);
+const heard = await voice(KEY);
+check("voice: a recording becomes text", heard.status === 200 && /parental leave/i.test(heard.body.text ?? ""), `${heard.status} ${JSON.stringify(heard.body).slice(0, 120)}`);
+
 console.log(`\n${passed}/${total} passed.`);
