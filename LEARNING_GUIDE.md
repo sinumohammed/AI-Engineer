@@ -117,6 +117,7 @@ API server: one Vercel function in Frankfurt <┘
 | **Fallback** | A second option used automatically when the first fails, e.g. a smaller model when the bigger one's daily limit is used up. |
 | **Access code / CORS** | A shared code the API requires, and the browser rule that only the app's own website may call the API. |
 | **API key (per app)** | A secret string one app sends with each request (`Authorization: Bearer <key>`), so the API knows which app is asking and can cut off one app without the others. |
+| **OpenAPI** | A JSON file that lists an API's endpoints, their parameters and what each is for. Programs read it to know how to call the API; here the agent reads it to know what it may ask an app. |
 
 ---
 
@@ -442,6 +443,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.1 | Other apps can ask: `POST /api/ask`, JSON in and out, one key per app | Live: 9/9 (keys, bad requests, a question, a conversation); ~1.4 s a question after a ~6 s cold start |
 | 10d.2 | Long attachments: chunks searched per question, like the handbook | 59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s |
 | 10d.3 | Which documents may go to which services: public, internal, confidential | Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota |
+| 10d.4 | Connected apps: answers from other applications' live data, added as configuration | Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment |
 
 - **Challenges, in plain terms:**
 
@@ -530,6 +532,18 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   Data Retention turns off even its abuse logs); Gemini's free tier may let human reviewers read
   prompts. The attach button now says where a file goes before you upload it. Check it with
   `cd phase10-cloud/eval && npm run eval:policy` (no model calls).
+- **Connected apps (10d.4):** the reverse of `/api/ask` - ask in the chat, and the agent reads another
+  application's data through its API. One generic connector; each app is a configuration entry in
+  Redis, not code, so adding one needs no deployment:
+  ```
+  add an app:  npm run app -- add apps/masjid.json  ->  its openapi.json is read: the GET calls it offers
+  question:    planner (one model call): which calls, with which values? none if not about the apps
+               -> code checks them, calls the app's API with its token -> JSON
+               -> one numbered excerpt per call, cited "masjid API" like a handbook page
+  ```
+  The app's side: a few read-only endpoints for the AI, an access token for them, and an
+  `openapi.json` describing them (`phase10-cloud/apps/README.md`). Try it with the demo app:
+  `cd phase10-cloud/eval && ANSWERS=1 npm run eval:apps`.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -612,6 +626,8 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 67 | 10d.2 | A short PDF's heading "3. Hotels" cited as [3] when the file was excerpt [1]: no source shown (row 56's fix had stopped holding) | In code: a number that matches no excerpt becomes the file's | 0/3 to 3/3, both modes; handbook citations unchanged |
 | 68 | 10d.3 | "Private documents never leave this Mac" only covered where they were stored: with `LLM_PROVIDER=groq` and the local table, salary-band excerpts went to Groq | Search leaves out `private/` chunks in SQL whenever the model is not local | Same questions: 4 private results with Ollama, 0 with Groq; retrieval eval unchanged (20/20, 7/10, 3/3, 4/4, 0/8) |
 | 69 | 10d.3 | On the Mac, every photo, scan and long-file overview went to Gemini's free tier, even with Ollama answering | `GEMINI_FILES`: on by default on Vercel only; off = photos and scans refused with the reason, overview from page 1 | Photo and scan refused, text PDF still read; the attach button names the services before upload |
+| 70 | 10d.4 | Each new app would need its own specialist code and a deployment | One generic connector; apps as entries in Redis, read from their `openapi.json` | Demo app added, used and removed with one command each, no deployment |
+| 71 | 10d.4 | Letting the model call app APIs as tools risks loops and invented calls | A planner picks from a fixed list (structured output); code checks and makes the calls: GET only, listed paths, time limit | Planner 6/6 (4 data questions call the right operation, 2 others call nothing); bad plans dropped in code |
 
 Where things stand (Phase 10 code):
 
@@ -630,6 +646,7 @@ Where things stand (Phase 10 code):
 | `POST /api/ask` for other apps (keys, bad requests, a question, a conversation) | 9/9 | 9/9 |
 | Long attachment, 59 pages: fact reaches the model / answers single, multi / which questions get it | 8/8 / 8/8, 8/8 / 9/9 | 4/4 live questions right |
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
+| Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 
 ---
 
@@ -685,6 +702,9 @@ what changed.
 15. **Where data is stored and where it is sent are two different rules.** Private documents were
     never stored on a hosted database, yet their excerpts were sent to a hosted model every time
     one answered (10d.3). Follow the data through every call, not only to where it rests.
+16. **Make the variable part data, not code.** Each app differs only in its address, its endpoints
+    and its token, so those became a configuration entry; the code that calls apps safely is
+    written once (10d.4). A new app is a command, not a deployment.
 
 ### What changed when the data got real (Phase 9)
 
@@ -732,6 +752,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Test a long attachment | `cd phase10-cloud/eval && npm run eval:long-file` (`ANSWERS=1` asks the agent too, `AGENT=multi` the supervisor) |
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
 | Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
+| Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps` |
 | A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
@@ -779,6 +800,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `fe6e3f6` | Phase 10d.1: example client for other apps |
 | `4ee670b`, `7ab27af` | Phase 10d.2: long attachments, deployed |
 | `6e005c0` | Phase 10d.3: data policy - which documents may go to which services |
+| `6019c98` | Phase 10d.4: connected apps - answers from other applications' live data |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

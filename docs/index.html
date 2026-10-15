@@ -298,6 +298,7 @@
         <div><dt>Fallback</dt><dd>A second option used automatically when the first fails, like a smaller model when the bigger one's daily limit is used up.</dd></div>
         <div><dt>Access code, CORS</dt><dd>A shared code the API requires, and the browser rule that only the app's own website may call the API.</dd></div>
         <div><dt>API key (per app)</dt><dd>A secret string one app sends with each request (<code>Authorization: Bearer &lt;key&gt;</code>), so the API knows which app is asking and can cut off one app without the others.</dd></div>
+        <div><dt>OpenAPI</dt><dd>A JSON file that lists an API's endpoints, their parameters and what each is for. Here the agent reads it to know what it may ask an app.</dd></div>
       </dl>
     </section>
 
@@ -843,6 +844,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.1</td><td>Other apps can ask: <code>POST /api/ask</code>, JSON in and out, one key per app</td><td class="res">Live: 9/9 (keys, bad requests, a question, a conversation); about 1.4 s a question after a 6 s cold start</td></tr>
                 <tr><td class="n">10d.2</td><td>Long attachments: chunks searched per question, like the handbook</td><td class="res">59-page tax guide: the fact reaches the model 8/8 (before: 4/8); answers 8/8 single and multi-agent; live upload 95 s</td></tr>
                 <tr><td class="n">10d.3</td><td>Which documents may go to which services: public, internal, confidential</td><td class="res">Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota</td></tr>
+                <tr><td class="n">10d.4</td><td>Connected apps: answers from other applications' live data, added as configuration</td><td class="res">Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment</td></tr>
               </tbody>
             </table>
           </div>
@@ -998,6 +1000,44 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.3. Three levels: public (<code>phase5-rag/docs</code>, anywhere), internal (<code>phase10-cloud/docs-internal</code>: Neon and Groq, never Gemini), confidential (<code>phase5-rag/docs-private</code>: this Mac and local models only). Decided in code (<code>api/dataPolicy.js</code>) from the settings. Groq keeps no prompts by default; Gemini's free tier may let human reviewers read them. The attach button says where a file goes before you upload it.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 260" role="img" aria-label="Adding an app: an admin command sends the app's entry; the service reads the app's openapi.json and stores its GET operations and encrypted token in Redis. Each question: a planner model call picks which operations to call, or none; code checks the plan and calls the app's API with its token; each result becomes a numbered excerpt and the model answers citing the app.">
+                <defs><marker id="a13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">ADD AN APP · ONE COMMAND, NO DEPLOYMENT</text>
+                <rect class="b" x="20" y="34" width="150" height="50" rx="6"/>
+                <text class="m" x="95" y="56" text-anchor="middle">npm run app</text>
+                <text class="s" x="95" y="73" text-anchor="middle">add masjid.json</text>
+                <line class="ln" x1="170" y1="59" x2="199" y2="59" marker-end="url(#a13)"/>
+                <rect class="b" x="200" y="34" width="150" height="50" rx="6"/>
+                <text class="t" x="275" y="55" text-anchor="middle">Read openapi.json</text>
+                <text class="s" x="275" y="72" text-anchor="middle">GET operations only</text>
+                <line class="ln" x1="350" y1="59" x2="379" y2="59" marker-end="url(#a13)"/>
+                <rect class="ba" x="380" y="34" width="150" height="50" rx="6"/>
+                <text class="t" x="455" y="55" text-anchor="middle">Redis registry</text>
+                <text class="s" x="455" y="72" text-anchor="middle">entry + encrypted token</text>
+
+                <text class="k" x="20" y="150">EVERY QUESTION</text>
+                <rect class="b" x="20" y="172" width="130" height="50" rx="6"/>
+                <text class="t" x="85" y="201" text-anchor="middle">Question</text>
+                <line class="ln" x1="150" y1="197" x2="169" y2="197" marker-end="url(#a13)"/>
+                <rect class="ba" x="170" y="172" width="150" height="50" rx="6"/>
+                <text class="t" x="245" y="193" text-anchor="middle">Planner</text>
+                <text class="s" x="245" y="210" text-anchor="middle">which calls? or none</text>
+                <line class="ln" x1="320" y1="197" x2="339" y2="197" marker-end="url(#a13)"/>
+                <rect class="b" x="340" y="172" width="170" height="50" rx="6"/>
+                <text class="t" x="425" y="193" text-anchor="middle">Code calls the app</text>
+                <text class="s" x="425" y="210" text-anchor="middle">GET, listed paths, token</text>
+                <line class="ln" x1="510" y1="197" x2="529" y2="197" marker-end="url(#a13)"/>
+                <rect class="b" x="530" y="172" width="170" height="50" rx="6"/>
+                <text class="t" x="615" y="193" text-anchor="middle">Model answers</text>
+                <text class="s" x="615" y="210" text-anchor="middle">cites "masjid API"</text>
+                <path class="ln" style="stroke-dasharray: 4 4" d="M455,84 V130 H245 V171" marker-end="url(#a13)"/>
+                <text class="s" x="350" y="124" text-anchor="middle">apps and their operations</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.4. One connector for every app: what differs per app (address, endpoints, token) is configuration, and the safe calling is written once. The app's side is a few read-only endpoints for the AI, an access token and an <code>openapi.json</code> (<code>phase10-cloud/apps/README.md</code>).</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1008,6 +1048,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Real use finds what evals miss: "tell that in Malayalam" and "hi" were never in a test; both came from using the live app, and both are tests now.</li>
               <li>A fallback must cover every model call, not only the answer: the judging step had none, so one used-up limit stopped every question.</li>
               <li>Where data is stored and where it is sent are different rules: private documents were never stored on a hosted database, yet a hosted model read their excerpts whenever it answered on the Mac.</li>
+              <li>Make the variable part data, not code: each app differs only in its address, endpoints and token, so a new app is a configuration entry and a command, not new code and a deployment.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
 npm run eval:public</pre><button type="button">Copy</button></div> Asked the way another app asks: <div class="cmd"><pre>cd phase10-cloud/examples
@@ -1093,6 +1134,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">67</td><td class="n">10d.2</td><td>A short PDF's heading "3. Hotels" cited as [3] when the file was excerpt [1]: no source shown (row 56's fix had stopped holding)</td><td>In code: a number that matches no excerpt becomes the file's</td><td class="res">0/3 to 3/3, both modes</td></tr>
             <tr><td class="n">68</td><td class="n">10d.3</td><td>"Private documents never leave this Mac" only covered where they were stored: with <code>LLM_PROVIDER=groq</code> and the local table, salary-band excerpts went to Groq</td><td>Search leaves out <code>private/</code> chunks in SQL whenever the model is not local</td><td class="res">4 private results with Ollama, 0 with Groq; retrieval unchanged</td></tr>
             <tr><td class="n">69</td><td class="n">10d.3</td><td>On the Mac, every photo, scan and long-file overview went to Gemini's free tier, even with Ollama answering</td><td><code>GEMINI_FILES</code>: on by default on Vercel only; off = photos and scans refused with the reason</td><td class="res">Photo and scan refused, text PDF still read; the attach button names the services</td></tr>
+            <tr><td class="n">70</td><td class="n">10d.4</td><td>Each new app would need its own specialist code and a deployment</td><td>One generic connector; apps as entries in Redis, read from their <code>openapi.json</code></td><td class="res">Demo app added, used and removed with one command each</td></tr>
+            <tr><td class="n">71</td><td class="n">10d.4</td><td>Letting the model call app APIs as tools risks loops and invented calls</td><td>A planner picks from a fixed list; code checks and makes the calls: GET only, listed paths, time limit</td><td class="res">Planner 6/6; bad plans dropped in code</td></tr>
           </tbody>
         </table>
       </div>
@@ -1114,6 +1157,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td><code>POST /api/ask</code> for other apps (keys, bad requests, a question, a conversation)</td><td class="n">9/9</td><td class="n">9/9</td></tr>
             <tr><td>Long attachment, 59 pages: fact found / answers single, multi / which questions get it</td><td class="n">8/8 / 8/8, 8/8 / 9/9</td><td class="n">4/4 live</td></tr>
             <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
+            <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
           </tbody>
         </table>
       </div>
@@ -1138,6 +1182,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Free tiers have limits you only find by hitting them.</strong> Per minute, per day, per request or per text, different for every service: Gemini counts each embedded text, 1,000 a day; Groq counts tokens per day per model. The limits shaped the design.</li>
         <li><strong>Make silent failures loud.</strong> A wrong database password looked like "no documents found", a framework ignored a misspelt option, and mixed embedding models would give plausible wrong results. Each now fails with a clear message.</li>
         <li><strong>Where data is stored and where it is sent are two different rules.</strong> Private documents were never stored on a hosted database, yet their excerpts were sent to a hosted model every time one answered (10d.3). Follow the data through every call, not only to where it rests.</li>
+        <li><strong>Make the variable part data, not code.</strong> Each app differs only in its address, its endpoints and its token, so those became a configuration entry; the code that calls apps safely is written once (10d.4). A new app is a command, not a deployment.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1187,6 +1232,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Test a long attachment</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:long-file</code> (<code>ANSWERS=1</code> asks the agent too)</td></tr>
             <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>Check which documents may go where</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:policy</code> (no model calls)</td></tr>
+            <tr><td>Connected apps</td><td><code>cd phase10-cloud/api &amp;&amp; npm run app -- list</code> (also <code>add &lt;file&gt;</code>, <code>try "question"</code>, <code>remove &lt;name&gt;</code>); test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:apps</code></td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>
