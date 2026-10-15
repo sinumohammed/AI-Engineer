@@ -789,6 +789,52 @@ Found while doing it, each first reproduced:
   After: single 10/10, supervisor 10/10, routing 24/24, end to end 3/3,
   history 4/4, `eval:apps` 39/39 - all with the demo app registered.
 
+**Who may ask, and as whom** (decided with the user 2026-10-15: this service
+stays generic - masjid data only through the masjid app, following the
+user's role; guests only the duty schedule). `api/appAccess.js` keeps the
+caller per request (AsyncLocalStorage): the web chat is `"web"`, `/api/ask` is
+the app's name, code outside a request has none - and sees no apps.
+
+| Entry field | |
+|---|---|
+| `callers` | required: `"web"` and/or `/api/ask` app names; masjid: `["masjid"]` |
+| `user` | `none` / `optional` / `required`: `/api/ask` takes `user: { token }` - the app's own short-lived token for its logged-in user - and it is sent on as `X-User-Token`; the app decides what that user may see |
+| `whoami` | the app's "who am I" operation: added in code for questions with I/me/my (found: "Do I have pending dues?" fetched only the dues list, and Fathima was told "you do not have any pending dues... Fathima Beevi owes 2,100") |
+
+Cached plans are per caller and per user. A 403 is passed on as the app's
+reason in plain words (it first read "returned a 403 error" to a visitor).
+
+The masjid side (its repo, branch `ai-read-api`): every `/api/ai/*` call needs
+the service token **and** a user token - minted per question by the masjid
+server, 5 minutes, read-only, signed with a key derived from its JWT secret, so
+its login checks never accept it. Admin: everything; member: schedule,
+announcements, members (no one else's payment plan), own dues and payments
+(`/ai/me`); guest (not logged in): `/ai/me`, today's duty, `/ai/duty-on-date`,
+the schedule and yearly duty days - else 403 "log in". `/api/assistant/ask`
+(masjid server, optional login) asks this service with the masjid key (never
+in the browser); guests are pinned to the connected_apps agent (not a general
+chatbot), need a random chat id, and get 20 questions an hour per IP
+(`AI_GUEST_PER_HOUR`). The app has an Assistant page and a floating chat
+button on every screen, including the login screen.
+
+**Measured** - `eval:apps` (demo app with roles: `X-User-Token` "admin" /
+"member:M-101"): 58/58, including callers (web chat, other apps and no caller
+see nothing), user required/forwarded/not forwarded, a member's own dues only,
+"Do I have pending dues?" for the member, both modes. End to end with the
+masjid backend on a throwaway database (`/api/assistant/ask` -> this service
+-> `/api/ai/*`): **23/23** - token checks (no user, user without service
+token, the AI user token refused as a login, a login token refused as an AI
+user token, a member's 403), admin dues and accounts, a member's own dues,
+"my next duty", accounts refused, the web chat / another app / the masjid key
+without a user get no masjid data, guests: today, tomorrow, a weekday, dues
+refused with "log in", "capital of France" not answered, a guessable chat id
+refused, the hourly limit. Browser (phone 390 px, desktop): Assistant page
+and floating chat, logged in and out, no horizontal overflow. Found on the
+way: "tomorrow" was planned as duty-schedule `days=1` (today only) -> a
+`duty-on-date` operation in the masjid API; a reused guest chat repeated its
+earlier wrong answers (the Phase 8c history effect) - each guest chat has its
+own random id. Regressions (Ollama): 10/10, 10/10, 24/24, 3/3, 4/4; policy 15/15.
+
 **To turn it on** (once): `npm run app -- keys`, put `ADMIN_KEY` and
 `APP_SECRETS_KEY` in `.env` and on Vercel, deploy. Then each app is
 `npm run app -- add ...` with `API_URL` pointing at the server - the Mac or

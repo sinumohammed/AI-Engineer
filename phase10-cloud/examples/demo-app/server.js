@@ -9,6 +9,11 @@
 //
 //   node server.js     (DEMO_APP_PORT, default 4010; DEMO_APP_TOKEN, default demo-token)
 //   DEMO_APP_DELAY_MS=5000 node server.js   answers slowly, to test time limits
+//
+// Roles, as a real app would check its own logged-in user: the AI service
+// passes the caller's user in X-User-Token. Here a demo token is "admin" or
+// "member:M-101"; a member sees only their own dues (403 for someone else's
+// details). No X-User-Token: everything, as before.
 import { createServer } from "node:http";
 
 const PORT = Number(process.env.DEMO_APP_PORT ?? 4010);
@@ -63,6 +68,9 @@ const OPENAPI = {
   info: { title: "Community Hall - AI read-only API", version: "1.0.0" },
   servers: [{ url: "/api" }],
   paths: {
+    "/ai/me": {
+      get: { operationId: "me", summary: "The asking user: their member record, own dues and upcoming duty days (admin: just the role)" },
+    },
     "/ai/duty": {
       get: {
         operationId: "duty_on_date",
@@ -109,8 +117,23 @@ const OPENAPI = {
   components: { parameters: { Limit: { name: "limit", in: "query", required: false, description: "How many, default 5", schema: { type: "integer" } } } },
 };
 
-function route(path, q) {
+function viewer(req) {
+  const t = req.headers["x-user-token"];
+  if (!t) return { all: true };
+  if (t === "admin") return { all: true, admin: true };
+  const m = t.match(/^member:(M-\d+)$/);
+  return m ? { memberId: m[1] } : { invalid: true };
+}
+
+function route(path, q, who) {
   if (path === "/api/ai/openapi.json") return [200, OPENAPI];
+  if (path === "/api/ai/me") {
+    if (!who.memberId) return [200, { role: who.admin ? "admin" : "anonymous" }];
+    const m = MEMBERS.find((x) => x.id === who.memberId);
+    const t = todayIso();
+    const upcoming = Array.from({ length: 14 }, (_, i) => duty(addDays(t, i))).filter((d) => d.onDuty.some((o) => o.memberId === m.id)).map((d) => ({ date: d.date, weekday: d.weekday }));
+    return [200, { role: "member", id: m.id, name: m.name, dues: dues().filter((d) => d.memberId === m.id), upcomingDuty: upcoming }];
+  }
   if (path === "/api/ai/duty") {
     const date = q.get("date") ?? todayIso();
     return isDate(date) ? [200, duty(date)] : [400, { error: "date must be YYYY-MM-DD" }];
@@ -131,13 +154,14 @@ function route(path, q) {
   if (member) {
     const m = MEMBERS.find((x) => x.id === decodeURIComponent(member[1]));
     if (!m) return [404, { error: "no such member" }];
+    if (!who.all && who.memberId !== m.id) return [403, { error: "members can only see their own details" }];
     const t = todayIso();
     const upcoming = Array.from({ length: 14 }, (_, i) => duty(addDays(t, i))).filter((d) => d.onDuty.some((o) => o.memberId === m.id)).map((d) => ({ date: d.date, weekday: d.weekday, role: d.onDuty.find((o) => o.memberId === m.id).role }));
     return [200, { ...m, dues: dues().filter((d) => d.memberId === m.id), upcomingDuty: upcoming }];
   }
   if (path === "/api/ai/dues") {
     const status = q.get("status");
-    return [200, dues().filter((d) => !status || d.status === status)];
+    return [200, dues().filter((d) => (!status || d.status === status) && (who.all || d.memberId === who.memberId))];
   }
   if (path === "/api/ai/announcements") return [200, announcements().slice(0, Number(q.get("limit") ?? 5) || 5)];
   return [404, { error: "not found" }];
@@ -151,6 +175,8 @@ createServer(async (req, res) => {
   };
   if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: "access token required" });
   if (req.method !== "GET") return send(405, { error: "read-only" });
+  const who = viewer(req);
+  if (who.invalid) return send(401, { error: "unknown user" });
   if (DELAY_MS) await new Promise((r) => setTimeout(r, DELAY_MS));
-  send(...route(url.pathname, url.searchParams));
+  send(...route(url.pathname, url.searchParams, who));
 }).listen(PORT, () => console.log(`Demo app on http://localhost:${PORT}/api (token "${TOKEN}")`));

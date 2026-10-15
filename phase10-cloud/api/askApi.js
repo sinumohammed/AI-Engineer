@@ -4,7 +4,8 @@
 // web app's access code, so a key can be given to one app and taken back
 // from it without touching the others.
 //
-//   POST /api/ask  { "question": "...", "conversationId"?: "...", "mode"?: "single" | "multi", "agent"?: "..." }
+//   POST /api/ask  { "question": "...", "conversationId"?: "...", "mode"?: "single" | "multi", "agent"?: "...",
+//                    "user"?: { "token": "..." } }
 //   -> { answer, sources, fromCompanyDocs, notices, usage, conversationId, mode }
 //   DELETE /api/ask/conversations/:conversationId  - forget a conversation
 //
@@ -12,6 +13,13 @@
 // questions in it are remembered (Redis, 24 hours), like a chat in the web
 // app. Conversations are stored per app ("app:<name>:<id>"), so one app can
 // never read another's, or the web app's.
+//
+// Phase 10 #4: the asking app is the caller for connected apps - it sees
+// only the apps whose entry names it in `callers` (appAccess.js). `user.token`
+// is the app's own short-lived token for its logged-in user, passed on to the
+// app's API (X-User-Token) so it answers as that user may see it. The app
+// should use a conversationId per user ("user-42:chat-1"), so one user's
+// conversation is never another's.
 import { timingSafeEqual, createHash } from "node:crypto";
 import express from "express";
 import { runAgent } from "./agent.js";
@@ -19,6 +27,7 @@ import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
 import { APP_API_KEYS, APP_DAILY_LIMIT, ACCESS_CODE } from "./config.js";
 import { getHistory, getSummary, appendTurn, clearSession, countAppQuestion } from "./sessionStore.js";
+import { withAccess } from "./appAccess.js";
 
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
@@ -47,13 +56,16 @@ askApi.use((req, res, next) => {
 });
 
 askApi.post("/", async (req, res) => {
-  const { question, conversationId, mode = "single", agent } = req.body ?? {};
+  const { question, conversationId, mode = "single", agent, user } = req.body ?? {};
   if (typeof question !== "string" || !question.trim()) return res.status(400).json({ error: 'Missing "question" (a string).' });
   if (question.length > MAX_QUESTION_CHARS) return res.status(400).json({ error: `"question" is too long - up to ${MAX_QUESTION_CHARS} characters.` });
   if (conversationId !== undefined && (typeof conversationId !== "string" || !CONVERSATION_ID.test(conversationId))) {
     return res.status(400).json({ error: '"conversationId" must be 1-100 characters: letters, digits, _ . : -' });
   }
   if (!["single", "multi"].includes(mode)) return res.status(400).json({ error: '"mode" must be "single" or "multi".' });
+  if (user !== undefined && !(user && typeof user.token === "string" && user.token.length > 0 && user.token.length <= 4096)) {
+    return res.status(400).json({ error: '"user" must be { "token": "..." } - a token of up to 4096 characters.' });
+  }
 
   const asked = await countAppQuestion(req.appName);
   if (asked > APP_DAILY_LIMIT) {
@@ -67,8 +79,8 @@ askApi.post("/", async (req, res) => {
     const [history, summary] = sessionId ? await Promise.all([getHistory(sessionId), getSummary(sessionId)]) : [[], null];
     const q = question.trim();
     // Notices (e.g. "answered by the fallback model") are returned with the answer.
-    const { result, notices } = await collectNotices(() =>
-      mode === "multi" ? runMultiAgent(q, history, { summary, forceAgent: agent }) : runAgent(q, history, { summary })
+    const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token }, () =>
+      collectNotices(() => (mode === "multi" ? runMultiAgent(q, history, { summary, forceAgent: agent }) : runAgent(q, history, { summary })))
     );
     const { answer, usage, fromCompanyDocs, sources = [] } = result;
     if (sessionId) await appendTurn(sessionId, q, answer, { fromCompanyDocs, askedAt, answeredAt: new Date().toISOString() });

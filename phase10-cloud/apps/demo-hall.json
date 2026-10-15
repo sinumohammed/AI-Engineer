@@ -2,6 +2,12 @@
   "name": "hall",
   "description": "Community hall (demo data): volunteer duty roster by day, members, monthly dues paid or pending, announcements",
   "openapi": "http://localhost:4010/api/ai/openapi.json",
+  "callers": [
+    "web",
+    "eval"
+  ],
+  "user": "optional",
+  "whoami": "me",
   "token": "demo-token",
   "dataLevel": "internal",
   "timezone": "Asia/Kolkata",

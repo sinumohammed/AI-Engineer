@@ -4,12 +4,22 @@
 // with no deployment of this service.
 //
 // An entry, as given by the admin:
-//   { name, description, openapi, token?, dataLevel?, timezone?, timeoutMs?, allow?, examples? }
+//   { name, description, openapi, callers, user?, token?, dataLevel?, timezone?, timeoutMs?, allow?, examples? }
 // - description: what the router and planner read to decide when to ask this app
 // - openapi: the URL of the app's OpenAPI 3 file; read at registration, so the
 //   app's GET operations are stored with the entry (openapiTools.js)
 // - token: sent as "Authorization: Bearer <token>"; stored encrypted
 // - dataLevel: public | internal | confidential (dataPolicy.js, default internal)
+// - callers: who may ask this app's data - "web" (the web chat) and/or the
+//   names of /api/ask apps (APP_API_KEYS). Required: an app's data is not
+//   open to every user of this service by default (appAccess.js).
+// - user: "none" (default) | "optional" | "required" - pass the caller's
+//   logged-in user to the app (header X-User-Token), so the app answers as
+//   that user may see it; "required": not used without one.
+// - whoami: optional - the id of the app's operation that says who the
+//   logged-in user is ("me"). A question with "I", "my", "me" that the plan
+//   sends to this app also gets that call, so "Do I have pending dues?" is
+//   answered for the asking user (apps.js).
 //
 // Safety does not depend on the entry: only GET, only the operations in the
 // stored list, only https (http on this machine for tests) - apps.js.
@@ -19,6 +29,7 @@ import { APPS_KEY, APP_SECRETS_KEY } from "./config.js";
 import { readOpenApi } from "./openapiTools.js";
 
 export const DATA_LEVELS = ["public", "internal", "confidential"];
+export const USER_MODES = ["none", "optional", "required"];
 const DEFAULT_TIMEOUT_MS = 60000; // a free Render backend can take ~50 s to wake up
 const MAX_OPENAPI_BYTES = 500000;
 
@@ -124,6 +135,13 @@ function validate(input, existing) {
   checkUrl(e.openapi, "openapi");
   e.dataLevel = e.dataLevel ?? existing?.dataLevel ?? "internal";
   if (!DATA_LEVELS.includes(e.dataLevel)) throw new AppConfigError(`dataLevel: one of ${DATA_LEVELS.join(", ")}`);
+  e.callers = e.callers ?? existing?.callers;
+  if (!Array.isArray(e.callers) || !e.callers.length || !e.callers.every((c) => /^[a-z0-9-]{1,30}$/.test(c))) {
+    throw new AppConfigError('callers: who may ask this app - "web" for the web chat and/or /api/ask app names, e.g. ["masjid"]');
+  }
+  e.user = e.user ?? existing?.user ?? "none";
+  if (!USER_MODES.includes(e.user)) throw new AppConfigError(`user: one of ${USER_MODES.join(", ")}`);
+  if (e.whoami !== undefined && (typeof e.whoami !== "string" || !e.whoami)) throw new AppConfigError("whoami: an operation id from the app's OpenAPI file");
   if (e.timezone) {
     try {
       new Intl.DateTimeFormat("en", { timeZone: e.timezone });
@@ -149,6 +167,9 @@ export async function saveApp(input) {
   const token = e.token ?? (existing?.tokenEnc ? decrypt(existing.tokenEnc) : null);
   const { baseUrl, title, operations, skipped } = await readSpec(e.openapi, token, e.timeoutMs, e.allow);
   checkUrl(baseUrl, "the OpenAPI servers[0].url");
+  if (e.whoami && !operations.some((o) => o.id === e.whoami)) {
+    throw new AppConfigError(`whoami: "${e.whoami}" is not one of the app's GET operations (${operations.map((o) => o.id).join(", ")})`);
+  }
   const entry = {
     name: e.name,
     description: e.description,
@@ -156,6 +177,9 @@ export async function saveApp(input) {
     baseUrl,
     title,
     dataLevel: e.dataLevel,
+    callers: e.callers,
+    user: e.user,
+    ...(e.whoami ? { whoami: e.whoami } : {}),
     ...(e.timezone ? { timezone: e.timezone } : {}),
     timeoutMs: e.timeoutMs,
     ...(e.allow ? { allow: e.allow } : {}),

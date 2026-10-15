@@ -8,9 +8,7 @@ import { specialists, searchDocs } from "./specialists.js";
 import { replyLanguageRule } from "./replyLanguage.js";
 import { sharesWords, MENTIONS_FILE } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
-import { listApps } from "./appRegistry.js";
-import { appAllowed } from "./dataPolicy.js";
-import { appContext } from "./apps.js";
+import { appContext, availableApps } from "./apps.js";
 
 export const AGENT_NAMES = Object.keys(specialists);
 const MAX_TASKS = 3;
@@ -87,7 +85,7 @@ export const ROUTER_PROMPT =
 // Phase 10 #4: the connected apps are added without a deployment, so the
 // router is told which exist at question time, not in ROUTER_PROMPT.
 export async function connectedAppsText() {
-  const apps = (await listApps()).filter(appAllowed);
+  const apps = await availableApps();
   return apps.length
     ? "\n\nConnected applications (for connected_apps):\n" + apps.map((a) => `- ${a.name}: ${a.description}`).join("\n")
     : "\n\nConnected applications: none.";
@@ -212,7 +210,7 @@ export function checkAttachmentTasks(decision, attachment) {
 // sent to connected_apps goes to general, as attachment tasks do without a file.
 export async function checkAppTasks(decision) {
   if (!decision.tasks.some((t) => t.agent === "connected_apps")) return decision;
-  if ((await listApps()).some(appAllowed)) return decision;
+  if ((await availableApps()).length > 0) return decision;
   return { ...decision, tasks: decision.tasks.map((t) => (t.agent === "connected_apps" ? { ...t, agent: "general" } : t)) };
 }
 
@@ -231,7 +229,7 @@ export async function checkAppTasks(decision) {
 const APP_PRIORITY = process.env.APP_PRIORITY !== "0";
 
 export async function applyAppPriority(decision) {
-  if (!APP_PRIORITY || !(await listApps()).some(appAllowed)) return decision;
+  if (!APP_PRIORITY || !(await availableApps()).length) return decision;
   const overridden = [];
   const tasks = await Promise.all(
     decision.tasks.map(async (t) => {

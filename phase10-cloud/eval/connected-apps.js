@@ -2,6 +2,7 @@
 // app (examples/demo-app), started here on ports 4011 and 4012 (slow).
 //   1. registration: OpenAPI read, GET only, token encrypted, bad entries refused - no model
 //   2. safety: calls stay on the app's URL, time limit, refused token, bad plans dropped - no model
+//   2b. who may ask: callers, apps that need a user, the user passed on - no model
 //   3. answers (ANSWERS=1): planner + agent on questions about the app's data,
 //      and questions that must not call the app (MODES=single,multi; ONLY=<text>)
 // Uses its own registry key (apps:registry:eval) and a throwaway encryption
@@ -12,7 +13,11 @@ import { randomBytes } from "node:crypto";
 process.env.APPS_KEY = "apps:registry:eval";
 process.env.APP_SECRETS_KEY = randomBytes(32).toString("base64");
 const { saveApp, removeApp, listApps, getApp, checkUrl } = await import("../api/appRegistry.js");
-const { callOperation, checkPlan, buildUrl, appContext } = await import("../api/apps.js");
+const { callOperation, checkPlan, buildUrl, appContext: appContextRaw, availableApps } = await import("../api/apps.js");
+const { withAccess } = await import("../api/appAccess.js");
+// The eval asks as the /api/ask app "eval", as a real app would.
+const asEval = (fn, userToken) => withAccess({ caller: "eval", userToken }, fn);
+const appContext = (q) => asEval(() => appContextRaw(q));
 const { redis } = await import("../api/sessionStore.js");
 
 const DEMO = new URL("../examples/demo-app/server.js", import.meta.url).pathname;
@@ -52,11 +57,14 @@ const HALL = {
   dataLevel: "internal",
   timezone: "Asia/Kolkata",
   timeoutMs: 10000,
+  callers: ["eval"],
+  user: "optional",
+  whoami: "me",
 };
 
 console.log("1. Registration");
 const { app, skipped } = await saveApp(HALL);
-check("OpenAPI read: 6 GET operations, the POST ignored", app.operations.length === 6 && skipped.notGet === 1, `${app.operations.map((o) => o.id).join(", ")}`);
+check("OpenAPI read: 7 GET operations, the POST ignored", app.operations.length === 7 && skipped.notGet === 1, `${app.operations.map((o) => o.id).join(", ")}`);
 check("Relative server URL resolved against the file", app.baseUrl === "http://localhost:4011/api", app.baseUrl);
 check("A $ref parameter is read", app.operations.find((o) => o.id === "announcements")?.params[0]?.name === "limit");
 const raw = await redis.hGet(process.env.APPS_KEY, "hall");
@@ -65,8 +73,10 @@ check("Wrong token: refused at registration", (await refused(() => saveApp({ ...
 check("http to another machine: refused", (await refused(() => saveApp({ ...HALL, name: "hall-http", openapi: "http://example.com/openapi.json" }), /must use https/)) === true);
 check("Bad name: refused", (await refused(() => saveApp({ ...HALL, name: "Hall App" }), /name:/)) === true);
 check("Unknown data level: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", dataLevel: "secret" }), /dataLevel/)) === true);
-const limited = await saveApp({ ...HALL, name: "hall-limited", allow: ["GET /ai/duty", "GET /ai/dues"] });
-check('"allow" keeps only the listed operations', limited.app.operations.length === 2 && limited.skipped.notAllowed === 4);
+check("No callers: refused (an app is not open to every caller by default)", (await refused(() => saveApp({ ...HALL, name: "hall-x", callers: undefined }), /callers/)) === true);
+check("whoami naming no operation: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", whoami: "nope" }), /whoami/)) === true);
+const limited = await saveApp({ ...HALL, name: "hall-limited", whoami: undefined, allow: ["GET /ai/duty", "GET /ai/dues"] });
+check('"allow" keeps only the listed operations', limited.app.operations.length === 2 && limited.skipped.notAllowed === 5);
 const kept = await saveApp({ ...HALL, name: "hall-limited", token: undefined, description: "Changed description for the same app" });
 check("Saving again without the token keeps it", kept.app.hasToken);
 await removeApp("hall-limited");
@@ -86,16 +96,39 @@ const timedOut = await callOperation(slowApp, slowApp.operations[0], {});
 check("A slow app: stopped at its time limit, with a clear message", !timedOut.ok && /no answer in 1 s/.test(timedOut.error), timedOut.error);
 await removeApp("hall-slow");
 const badToken = await callOperation({ ...hall, tokenEnc: undefined }, op("duty_on_date"), {});
-check("A refused token: reported, not thrown", !badToken.ok && /refused the access token/.test(badToken.error), badToken.error);
+check("A refused token: reported, not thrown", !badToken.ok && /refused this service.s access/.test(badToken.error), badToken.error);
 const plan = checkPlan(
   { calls: [{ operation: "hall.nope", args: [] }, { operation: "hall.member_details", args: [] }, { operation: "hall.list_dues", args: [{ name: "status", value: "pending" }, { name: "drop_table", value: "x" }] }] },
   [hall]
 );
 check("Planner output checked: unknown and incomplete calls dropped, unknown parameters removed", plan.calls.length === 1 && JSON.stringify(plan.calls[0].args) === '{"status":"pending"}' && plan.dropped.length === 2, plan.dropped.join("; "));
 
+console.log("\n2b. Who may ask");
+const names = async (access) => (await withAccess(access, () => availableApps())).map((a) => a.name).join(",") || "none";
+check("Outside a request (no caller): no apps", (await names({})) === "none");
+check('The web chat ("web") does not see an app for "eval" only', (await names({ caller: "web" })) === "none");
+check("Another /api/ask app does not see it", (await names({ caller: "crm" })) === "none");
+check('The app it names ("eval") sees it', (await names({ caller: "eval" })) === "hall");
+const webNone = await withAccess({ caller: "web" }, () => appContextRaw("Who is on duty today?"));
+check("Web chat question: no planner call at all", webNone.usage === null && webNone.calls.length === 0);
+await saveApp({ ...HALL, name: "hall-users", user: "required" });
+check('user: "required" - not available without a user', !(await names({ caller: "eval" })).includes("hall-users"));
+check('user: "required" - available with one', (await names({ caller: "eval", userToken: "member:M-102" })).includes("hall-users"));
+await removeApp("hall-users");
+const asMember = await asEval(() => callOperation(hall, op("list_dues"), { status: "pending" }), "member:M-102");
+check("The user is passed on: a member sees only their own dues", asMember.ok && asMember.text.includes("Bilal") && !asMember.text.includes("Hamza"), asMember.text.slice(0, 100));
+const asAdmin = await asEval(() => callOperation(hall, op("list_dues"), { status: "pending" }), "admin");
+check("The admin sees everyone's", asAdmin.ok && asAdmin.text.includes("Bilal") && asAdmin.text.includes("Hamza"));
+const other = await asEval(() => callOperation(hall, op("member_details"), { id: "M-104" }), "member:M-102");
+check("Another member's details: the app's own reason is passed on", !other.ok && /not allowed for this user: members can only see their own details/.test(other.error), other.error);
+const noUserHeader = await asEval(() => callOperation({ ...hall, user: "none" }, op("list_dues"), { status: "pending" }), "member:M-102");
+check('user: "none" - the user is not passed on', noUserHeader.ok && noUserHeader.text.includes("Hamza"));
+
 if (process.env.ANSWERS === "1") {
-  const { runAgent } = await import("../api/agent.js");
-  const { runAgent: runMultiAgent } = await import("../api/supervisor.js");
+  const { runAgent: runSingle } = await import("../api/agent.js");
+  const { runAgent: runSupervisor } = await import("../api/supervisor.js");
+  const runAgent = (q, h, o, user) => asEval(() => runSingle(q, h, o), user);
+  const runMultiAgent = (q, h, o, user) => asEval(() => runSupervisor(q, h, o), user);
   const get = async (path) => (await fetch(`http://localhost:4011/api${path}`, { headers: { Authorization: "Bearer demo-token" } })).json();
   const today = await get("/ai/duty");
   const latest = (await get("/ai/announcements"))[0];
@@ -128,6 +161,18 @@ if (process.env.ANSWERS === "1") {
       const okCase = has && (c.app ? cited : !cited);
       check(`${c.q}`, okCase, `${c.app ? (cited ? "cites hall API" : "NO hall API source") : cited ? "WRONGLY cites hall API" : "no app source"}${has ? "" : `; missing ${c.expect.filter((e) => !text.includes(e.toLowerCase())).join(", ")}`} | ${r.answer.slice(0, 120).replace(/\n/g, " ")}`);
     }
+  }
+
+  console.log("\n3c. The same question, two users (single agent and supervisor)");
+  for (const [label, run] of [["single", runAgent], ["multi", runMultiAgent]]) {
+    const member = await run("Which hall members have pending dues?", [], {}, "member:M-104");
+    const admin = await run("Which hall members have pending dues?", [], {}, "admin");
+    check(`${label}: member M-104 hears only their own dues`, member.answer.includes("Hamza") && !member.answer.includes("Bilal"), member.answer.slice(0, 110).replace(/\n/g, " "));
+    check(`${label}: the admin hears everyone's`, admin.answer.includes("Hamza") && admin.answer.includes("Bilal"), admin.answer.slice(0, 110).replace(/\n/g, " "));
+    // "I" is the asking user: the app's whoami call is added in code.
+    const mine = await run("Do I have any pending dues at the hall?", [], {}, "member:M-104");
+    // Their due is October's 500 INR: either is the right answer, a plain "no" is not.
+    check(`${label}: "Do I have pending dues?" - answered for the member, yes`, /\byes\b|you have|you owe/i.test(mine.answer) && /500|October/.test(mine.answer), mine.answer.slice(0, 110).replace(/\n/g, " "));
   }
 }
 

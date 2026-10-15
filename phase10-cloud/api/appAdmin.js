@@ -4,7 +4,8 @@
 //   npm run app -- add <app.json>        add or replace an app (see ../apps/*.example.json)
 //   npm run app -- refresh <name>        read its OpenAPI file again after the app changed
 //   npm run app -- remove <name>
-//   npm run app -- try "<question>"      which app calls a question makes, and what came back
+//   npm run app -- try "<question>" [user-token]   which app calls a question makes, and what came back
+//                                        (user-token: as a logged-in user of an app with "user")
 //   npm run app -- keys                  new values for ADMIN_KEY and APP_SECRETS_KEY (nothing saved)
 //
 // Talks to API_URL (default the Mac, http://localhost:3002) with ADMIN_KEY
@@ -60,6 +61,7 @@ async function call(method, path, body) {
 function showApp(a) {
   console.log(`${a.name} - ${a.description}`);
   console.log(`  ${a.baseUrl}  (${a.dataLevel}${a.timezone ? `, ${a.timezone}` : ""}, token ${a.hasToken ? "stored" : "none"}, updated ${a.updatedAt})`);
+  console.log(`  asked by: ${(a.callers ?? []).join(", ") || "nobody"}; user: ${a.user ?? "none"}`);
   for (const op of a.operations) console.log(`  GET ${op.path}  - ${op.summary}${op.params.length ? `  [${op.params.map((p) => `${p.name}${p.required ? "" : "?"}`).join(", ")}]` : ""}`);
 }
 
@@ -89,7 +91,8 @@ if (cmd === "list") {
   await call("DELETE", `/apps/${encodeURIComponent(arg)}`);
   console.log(`Removed ${arg}.`);
 } else if (cmd === "try") {
-  const { calls, dropped, excerpts } = await call("POST", "/try", { question: arg });
+  const userToken = process.argv[4];
+  const { calls, dropped, excerpts } = await call("POST", "/try", { question: arg, ...(userToken ? { userToken } : {}) });
   if (!calls.length) console.log("No app calls for this question.");
   for (const [i, c] of calls.entries()) {
     console.log(`${c.ok ? "OK " : "ERR"} ${c.app}.${c.operation} ${JSON.stringify(c.args)} ${c.latencyMs ?? "-"} ms${c.error ? ` - ${c.error}` : ""}`);

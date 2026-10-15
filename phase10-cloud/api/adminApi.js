@@ -7,8 +7,10 @@
 //   PUT    /api/admin/apps/:name           add or replace one - body: the app's entry
 //   POST   /api/admin/apps/:name/refresh   read its OpenAPI file again
 //   DELETE /api/admin/apps/:name
-//   POST   /api/admin/try                  { question } - plan and fetch only, no answer:
-//                                          which app calls a question makes, and what came back
+//   POST   /api/admin/try                  { question, userToken? } - plan and fetch only, no answer:
+//                                          which app calls a question makes, and what came back.
+//                                          Any app, whatever its callers; a userToken is passed on
+//                                          as a caller would (apps with user: "required" need one).
 //
 // `npm run app` (appAdmin.js) is the command-line client.
 import { timingSafeEqual, createHash } from "node:crypto";
@@ -16,6 +18,7 @@ import express from "express";
 import { ADMIN_KEY } from "./config.js";
 import { listApps, saveApp, refreshApp, removeApp, publicView, AppConfigError } from "./appRegistry.js";
 import { appContext } from "./apps.js";
+import { withAccess } from "./appAccess.js";
 
 const digest = (s) => createHash("sha256").update(String(s)).digest();
 
@@ -58,7 +61,8 @@ adminApi.post(
   handle(async (req) => {
     const question = String(req.body?.question ?? "").trim();
     if (!question) throw new AppConfigError("question is required");
-    const data = await appContext(question);
+    const userToken = typeof req.body?.userToken === "string" && req.body.userToken ? req.body.userToken : null;
+    const data = await withAccess({ admin: true, userToken }, () => appContext(question));
     return { calls: data.calls, dropped: data.dropped, excerpts: data.chunks.map((c) => c.content.slice(0, 1500)) };
   })
 );

@@ -13,6 +13,7 @@ import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, na
 import { POINTS_BACK } from "./retrieve.js";
 import { askApi } from "./askApi.js";
 import { adminApi } from "./adminApi.js";
+import { withAccess } from "./appAccess.js";
 import { listApps } from "./appRegistry.js";
 import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, ADMIN_KEY, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
@@ -114,7 +115,9 @@ app.get("/api/chat/stream", async (req, res) => {
     // decision and each specialist starting and finishing.
     // Phase 10: notices (e.g. "answered by the fallback model") are collected
     // for this request by the model client and sent before the answer.
-    const { result, notices } = await collectNotices(() =>
+    // Phase 10 #4: the web chat is the caller "web" - it sees only the
+    // connected apps whose entry names "web" (appAccess.js).
+    const { result, notices } = await withAccess({ caller: "web" }, () => collectNotices(() =>
       mode === "multi"
         ? runMultiAgent(asked, history, {
             onRoute: (decision) => send("route", decision),
@@ -134,7 +137,7 @@ app.get("/api/chat/stream", async (req, res) => {
             summary,
             attachment,
           })
-    );
+    ));
     const { answer, usage, fromCompanyDocs, sources = [] } = result;
     for (const text of notices) send("notice", { text });
 
@@ -251,6 +254,6 @@ function logServices(firstLine) {
   const askAccess = APP_API_KEYS.length ? `keys for ${APP_API_KEYS.map((a) => a.name).join(", ")}` : ACCESS_CODE ? "off (no APP_API_KEYS)" : "open (no APP_API_KEYS)";
   console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app`);
   listApps().then((apps) =>
-    console.log(`  apps:       ${apps.length ? apps.map((a) => `${a.name} (${a.operations.length} operations, ${a.dataLevel})`).join(", ") : "none connected"}; admin API ${ADMIN_KEY ? "on" : "off (no ADMIN_KEY)"}`)
+    console.log(`  apps:       ${apps.length ? apps.map((a) => `${a.name} (${a.operations.length} operations, ${a.dataLevel}, for ${(a.callers ?? []).join("/") || "nobody"})`).join(", ") : "none connected"}; admin API ${ADMIN_KEY ? "on" : "off (no ADMIN_KEY)"}`)
   );
 }

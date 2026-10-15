@@ -2,6 +2,11 @@
   "name": "masjid",
   "description": "Masjid management: daily food-duty rotation (which member household supplies food each day) and swaps, members, pending dues, income and expense transactions, bank balances, announcements",
   "openapi": "https://angular-session.onrender.com/api/ai/openapi.json",
+  "callers": [
+    "masjid"
+  ],
+  "user": "required",
+  "whoami": "me",
   "token": "$MASJID_AI_TOKEN",
   "dataLevel": "internal",
   "timezone": "Asia/Kolkata",

@@ -116,6 +116,9 @@ full https URL. Only GET operations are used; at most 15 per app.
 | `description` | what data the app has - the router and planner decide by it |
 | `openapi` | URL of the app's OpenAPI file (https; http only on this machine) |
 | `token` | `"$ENV_NAME"` reads it from `../.env`; stored encrypted |
+| `callers` | **required** - who may ask this app's data: `"web"` (this service's web chat) and/or `/api/ask` app names (`APP_API_KEYS`). The masjid entry is `["masjid"]`: only the masjid app's own chat, never the general web chat |
+| `user` | `"none"` (default), `"optional"` or `"required"` - pass the caller's logged-in user on to the app (header `X-User-Token`), so it answers as that user may see it; `"required"`: never used without a user |
+| `whoami` | optional - the id of the app's "who am I" operation (e.g. `"me"`); a question with "I", "my", "me" that goes to this app also gets that call, so "Do I have pending dues?" is answered for the asking user |
 | `dataLevel` | `public`, `internal` (default) or `confidential` - see 10d.3; confidential apps only work with a local model |
 | `timezone` | the app's time zone, so "today" is the app's day (e.g. `Asia/Kolkata`) |
 | `timeoutMs` | per call, default 60000 (a free Render backend can take ~50 s to wake up) |
@@ -124,3 +127,28 @@ full https URL. Only GET operations are used; at most 15 per app.
 
 After the app adds or changes an endpoint in its `openapi.json`:
 `npm run app -- refresh <name>`.
+
+## Who sees what: callers and users
+
+This service is generic: its web chat answers from the handbook and general
+knowledge, and from no app unless that app's entry names `"web"`. An app's
+data is asked for by the app itself, for one of its users:
+
+```
+app's own chat screen (user logged in)
+  -> app's server: POST /api/ask with the app's key (never in the browser),
+     { question, conversationId: "u-<user>-<chat>", user: { token: <short-lived token for this user> } }
+  -> this service: only apps whose `callers` include this app; plans the calls
+  -> GET <app>/api/ai/... with the app's service token + X-User-Token
+  -> the app checks the user and returns only what that user may see
+```
+
+The user token is the app's own, short-lived and read-only - not the user's
+login token (which could do anything the user can). The masjid backend mints
+one per question: 5 minutes, signed with a key its login checks never accept.
+The app decides what each role sees; a refusal (403 with a reason) is passed on
+to the answer ("only the admin can see the masjid's accounts").
+
+Cached plans and results are per caller and per user, so one user's data is
+never another's answer.
+
