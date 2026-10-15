@@ -50,6 +50,34 @@ cp .env.example .env          # once
 It runs next to the original app (API 3001, web 5173) on API 3002 and web
 5174, against the same local Ollama, Postgres and Redis.
 
+## Keys at a glance
+
+Every secret, where it lives, and which way it goes. Values are in `.env`
+(gitignored, each key commented) and in the hosts' settings - never in git.
+
+```
+web chat user --(HOSTED_ACCESS_CODE)--> AI service <--(ADMIN_KEY)-- you: npm run app
+eval scripts  --(ASK_API_KEY = "eval")--> AI service
+masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> masjid /api/ai/*
+                                           AI service --(GROQ_API_KEY, GEMINI_API_KEY)--> models
+```
+
+| Key | For | In `.env` as | On Vercel (ai-engineer-api) | On Render (masjid backend) | New one |
+|---|---|---|---|---|---|
+| Groq | answer, judge, router models; Whisper | `GROQ_API_KEY` | `GROQ_API_KEY` | - | console.groq.com |
+| Gemini | voice, photos/scans, overviews | `GEMINI_API_KEY` | `GEMINI_API_KEY` | - | aistudio.google.com |
+| Neon | handbook vectors | `NEON_DATABASE_URL` | `DATABASE_URL` | - | Neon console |
+| Upstash | history, attachments, app registry | `UPSTASH_REDIS_URL` | `REDIS_URL` | - | Upstash console |
+| Web chat access code | everyone using the live chat | `HOSTED_ACCESS_CODE` | `ACCESS_CODE` | - | any string |
+| eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | `eval=...` in `APP_API_KEYS` | - | `npm run new-app-key -- eval` |
+| masjid app key | the masjid server asking the AI | - | `masjid=...` in `APP_API_KEYS` | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run new-app-key -- masjid` |
+| Admin key | `npm run app` (connected apps) | `ADMIN_KEY` | `ADMIN_KEY` | - | `npm run app -- keys` |
+| App secrets key | encrypts app tokens in Redis | `APP_SECRETS_KEY` | `APP_SECRETS_KEY` | - | `npm run app -- keys` (then re-add every app) |
+| Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid.json` |
+
+`APP_API_KEYS` on Vercel holds every `/api/ask` app: `eval=...,masjid=...`.
+A changed Vercel value applies after the next `npx vercel deploy --prod`.
+
 ## Evals
 
 From `eval/`:
