@@ -645,6 +645,8 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 74 | 10d.5 | Masjid data would be open to every web chat user | `callers` per app; the user passed through; the app filters by role | Web chat and other apps: no masjid data; a member sees only their own dues |
 | 75 | 10d.5 | "Do I have pending dues?" told Fathima she had none ("...Fathima owes 2,100") | The app's "who am I" call added in code for I/me/my | Answered for the asking user |
 | 76 | 10d.5 | A guest's "tomorrow" was asked as "the next 1 day" (today) | A duty-on-date operation in the masjid API | Live: tomorrow's member named |
+| 77 | 10d.5 | Live: a member asked (in Malayalam) for the pending-payments list and was told "no members have pending dues" - their own list was empty, the admin's page showed many | Filtered data says it is filtered ("only your own; the full list is for the admin"); the chat shows "Asking as" | The member is told they owe nothing and only the admin sees others; the admin gets the full list |
+| 78 | 10d.5 | Members wanted to speak questions, see recent ones and a fair share of the free quota | Voice through the AI service's speech-to-text (`/api/ask/transcribe`); recent questions; 10 questions a day per user, counted in the app's own database | Live: Malayalam voice read, the count goes 10 -> 9, voice not counted |
 
 Where things stand (Phase 10 code):
 
@@ -726,6 +728,8 @@ what changed.
 17. **Who may see data is the data owner's decision, enforced where the data is.** The AI service
     only says who is asking; the masjid app decides what an admin, a member or a guest sees
     (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule.
+    **And filtered data must say it is filtered:** an empty list "for this member" read as "nobody
+    owes anything" until the response said whose list it was.
 
 ### What changed when the data got real (Phase 9)
 

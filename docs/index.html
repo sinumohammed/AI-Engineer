@@ -1143,6 +1143,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">74</td><td class="n">10d.5</td><td>Masjid data would be open to every web chat user</td><td><code>callers</code> per app; the user passed through; the app filters by role</td><td class="res">Web chat sees none; a member only their own dues</td></tr>
             <tr><td class="n">75</td><td class="n">10d.5</td><td>"Do I have pending dues?" told Fathima she had none</td><td>The app's "who am I" call added in code for I/me/my</td><td class="res">Answered for the asking user</td></tr>
             <tr><td class="n">76</td><td class="n">10d.5</td><td>A guest's "tomorrow" was asked as "the next 1 day"</td><td>A duty-on-date operation in the masjid API</td><td class="res">Live: tomorrow's member named</td></tr>
+            <tr><td class="n">77</td><td class="n">10d.5</td><td>Live: a member asked for the pending-payments list and was told "no members have pending dues" - their own list was empty</td><td>Filtered data says it is filtered; the chat shows "Asking as"</td><td class="res">The member is told they owe nothing; the admin gets the full list</td></tr>
+            <tr><td class="n">78</td><td class="n">10d.5</td><td>Members wanted voice, recent questions and a fair share of the free quota</td><td>Voice through the AI service's speech-to-text; recent questions; 10 questions a day per user in the app's database</td><td class="res">Live: Malayalam voice read, the count goes 10 to 9</td></tr>
           </tbody>
         </table>
       </div>
@@ -1191,7 +1193,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Make silent failures loud.</strong> A wrong database password looked like "no documents found", a framework ignored a misspelt option, and mixed embedding models would give plausible wrong results. Each now fails with a clear message.</li>
         <li><strong>Where data is stored and where it is sent are two different rules.</strong> Private documents were never stored on a hosted database, yet their excerpts were sent to a hosted model every time one answered (10d.3). Follow the data through every call, not only to where it rests.</li>
         <li><strong>Make the variable part data, not code.</strong> Each app differs only in its address, its endpoints and its token, so those became a configuration entry; the code that calls apps safely is written once (10d.4). A new app is a command, not a deployment.</li>
-        <li><strong>Who may see data is the data owner's decision, enforced where the data is.</strong> The AI service only says who is asking; the masjid app decides what an admin, a member or a guest sees (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule.</li>
+        <li><strong>Who may see data is the data owner's decision, enforced where the data is.</strong> The AI service only says who is asking; the masjid app decides what an admin, a member or a guest sees (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule. And filtered data must say it is filtered: an empty list "for this member" read as "nobody owes anything" until the response said whose list it was.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
