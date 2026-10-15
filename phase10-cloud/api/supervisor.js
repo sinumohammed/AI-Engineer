@@ -17,7 +17,7 @@ import { chat, ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { runSpecialist } from "./specialists.js";
 import { standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
-import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, checkAttachmentTasks, checkAppTasks, checkFreshFile, synthesizerMessages } from "./routing.js";
+import { AGENT_NAMES, ROUTE_SCHEMA, routerMessages, validateRoute, applyDocPriority, checkAttachmentTasks, checkAppTasks, applyAppPriority, checkFreshFile, synthesizerMessages } from "./routing.js";
 
 export async function route(question, history = [], attachment = null) {
   const startedAt = Date.now();
@@ -51,7 +51,11 @@ export async function route(question, history = [], attachment = null) {
   // Phase 10: a task that is the user's follow-up word for word ("And who is
   // eligible for it?") gets the resolved wording, so the specialist's own
   // document search can find what "it" is.
-  const decision = checkFreshFile(checkAttachmentTasks(await applyDocPriority(await checkAppTasks(validateRoute(parsed, question, history)), evidence), attachment), question, freshFile);
+  // Apps before the handbook: "Is there any new announcement?" matched a
+  // handbook page about job postings, and the handbook rule took it before
+  // the app check ran. A part the planner finds app data for goes to
+  // connected_apps, which applyDocPriority leaves alone.
+  const decision = checkFreshFile(checkAttachmentTasks(await applyDocPriority(await applyAppPriority(await checkAppTasks(validateRoute(parsed, question, history))), evidence), attachment), question, freshFile);
   if (searchQuestion !== question) {
     decision.tasks = decision.tasks.map((t) => (t.question.trim() === question.trim() ? { ...t, question: searchQuestion } : t));
   }
@@ -170,6 +174,7 @@ export async function runAgent(
       tasks: routing.tasks,
       fallback: routing.fallback,
       overriddenFrom: routing.overriddenFrom,
+      appOverriddenFrom: routing.appOverriddenFrom,
       manual,
       evidence: routing.evidence,
       latencyMs: routing.latencyMs,

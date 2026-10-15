@@ -1,14 +1,16 @@
 {
   "name": "masjid",
-  "description": "Masjid management: daily duty schedule and swaps, members, pending dues, transactions, announcements",
+  "description": "Masjid management: daily food-duty rotation (which member household supplies food each day) and swaps, members, pending dues, income and expense transactions, bank balances, announcements",
   "openapi": "https://angular-session.onrender.com/api/ai/openapi.json",
   "token": "$MASJID_AI_TOKEN",
   "dataLevel": "internal",
   "timezone": "Asia/Kolkata",
   "timeoutMs": 60000,
   "examples": [
-    "Who is on duty today?",
+    "Who supplies food today?",
+    "When is member MR#002's next food duty?",
     "Which members have pending dues?",
-    "What were the transactions last week?"
+    "How much did the masjid spend this month?",
+    "What is the latest announcement?"
   ]
 }

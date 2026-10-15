@@ -78,7 +78,10 @@ function plannerPrompt(apps) {
       .join("\n") +
     "\n\nRules:\n" +
     "- If the question is not about data these applications hold - general knowledge, programming, the company " +
-    "handbook's policies, small talk - return an empty list of calls.\n" +
+    "handbook's policies, small talk - return an empty list of calls. Questions about the company's own " +
+    "processes (\"our on-call rotation\", deployments, leave, benefits) are handbook questions, not application " +
+    "data, even when a word like \"rotation\" or \"schedule\" also fits an application - unless the question names " +
+    "the application or its records.\n" +
     `- Otherwise choose the fewest calls that fetch what the question needs, at most ${MAX_CALLS}.\n` +
     "- Give every required parameter, and optional ones only when the question asks for them. Use only the " +
     "parameters listed for that operation. Write dates as YYYY-MM-DD, worked out from today's date above.\n" +
@@ -194,11 +197,38 @@ export function appNote(chunks, offset = 0) {
   );
 }
 
+// Remembered briefly per question: the supervisor plans a part once to decide
+// where it goes (routing.js, applyAppPriority) and again in the
+// connected_apps specialist - the second call reuses the first, live data
+// included. 30 s, so a repeated question later still gets fresh data.
+const recent = new Map();
+const RECENT_MS = 30000;
+const RECENT_MAX = 50;
+
 // The step every agent uses. `question` should be self-contained (a
-// follow-up already resolved). `onCall`/`onResult` report progress to the UI.
+// follow-up already resolved). `onCall`/`onResult` report progress to the UI
+// (for a remembered result, they are replayed at once).
 // Returns { chunks, calls, dropped, usage } - no apps, or none allowed with
 // this model: no model call at all.
-export async function appContext(question, { onCall, onResult } = {}) {
+export async function appContext(question, callbacks = {}) {
+  const hit = recent.get(question);
+  if (hit && Date.now() - hit.at < RECENT_MS) {
+    const data = await hit.promise;
+    for (const c of data.calls) {
+      callbacks.onCall?.({ app: c.app, operation: c.operation, args: c.args });
+      callbacks.onResult?.({ app: c.app, operation: c.operation, ok: c.ok, status: c.status, latencyMs: c.latencyMs, error: c.error });
+    }
+    // Model tokens were spent once, by the first caller.
+    return { ...data, usage: data.usage && { promptTokens: 0, completionTokens: 0 } };
+  }
+  if (recent.size >= RECENT_MAX) recent.delete(recent.keys().next().value);
+  const promise = planAndFetch(question, callbacks);
+  recent.set(question, { at: Date.now(), promise });
+  promise.catch(() => recent.delete(question));
+  return promise;
+}
+
+async function planAndFetch(question, { onCall, onResult } = {}) {
   const apps = (await listApps()).filter(appAllowed);
   if (!apps.length) return { chunks: [], calls: [], dropped: [], usage: null, apps: 0 };
   const ids = apps.flatMap((a) => a.operations.map((op) => `${a.name}.${op.id}`));

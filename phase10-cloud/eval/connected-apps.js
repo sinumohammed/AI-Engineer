@@ -104,6 +104,9 @@ if (process.env.ANSWERS === "1") {
     { q: "Which hall members have pending dues?", app: true, expect: ["Bilal", "Hamza", "Omar"] },
     { q: "What was the latest hall announcement?", app: true, expect: [latest.title.includes("repairs") ? "repair" : latest.title] },
     { q: "How many members does the hall have?", app: true, expect: ["6"] },
+    // Names no app: the router sent it to general (found with the masjid
+    // app); applyAppPriority sends it to connected_apps.
+    { q: "Is there any new announcement?", app: true, expect: ["repair"] },
     { q: "What is our rollback process?", app: false, expect: ["tag"] },
     { q: "What is the capital of France?", app: false, expect: ["Paris"] },
   ].filter((c) => !process.env.ONLY || c.q.toLowerCase().includes(process.env.ONLY.toLowerCase()));

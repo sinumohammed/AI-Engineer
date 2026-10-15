@@ -10,6 +10,7 @@ import { sharesWords, MENTIONS_FILE } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { listApps } from "./appRegistry.js";
 import { appAllowed } from "./dataPolicy.js";
+import { appContext } from "./apps.js";
 
 export const AGENT_NAMES = Object.keys(specialists);
 const MAX_TASKS = 3;
@@ -215,6 +216,39 @@ export async function checkAppTasks(decision) {
   return { ...decision, tasks: decision.tasks.map((t) => (t.agent === "connected_apps" ? { ...t, agent: "general" } : t)) };
 }
 
+// Phase 10 #4, found with the masjid app: "What is the latest announcement?"
+// names no app, so the router sent it to general, which said it had no
+// access - while the single agent, whose planner looks at the apps itself,
+// answered it. The same fix as the handbook's (applyDocPriority below): a
+// part sent to general, coding or company_docs is planned too, and goes to
+// connected_apps when the planner finds calls to make. company_docs too:
+// "Is there any new announcement?" went there - the router was shown a
+// handbook page about job postings. The planner returns no calls for the
+// handbook's policies ("What is our rollback process?"), so those stay - before applyDocPriority (see
+// supervisor.js). appContext remembers the plan, so the specialist does not
+// plan it again. Only when an app is connected.
+// APP_PRIORITY=0 turns this off, to compare.
+const APP_PRIORITY = process.env.APP_PRIORITY !== "0";
+
+export async function applyAppPriority(decision) {
+  if (!APP_PRIORITY || !(await listApps()).some(appAllowed)) return decision;
+  const overridden = [];
+  const tasks = await Promise.all(
+    decision.tasks.map(async (t) => {
+      if (!["general", "coding", "company_docs"].includes(t.agent)) return [t];
+      const { calls } = await appContext(t.question);
+      if (!calls.length) return [t];
+      overridden.push(t.agent);
+      // A handbook choice is kept and the app asked as well: with the demo
+      // hall app connected, "When does the on-call rotation hand off?" made
+      // the planner fetch the hall's duty roster. Both answer; the
+      // synthesizer keeps what fits the question.
+      return t.agent === "company_docs" ? [{ ...t, agent: "connected_apps" }, t] : [{ ...t, agent: "connected_apps" }];
+    })
+  );
+  return overridden.length ? { ...decision, tasks: tasks.flat(), appOverriddenFrom: overridden.join(", ") } : decision;
+}
+
 // Phase 9.6, found by the citation eval: "Who is eligible for FMLA?" and
 // "Should git commits be cryptographically signed?" were sent to `general`
 // and `coding`, which answered from general knowledge - although the
@@ -267,7 +301,10 @@ export function synthesizerMessages(question, steps) {
         "the user directly, as one assistant: do not mention specialists, agents or that answers were combined. " +
         "Keep citation markers such as [1] exactly as they appear, next to the facts they belong to. If the " +
         "attachment specialist and company_docs answered the same question, give both answers and say which is " +
-        "from the attached file and which from the company documents." +
+        "from the attached file and which from the company documents. If connected_apps and company_docs answered " +
+        "the same question, keep the answer that fits what the user asked - an application's live records, or the " +
+        "company's documented process - and drop the other when it is about something else; if both fit, give both " +
+        "and say which is from the application and which from the company documents." +
         replyLanguageRule(question),
     },
     {

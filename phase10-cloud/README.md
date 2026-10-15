@@ -753,10 +753,41 @@ nothing changes - no call.
 | Planner: 4 data questions call the right operation (duty with today's date, pending dues, announcements, members); rollback and "capital of France" call nothing | 6/6 |
 | Answers, single agent / supervisor: right facts, cite "hall API"; the two others cite no app | 6/6 / 6/6 |
 | No apps registered: no planner call | ✅ |
-| Total | 36/36 |
+| An announcement question naming no app ("Is there any new announcement?"), both modes | ✅ ✅ |
+| Total | 39/39 |
 | End to end through the server: `npm run app -- add/list/try/remove`, no-key refused, `/api/ask` answer from the app with its source; "tomorrow" -> 2026-10-16 (Asia/Kolkata) | ✅ |
 | Regressions with no app (Ollama): single, supervisor, routing | 10/10, 10/10, 24/24 |
 | `eval:policy` | 15/15 |
+
+**First real app: the masjid backend** (Express + Postgres on Render, its
+own repo, branch `ai-read-api`): eight read-only `/api/ai/*` endpoints that
+reuse the app's own helpers - today's food duty, the schedule, each member's
+duty days in a year, members (no phones or addresses), pending dues, finance
+summary with bank balances, transactions, announcements - behind
+`MASJID_AI_TOKEN`, described in `aiOpenapi.js`. Tested against a throwaway
+local database filled through the app's own admin routes: token refused
+without/with a wrong value, no POST, bad dates rejected, no phone or address
+in any response. Registered with the AI service unchanged (8 operations
+read): **18/18** questions answered and cited "masjid API" (single and
+supervisor), the rollback question untouched.
+
+Found while doing it, each first reproduced:
+- "What is the latest announcement?" names no app: the router sent it to
+  `general` ("I don't have access...") while the single agent answered it.
+  Now a part the router sends to general, coding or company_docs is planned
+  too (`applyAppPriority`, routing.js) and goes to connected_apps when the
+  planner finds calls; the plan is remembered 30 s, so the specialist does not
+  plan again. "Is there any new announcement?" went to company_docs (the
+  router was shown a handbook page about job postings) - so company_docs
+  choices are planned too, and checked before the handbook rule.
+- With the demo hall app registered, "When does the on-call rotation hand
+  off?" made the planner fetch the hall's duty roster, and the supervisor
+  regressions fell to 9/10 and 22/24. Two layers: the planner prompt now
+  says the company's own processes are handbook questions unless the app is
+  named (the planner then called nothing for it), and in code a company_docs
+  choice is kept with the app asked as well - the synthesizer keeps what fits.
+  After: single 10/10, supervisor 10/10, routing 24/24, end to end 3/3,
+  history 4/4, `eval:apps` 39/39 - all with the demo app registered.
 
 **To turn it on** (once): `npm run app -- keys`, put `ADMIN_KEY` and
 `APP_SECRETS_KEY` in `.env` and on Vercel, deploy. Then each app is
