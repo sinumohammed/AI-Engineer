@@ -446,6 +446,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.4 | Connected apps: answers from other applications' live data, added as configuration | Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment |
 | 10d.5 | First real app (masjid): who may ask, and as which user | Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23 |
 | 10d.6 | The masjid assistant in daily use: limits in Settings, a phone-first chat, hands-free voice, rupees, Malayalam names, a repeatable test | Live: "Sinu TK" finds സിനു ടി കെ, "this month" gives October; `eval:masjid` 40/40 |
+| 10e | Command Center: usage and cost per app and per user, the agents at work live, ask by voice or by clapping twice | Live: web and masjid questions counted with their cost (9 questions, $0.0086 at paid prices); `eval:masjid` 41/41 |
 
 - **Challenges, in plain terms:**
 
@@ -569,7 +570,27 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   "this month" = January -> AI service: every app result says today's date
   ```
   `cd phase10-cloud/eval && npm run eval:masjid` runs the masjid app end to end with made-up data
-  (40 checks) - after any change on either side.
+  (41 checks) - after any change on either side.
+- **Command Center (10e):** with more apps coming, the service has to say who uses it, how much,
+  and what that costs - per app, like a bill. Every request is metered without changing the code
+  that calls the models:
+  ```
+  a request (web chat, an app's /api/ask, voice, a file)
+    runs inside metered()            one "meter" per request (AsyncLocalStorage)
+      every model call  -> model, tokens   (recorded in chat(), the one place all calls pass)
+      every app call    -> app, operation, ok, time
+      every specialist  -> its name
+    -> one row in Postgres: which app (its key = its billing identity), which user inside it,
+       agents, models, tokens, cost = tokens x list price, time, ok/error
+       never the question or the answer
+  ```
+  The Command Center (`#/command` in the web app, opened with a read-only dashboard key) shows it:
+  totals, questions per day per app, **billing by app**, top users, agents, models, app calls and
+  recent requests. Its console asks the agents by typing, by voice, or hands-free - **clap twice**,
+  a chime, speak - and shows the question's path live (You -> Router -> specialists -> Combiner ->
+  Answer) with a log of the hand-offs; the answer can be read aloud. On free tiers the real bill
+  is $0; the dashboard shows what the same use would cost on paid tiers. The masjid app sends who
+  asks as a code ("member:MR001", "admin", an anonymous code for visitors), never a name.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -667,6 +688,10 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 82 | 10d.6 | The masjid checks were one-off scripts: two bugs reached the user first | `eval:masjid`: the real masjid backend on a throwaway database, every role and limit check | 34 -> 40 checks; found that fetch refuses port 5061 ("bad port") |
 | 83 | 10d.6 | "Dues of Sinu TK" found nobody - every real name is in Malayalam, the test names were English | Masjid code turns Malayalam names into English letters and compares loosely (initials, ids, near spellings) | All typed forms find the right member among the 35 real names; live: "Sinu TK" -> MR#001 |
 | 84 | 10d.6 | "This month" was answered with January | Each app result says today's date in the app's time zone | Live: October 26, matching the app's own schedule |
+| 85 | 10e | The service could not say who uses it or what it costs per app: a daily count in Redis for 48 hours, tokens sent back and forgotten, logs kept ~30 minutes | Every request metered (one row in Postgres, never the text); cost = tokens x list price per model | Local, Ollama and Groq: the right app, agents and models; cost checked by hand. Live: 9 questions from the web chat and the masjid app, $0.0086 |
+| 86 | 10e | A dashboard in a browser would hold the admin key, which can change the connected apps | A read-only `DASHBOARD_KEY`: usage and nothing else | Dashboard key: usage 200, every other admin call 401 |
+| 87 | 10e | Clap to wake: two claps did not wake it in the test | The test's fake microphone played only on the first of two streams (React opens it twice in development); and browsers start audio paused until a tap - the page now resumes it or asks for one tap | Synthetic audio 4/4: two claps wake it; one clap, speech-like sound and slow claps do not |
+| 88 | 10e | The Users column was empty: apps did not say who asks | `user.ref` on `/api/ask`; the masjid app sends the member code, "admin" or an anonymous visitor code; a Top users panel | `eval:masjid` 41/41: member codes and visitor codes, no names |
 
 Where things stand (Phase 10 code):
 
@@ -687,7 +712,8 @@ Where things stand (Phase 10 code):
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
-| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation | 40/40 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
+| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes | 41/41 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
+| Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 4/4 | live: web and masjid questions recorded with app calls and cost |
 
 ---
 
@@ -754,6 +780,11 @@ what changed.
 18. **Test data must look like the real data.** The test members had English names; every real
     member's name is in Malayalam, so "Sinu TK" failing was invisible until a user asked (10d.6).
     Now the masjid eval includes a Malayalam-named member searched in English letters.
+19. **Measure in the one place everything passes through.** Every model call goes through `chat()`,
+    so usage is recorded there once, for every agent, app and fallback - not in each of the ~10
+    callers (10e). The same request-scoped trick already carried notices; now it carries the meter.
+    **And give each key only what it needs:** the dashboard reads usage with its own key, so the
+    key that can change apps never sits in a browser.
 
 ### What changed when the data got real (Phase 9)
 
@@ -805,6 +836,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; needs the masjid repo at `MASJID_REPO`) |
 | A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
+| Command Center (usage, cost, agents live) | live: https://ai-engineer-web-seven.vercel.app/#/command; local: http://localhost:5174/#/command (key: `DASHBOARD_KEY` or `ADMIN_KEY` in `.env`) |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
 
 ---
@@ -853,6 +885,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `6019c98` | Phase 10d.4: connected apps - answers from other applications' live data |
 | `63f3258`, `cd00e5f` | Phase 10d.5: routing fixes; callers, users and roles (masjid repo: `c2d7cdb`, `fbb0286`) |
 | `6a1f23d`, `e3d4d57`, `4129b76` | Phase 10d.6: voice for apps, `eval:masjid`, today's date in app results (masjid repo: `744c56c` limits, `2e75da3` phone UI, `33bfecc` voice and ₹, `061b97d` Malayalam names) |
+| `47907ce`, `6d489d2` | Phase 10e: usage metering, the Command Center, top users (masjid repo: `f2317ef` who asks) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

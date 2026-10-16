@@ -847,6 +847,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.4</td><td>Connected apps: answers from other applications' live data, added as configuration</td><td class="res">Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment</td></tr>
                 <tr><td class="n">10d.5</td><td>First real app (masjid): who may ask, and as which user</td><td class="res">Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23</td></tr>
                 <tr><td class="n">10d.6</td><td>The masjid assistant in daily use: limits in Settings, a phone-first chat, hands-free voice, rupees, Malayalam names, a repeatable test</td><td class="res">Live: "Sinu TK" finds സിനു ടി കെ, "this month" gives October; <code>eval:masjid</code> 40/40</td></tr>
+                <tr><td class="n">10e</td><td>Command Center: usage and cost per app and per user, the agents at work live, ask by voice or by clapping twice</td><td class="res">Live: web and masjid questions counted with their cost (9 questions, $0.0086 at paid prices); <code>eval:masjid</code> 41/41</td></tr>
               </tbody>
             </table>
           </div>
@@ -1040,6 +1041,37 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.4. One connector for every app: what differs per app (address, endpoints, token) is configuration, and the safe calling is written once. The app's side is a few read-only endpoints for the AI, an access token and an <code>openapi.json</code> (<code>phase10-cloud/apps/README.md</code>).</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 250" role="img" aria-label="Every request runs inside a meter. Model calls, app calls and specialists report to it without being passed along. At the end one row is saved in Postgres: which app, which user, agents, models, tokens, cost, time, never the question. The Command Center reads those rows: billing by app, top users, agents and models, and a console that shows the agents at work live.">
+                <defs><marker id="a14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">EVERY REQUEST · ONE METER</text>
+                <rect class="b" x="20" y="34" width="150" height="50" rx="6"/>
+                <text class="t" x="95" y="56" text-anchor="middle">A request</text>
+                <text class="s" x="95" y="73" text-anchor="middle">web chat, app, voice, file</text>
+                <line class="ln" x1="170" y1="59" x2="209" y2="59" marker-end="url(#a14)"/>
+                <rect class="b" x="210" y="34" width="290" height="114" rx="6"/>
+                <text class="t" x="355" y="56" text-anchor="middle">metered() - one meter per request</text>
+                <text class="s" x="355" y="80" text-anchor="middle">model call -> model, tokens (in chat())</text>
+                <text class="s" x="355" y="100" text-anchor="middle">app call -> app, operation, ok, time</text>
+                <text class="s" x="355" y="120" text-anchor="middle">specialist -> its name</text>
+                <text class="s" x="355" y="138" text-anchor="middle">nothing passed along: AsyncLocalStorage</text>
+                <line class="ln" x1="500" y1="91" x2="529" y2="91" marker-end="url(#a14)"/>
+                <rect class="b" x="530" y="34" width="170" height="114" rx="6"/>
+                <text class="t" x="615" y="56" text-anchor="middle">One row, Postgres</text>
+                <text class="s" x="615" y="80" text-anchor="middle">app (its key) and user</text>
+                <text class="s" x="615" y="100" text-anchor="middle">agents, models, tokens</text>
+                <text class="s" x="615" y="120" text-anchor="middle">cost = tokens x price</text>
+                <text class="s" x="615" y="138" text-anchor="middle">never the question</text>
+                <text class="k" x="20" y="182">COMMAND CENTER · #/command, READ-ONLY KEY</text>
+                <path class="ln" style="stroke-dasharray: 4 4" d="M615,148 V164 H360 V193" marker-end="url(#a14)"/>
+                <rect class="b" x="20" y="194" width="680" height="44" rx="6"/>
+                <text class="t" x="360" y="213" text-anchor="middle">Billing by app · top users · agents · models · app calls · recent</text>
+                <text class="s" x="360" y="230" text-anchor="middle">plus a console: type, speak or clap twice; watch Router -> specialists -> Combiner live</text>
+              </svg>
+            </div>
+            <figcaption>Step 10e. Usage is recorded in the one place every model call passes through, so every agent, app and fallback is counted without touching the ~10 callers. Each app's key is its billing identity; the masjid app also says which user asks, as a code ("member:MR001", an anonymous code for visitors), never a name. On free tiers the real bill is $0; the dashboard shows what the same use would cost on paid tiers.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1052,6 +1084,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Where data is stored and where it is sent are different rules: private documents were never stored on a hosted database, yet a hosted model read their excerpts whenever it answered on the Mac.</li>
               <li>Make the variable part data, not code: each app differs only in its address, endpoints and token, so a new app is a configuration entry and a command, not new code and a deployment.</li>
               <li>Who may see data is the data owner's decision, enforced where the data is: the AI only says who is asking, the masjid app decides what an admin, a member or a guest sees.</li>
+              <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
 npm run eval:public</pre><button type="button">Copy</button></div> Asked the way another app asks: <div class="cmd"><pre>cd phase10-cloud/examples
@@ -1152,6 +1185,10 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">82</td><td class="n">10d.6</td><td>Masjid checks were one-off scripts; two bugs reached the user first</td><td><code>eval:masjid</code> on a throwaway database</td><td class="res">40 checks; found fetch refuses port 5061</td></tr>
             <tr><td class="n">83</td><td class="n">10d.6</td><td>"Dues of Sinu TK" found nobody: every real name is in Malayalam</td><td>Malayalam names turned into English letters and compared loosely, in the masjid code</td><td class="res">Live: "Sinu TK" finds MR#001</td></tr>
             <tr><td class="n">84</td><td class="n">10d.6</td><td>"This month" answered with January</td><td>Each app result says today's date</td><td class="res">Live: October 26, matching the app</td></tr>
+            <tr><td class="n">85</td><td class="n">10e</td><td>The service could not say who uses it or what it costs per app: tokens were forgotten, logs kept ~30 minutes</td><td>Every request metered, one row in Postgres (never the text); cost = tokens x list price</td><td class="res">Right app, agents, models; cost checked by hand. Live: 9 questions, $0.0086</td></tr>
+            <tr><td class="n">86</td><td class="n">10e</td><td>A dashboard in a browser would hold the admin key</td><td>A read-only <code>DASHBOARD_KEY</code>: usage only</td><td class="res">Usage 200, every other admin call 401</td></tr>
+            <tr><td class="n">87</td><td class="n">10e</td><td>Clap to wake: two claps did not wake it in the test</td><td>The fake microphone played only on the first of two streams; browsers start audio paused until a tap - resumed, or one tap asked for</td><td class="res">4/4: two claps wake it; one clap, speech, slow claps do not</td></tr>
+            <tr><td class="n">88</td><td class="n">10e</td><td>The Users column was empty: apps did not say who asks</td><td><code>user.ref</code>; the masjid app sends a member code or an anonymous visitor code; Top users panel</td><td class="res"><code>eval:masjid</code> 41/41, no names</td></tr>
           </tbody>
         </table>
       </div>
@@ -1175,7 +1212,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
-            <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation</td><td class="n">40/40</td><td class="n">live: 2/2 match the app's schedule</td></tr>
+            <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes</td><td class="n">41/41</td><td class="n">live: 2/2 match the app's schedule</td></tr>
+            <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 4/4</td><td class="n">live: web and masjid questions recorded with cost</td></tr>
           </tbody>
         </table>
       </div>
@@ -1203,6 +1241,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Make the variable part data, not code.</strong> Each app differs only in its address, its endpoints and its token, so those became a configuration entry; the code that calls apps safely is written once (10d.4). A new app is a command, not a deployment.</li>
         <li><strong>Who may see data is the data owner's decision, enforced where the data is.</strong> The AI service only says who is asking; the masjid app decides what an admin, a member or a guest sees (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule. And filtered data must say it is filtered: an empty list "for this member" read as "nobody owes anything" until the response said whose list it was.</li>
         <li><strong>Test data must look like the real data.</strong> The test members had English names; every real member's name is in Malayalam, so "Sinu TK" failing was invisible until a user asked (10d.6). The masjid eval now has a Malayalam-named member searched in English letters.</li>
+        <li><strong>Measure in the one place everything passes through.</strong> Every model call goes through <code>chat()</code>, so usage is recorded there once, for every agent, app and fallback - not in each of the ~10 callers (10e). <strong>And give each key only what it needs:</strong> the dashboard reads usage with its own key, so the key that can change apps never sits in a browser.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1256,6 +1295,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice)</td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
+            <tr><td>Command Center (usage, cost, agents live)</td><td>live: <code>https://ai-engineer-web-seven.vercel.app/#/command</code>; local: <code>http://localhost:5174/#/command</code> (key: <code>DASHBOARD_KEY</code> or <code>ADMIN_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>
           </tbody>
         </table>
