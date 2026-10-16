@@ -33,6 +33,7 @@ const jwt = createRequire(`${MASJID_SERVER}/package.json`)("jsonwebtoken");
 const { createHmac } = await import("node:crypto");
 
 const DB = `masjid_eval_${process.pid}`;
+const RUN_STARTED = new Date();
 const PG_ADMIN = process.env.MASJID_EVAL_PG ?? "postgres://rag:rag@localhost:5432/rag";
 // Not 5060/5061: fetch refuses those ports (SIP) with "bad port".
 const MASJID_PORT = 5071;
@@ -126,6 +127,9 @@ const aiEnv = {
   APP_API_KEYS: `masjid=${MASJID_ASK_KEY},other=${OTHER_ASK_KEY}`,
   PORT: String(AI_PORT),
   ACCESS_CODE: "",
+  // The per-app daily count lives in the shared local Redis: without this, a
+  // few runs in one day used up the 100 and every answer became a 429.
+  APP_DAILY_LIMIT: "100000",
 };
 const startMasjid = () => start(process.execPath, ["index.js"], MASJID_SERVER, masjidEnv);
 const startAi = () => start(process.execPath, ["--env-file=../.env", "server.js"], new URL("../api/", import.meta.url).pathname, aiEnv);
@@ -310,6 +314,16 @@ try {
   check("Another app's key: no masjid data", r.status === 200 && !(r.body.sources ?? []).some((s) => s.source === "masjid API"), r.body.answer);
   r = await call(`${AI}/api/ask`, { method: "POST", token: MASJID_ASK_KEY, body: { question: "Who supplies food today?" } });
   check("The masjid key without a user: no masjid data", r.status === 200 && !(r.body.sources ?? []).some((s) => s.source === "masjid API"), r.body.answer);
+
+  // Phase 10e: the AI service's usage dashboard sees who asked - a member code
+  // or an anonymous visitor code, never a name.
+  r = await call(`${AI}/api/admin/usage?days=1`, { token: ADMIN_KEY });
+  const refs = (r.body.byUser ?? []).filter((u) => u.caller === "masjid" && new Date(u.last_at) >= RUN_STARTED).map((u) => u.user_ref);
+  check(
+    "Usage dashboard: members by code, visitors anonymous, no names",
+    refs.some((u) => /^member:[A-Za-z0-9_.-]+$/.test(u)) && refs.some((u) => /^guest:[0-9a-f]{10}$/.test(u)) && !refs.some((u) => /fathima|shameer|sinu/i.test(u)),
+    refs.join(", ")
+  );
 
   // =====================================================================
   console.log("\n5. Daily limits");

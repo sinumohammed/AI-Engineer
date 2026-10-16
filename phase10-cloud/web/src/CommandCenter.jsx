@@ -686,6 +686,34 @@ function UsagePanels({ d }) {
           {unpriced.length > 0 && <p className="muted small">No price set for {unpriced.map((m) => m.model).join(", ")} - add it to MODEL_PRICES.</p>}
         </Card>
 
+        <Card title="Top users" size="small" extra={<span className="muted small">Inside apps that say who asks</span>}>
+          {d.byUser?.length ? (
+            <Table
+              size="small"
+              rowKey={(r) => `${r.caller}:${r.user_ref}`}
+              pagination={false}
+              dataSource={d.byUser}
+              columns={[
+                {
+                  title: "User",
+                  key: "user",
+                  render: (_, r) => (
+                    <span className="app-cell">
+                      <i style={{ background: colors[r.caller] ?? "var(--other)" }} />
+                      <span className="mono">{r.user_ref}</span>
+                    </span>
+                  ),
+                },
+                { title: "Questions", dataIndex: "questions", align: "right", render: fmtInt },
+                { title: "Est. cost", dataIndex: "cost_usd", align: "right", render: fmtUsd },
+                { title: "Last", dataIndex: "last_at", align: "right", render: (v) => new Date(v).toLocaleString([], { dateStyle: "short", timeStyle: "short" }), responsive: ["sm"] },
+              ]}
+            />
+          ) : (
+            <p className="muted small">No app has sent who is asking yet. An app sends it as user.ref on /api/ask - the masjid app sends the member code, or an anonymous code for visitors.</p>
+          )}
+        </Card>
+
         <Card title="Connected-app calls" size="small" extra={<span className="muted small">What the agents read from apps</span>}>
           {d.appCalls.length ? (
             <Table
@@ -705,7 +733,7 @@ function UsagePanels({ d }) {
           )}
         </Card>
 
-        <Card title="Recent requests" size="small" extra={<span className="muted small">Newest first · no question text is stored</span>}>
+        <Card className="span2" title="Recent requests" size="small" extra={<span className="muted small">Newest first · no question text is stored</span>}>
           <ul className="recent">
             {d.recent.map((r, i) => (
               <li key={i}>

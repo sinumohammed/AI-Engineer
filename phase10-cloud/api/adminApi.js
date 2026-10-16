@@ -11,8 +11,8 @@
 //                                          which app calls a question makes, and what came back.
 //                                          Any app, whatever its callers; a userToken is passed on
 //                                          as a caller would (apps with user: "required" need one).
-//   GET    /api/admin/usage?days=30        Phase 10e: usage and cost per app, agent, model and app
-//                                          call, latency, recent requests (usage.js) - the Command Center
+//   GET    /api/admin/usage?days=30        Phase 10e: usage and cost per app, user, agent, model and
+//                                          app call, latency, recent requests (usage.js) - the Command Center
 //
 // `npm run app` (appAdmin.js) is the command-line client.
 import { timingSafeEqual, createHash } from "node:crypto";

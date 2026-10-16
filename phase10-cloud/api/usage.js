@@ -183,7 +183,7 @@ export async function usageReport(days = 30) {
   const since = `now() - make_interval(days => $1)`;
   const q = (sql) => db.query(sql, [days]).then((r) => r.rows);
   const QUESTION = `channel IN ('chat', 'ask')`;
-  const [byApp, byDay, byAgent, byModel, appCalls, latency, recent] = await Promise.all([
+  const [byApp, byDay, byAgent, byModel, appCalls, byUser, latency, recent] = await Promise.all([
     q(`SELECT caller,
               count(*) FILTER (WHERE ${QUESTION})::int AS questions,
               count(*) FILTER (WHERE NOT ok)::int AS errors,
@@ -218,6 +218,14 @@ export async function usageReport(days = 30) {
               round(avg((c->>'latencyMs')::int))::int AS avg_ms
          FROM usage_events, jsonb_array_elements(app_calls) AS c WHERE at >= ${since}
         GROUP BY 1, 2 ORDER BY calls DESC LIMIT 25`),
+    // Users inside apps - only apps that send user.ref (askApi.js).
+    q(`SELECT caller, user_ref,
+              count(*) FILTER (WHERE ${QUESTION})::int AS questions,
+              count(*) FILTER (WHERE NOT ok)::int AS errors,
+              sum(cost_usd)::float AS cost_usd,
+              max(at) AS last_at
+         FROM usage_events WHERE at >= ${since} AND user_ref IS NOT NULL
+        GROUP BY 1, 2 ORDER BY questions DESC, cost_usd DESC LIMIT 20`),
     q(`SELECT latency_ms FROM usage_events WHERE at >= ${since} AND ${QUESTION} AND ok AND latency_ms IS NOT NULL ORDER BY latency_ms`),
     db
       .query(
@@ -247,6 +255,7 @@ export async function usageReport(days = 30) {
     byAgent,
     byModel: byModel.map((r) => ({ ...r, prompt_tokens: num(r.prompt_tokens), completion_tokens: num(r.completion_tokens), cost_usd: num(r.cost_usd) })),
     appCalls,
+    byUser: byUser.map((r) => ({ ...r, cost_usd: num(r.cost_usd) })),
     recent,
     prices: PRICES,
   };
