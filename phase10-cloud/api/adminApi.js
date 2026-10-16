@@ -11,24 +11,30 @@
 //                                          which app calls a question makes, and what came back.
 //                                          Any app, whatever its callers; a userToken is passed on
 //                                          as a caller would (apps with user: "required" need one).
+//   GET    /api/admin/usage?days=30        Phase 10e: usage and cost per app, agent, model and app
+//                                          call, latency, recent requests (usage.js) - the Command Center
 //
 // `npm run app` (appAdmin.js) is the command-line client.
 import { timingSafeEqual, createHash } from "node:crypto";
 import express from "express";
-import { ADMIN_KEY } from "./config.js";
+import { ADMIN_KEY, DASHBOARD_KEY } from "./config.js";
 import { listApps, saveApp, refreshApp, removeApp, publicView, AppConfigError } from "./appRegistry.js";
 import { appContext } from "./apps.js";
 import { withAccess } from "./appAccess.js";
+import { usageReport } from "./usage.js";
 
 const digest = (s) => createHash("sha256").update(String(s)).digest();
 
 export const adminApi = express.Router();
 adminApi.use(express.json({ limit: "100kb" }));
+const keyMatches = (given, key) => Boolean(given && key && timingSafeEqual(digest(given), digest(key)));
 adminApi.use((req, res, next) => {
-  if (!ADMIN_KEY) return res.status(404).json({ error: "The admin API is off (no ADMIN_KEY)" });
+  if (!ADMIN_KEY && !DASHBOARD_KEY) return res.status(404).json({ error: "The admin API is off (no ADMIN_KEY)" });
   const given = req.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-  if (!given || !timingSafeEqual(digest(given), digest(ADMIN_KEY))) return res.status(401).json({ error: "Admin key required" });
-  next();
+  if (keyMatches(given, ADMIN_KEY)) return next();
+  // Phase 10e: the dashboard key reads usage and nothing else.
+  if (req.method === "GET" && req.path === "/usage" && keyMatches(given, DASHBOARD_KEY)) return next();
+  res.status(401).json({ error: req.path === "/usage" ? "Dashboard key required" : "Admin key required" });
 });
 
 const handle = (fn) => async (req, res) => {
@@ -64,5 +70,14 @@ adminApi.post(
     const userToken = typeof req.body?.userToken === "string" && req.body.userToken ? req.body.userToken : null;
     const data = await withAccess({ admin: true, userToken }, () => appContext(question));
     return { calls: data.calls, dropped: data.dropped, excerpts: data.chunks.map((c) => c.content.slice(0, 1500)) };
+  })
+);
+adminApi.get(
+  "/usage",
+  handle(async (req) => {
+    const days = Math.min(365, Math.max(1, Math.round(Number(req.query.days) || 30)));
+    const [report, apps] = await Promise.all([usageReport(days), listApps()]);
+    // The registry too, so an app with no use yet still shows (with zeros).
+    return { ...report, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
   })
 );

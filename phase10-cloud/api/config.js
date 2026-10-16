@@ -84,6 +84,10 @@ export const APP_DAILY_LIMIT = Number(process.env.APP_DAILY_LIMIT ?? 100);
 // app's access token in Redis; without it, apps that need a token cannot be
 // added. Both are set once; adding an app later needs no deployment.
 export const ADMIN_KEY = process.env.ADMIN_KEY || null;
+// Phase 10e: a read-only key for the Command Center (GET /api/admin/usage
+// only), so the dashboard in a browser never holds the key that can change
+// the connected apps. ADMIN_KEY opens the dashboard too.
+export const DASHBOARD_KEY = process.env.DASHBOARD_KEY || null;
 export const APP_SECRETS_KEY = process.env.APP_SECRETS_KEY || null;
 // The Redis key holding the registry - the eval uses its own.
 export const APPS_KEY = process.env.APPS_KEY ?? "apps:registry";

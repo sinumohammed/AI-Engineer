@@ -5,6 +5,7 @@
 // can call either one the same way.
 import { runAgent as runSupervisor } from "./supervisor.js";
 import { NUM_CTX, contextWarning } from "./agent.js";
+import { recordAgent } from "./usage.js";
 
 // Same contract as agent.js's runAgent: (question, history, callbacks) ->
 // { answer, usage }. The callbacks differ - a supervisor has no tool calls
@@ -18,7 +19,11 @@ export async function runMultiAgent(
 ) {
   const { answer, usage: totals, fromCompanyDocs, sources } = await runSupervisor(question, history, {
     onRoute,
-    onAgentStart,
+    // Phase 10e: which specialists worked on it, for the usage dashboard (usage.js).
+    onAgentStart: (step) => {
+      recordAgent(step.agent);
+      onAgentStart?.(step);
+    },
     onAgentDone,
     summary,
     forceAgent,

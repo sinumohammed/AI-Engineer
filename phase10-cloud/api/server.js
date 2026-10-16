@@ -15,6 +15,7 @@ import { askApi } from "./askApi.js";
 import { adminApi } from "./adminApi.js";
 import { withAccess } from "./appAccess.js";
 import { listApps } from "./appRegistry.js";
+import { metered, meteredJob, recordUsage } from "./usage.js";
 import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, ADMIN_KEY, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED, saveAttachment, getAttachment, removeAttachment } from "./sessionStore.js";
@@ -100,72 +101,82 @@ app.get("/api/chat/stream", async (req, res) => {
   // `mode` at all) keeps the single agent, so older clients behave as before.
   const mode = req.query.mode === "multi" ? "multi" : "single";
 
+  // Phase 10e: everything this question uses - model calls, app calls, the
+  // summary of older turns - is metered and saved as one usage row (usage.js).
+  const startedAt = Date.now();
+  let meter = null;
+  let failure = null;
   try {
-    const [history, summary, stored] = await Promise.all([getHistory(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
-    // Phase 10: the file goes with the message it was attached to, then only
-    // with follow-ups that look related (attachments.js, fileForQuestion).
-    const attachment = fileForQuestion(stored, question, history, POINTS_BACK);
-    if (attachment) send("file_used", { name: attachment.name, sentWithMessage: !attachment.sent });
-    // "Explain it" with a new file attached -> 'Explain the attached file "scan.pdf"' for
-    // the model; the user's own words are what is stored and shown.
-    const asked = nameTheFile(question, attachment);
-    // Sessions, memory, summaries and the answer/usage/memory events below
-    // are identical for both modes - only the progress events differ: the
-    // single agent reports tool calls, the supervisor reports its routing
-    // decision and each specialist starting and finishing.
-    // Phase 10: notices (e.g. "answered by the fallback model") are collected
-    // for this request by the model client and sent before the answer.
-    // Phase 10 #4: the web chat is the caller "web" - it sees only the
-    // connected apps whose entry names "web" (appAccess.js).
-    const { result, notices } = await withAccess({ caller: "web" }, () => collectNotices(() =>
-      mode === "multi"
-        ? runMultiAgent(asked, history, {
-            onRoute: (decision) => send("route", decision),
-            onAgentStart: (step) => send("agent_start", step),
-            onAgentDone: (step) => send("agent_done", step),
-            summary,
-            // Manual override: `?agent=coding` skips the router. Absent or
-            // unrecognized means the router decides (validated in supervisor.js).
-            forceAgent: req.query.agent,
-            attachment,
-          })
-        : runAgent(asked, history, {
-            onToolCall: (name, args) => send("tool_call", { name, args }),
-            // `outcome` (document search only): "used", "not relevant" or
-            // "code not found" - what the search led to, shown on the chip.
-            onToolResult: (name, result, { outcome } = {}) => send("tool_result", { name, result, outcome }),
-            summary,
-            attachment,
-          })
-    ));
-    const { answer, usage, fromCompanyDocs, sources = [] } = result;
-    for (const text of notices) send("notice", { text });
+    ({ meter } = await metered(async () => {
+      const [history, summary, stored] = await Promise.all([getHistory(sessionId), getSummary(sessionId), getAttachment(sessionId)]);
+      // Phase 10: the file goes with the message it was attached to, then only
+      // with follow-ups that look related (attachments.js, fileForQuestion).
+      const attachment = fileForQuestion(stored, question, history, POINTS_BACK);
+      if (attachment) send("file_used", { name: attachment.name, sentWithMessage: !attachment.sent });
+      // "Explain it" with a new file attached -> 'Explain the attached file "scan.pdf"' for
+      // the model; the user's own words are what is stored and shown.
+      const asked = nameTheFile(question, attachment);
+      // Sessions, memory, summaries and the answer/usage/memory events below
+      // are identical for both modes - only the progress events differ: the
+      // single agent reports tool calls, the supervisor reports its routing
+      // decision and each specialist starting and finishing.
+      // Phase 10: notices (e.g. "answered by the fallback model") are collected
+      // for this request by the model client and sent before the answer.
+      // Phase 10 #4: the web chat is the caller "web" - it sees only the
+      // connected apps whose entry names "web" (appAccess.js).
+      const { result, notices } = await withAccess({ caller: "web" }, () => collectNotices(() =>
+        mode === "multi"
+          ? runMultiAgent(asked, history, {
+              onRoute: (decision) => send("route", decision),
+              onAgentStart: (step) => send("agent_start", step),
+              onAgentDone: (step) => send("agent_done", step),
+              summary,
+              // Manual override: `?agent=coding` skips the router. Absent or
+              // unrecognized means the router decides (validated in supervisor.js).
+              forceAgent: req.query.agent,
+              attachment,
+            })
+          : runAgent(asked, history, {
+              onToolCall: (name, args) => send("tool_call", { name, args }),
+              // `outcome` (document search only): "used", "not relevant" or
+              // "code not found" - what the search led to, shown on the chip.
+              onToolResult: (name, result, { outcome } = {}) => send("tool_result", { name, result, outcome }),
+              summary,
+              attachment,
+            })
+      ));
+      const { answer, usage, fromCompanyDocs, sources = [] } = result;
+      for (const text of notices) send("notice", { text });
 
-    await appendTurn(sessionId, question, answer, {
-      fromCompanyDocs,
-      askedAt,
-      answeredAt: new Date().toISOString(),
-      attachmentName: attachment && !attachment.sent ? attachment.name : undefined,
-      usedFile: attachment?.name,
-    });
-    if (attachment && !attachment.sent) await saveAttachment(sessionId, { ...attachment, sent: true });
-    await saveUsage(sessionId, usage);
+      await appendTurn(sessionId, question, answer, {
+        fromCompanyDocs,
+        askedAt,
+        answeredAt: new Date().toISOString(),
+        attachmentName: attachment && !attachment.sent ? attachment.name : undefined,
+        usedFile: attachment?.name,
+      });
+      if (attachment && !attachment.sent) await saveAttachment(sessionId, { ...attachment, sent: true });
+      await saveUsage(sessionId, usage);
 
-    const words = answer.split(" ");
-    for (const word of words) {
-      send("answer_chunk", { text: word + " " });
-      await new Promise((r) => setTimeout(r, 40));
-    }
-    // Phase 9.6: the document excerpts the answer cited, shown under it.
-    if (sources.length) send("sources", sources);
-    send("usage", usage);
+      const words = answer.split(" ");
+      for (const word of words) {
+        send("answer_chunk", { text: word + " " });
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      // Phase 9.6: the document excerpts the answer cited, shown under it.
+      if (sources.length) send("sources", sources);
+      send("usage", usage);
 
-    const [updatedHistory, updatedSummary] = await Promise.all([getHistory(sessionId), getSummary(sessionId)]);
-    send("memory", memoryInfo(updatedHistory, updatedSummary));
-    send("done", {});
+      const [updatedHistory, updatedSummary] = await Promise.all([getHistory(sessionId), getSummary(sessionId)]);
+      send("memory", memoryInfo(updatedHistory, updatedSummary));
+      send("done", {});
+    }));
   } catch (err) {
+    meter = err.meter ?? null;
+    failure = err;
     send("error", { message: err.message });
   } finally {
+    await recordUsage({ caller: "web", channel: "chat", mode, ok: !failure, error: failure?.message, latencyMs: Date.now() - startedAt, meter });
     res.end();
   }
 });
@@ -181,7 +192,7 @@ app.delete("/api/chat/session/:sessionId", async (req, res) => {
 app.post("/api/transcribe", express.raw({ type: () => true, limit: "4mb" }), async (req, res) => {
   try {
     // ?lang=Malayalam: the language the user picked, a hint for the model.
-    res.json(await transcribe(req.body, req.get("content-type"), req.query.lang));
+    res.json(await meteredJob({ caller: "web", channel: "transcribe" }, () => transcribe(req.body, req.get("content-type"), req.query.lang)));
   } catch (err) {
     if (!(err instanceof TranscribeError)) console.error("[transcribe]", err);
     res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });
@@ -196,7 +207,7 @@ app.post("/api/attachments", express.raw({ type: () => true, limit: "4mb" }), as
   if (!sessionId) return res.status(400).json({ error: "Missing ?sessionId=" });
   try {
     const name = decodeURIComponent(req.get("x-file-name") ?? "");
-    const att = await readAttachment(req.body, req.get("content-type"), name);
+    const att = await meteredJob({ caller: "web", channel: "attachment" }, () => readAttachment(req.body, req.get("content-type"), name));
     if (!(await saveAttachment(sessionId, { ...att, at: new Date().toISOString() }))) {
       return res.status(503).json({ error: "Could not save the file with this chat - please try again." });
     }

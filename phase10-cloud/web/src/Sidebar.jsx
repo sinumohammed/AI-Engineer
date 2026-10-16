@@ -2,6 +2,7 @@ import { Alert, Button, Progress, Segmented, Select, Switch, Tooltip, Typography
 import {
   ApartmentOutlined,
   BulbOutlined,
+  DashboardOutlined,
   DownloadOutlined,
   MoonOutlined,
   PlusOutlined,
@@ -165,6 +166,11 @@ export default function Sidebar({ state, newChat, setMode, setAgent, themeMode, 
           ]}
         />
       </section>
+
+      {/* Phase 10e: usage, cost and the agents at work - needs the dashboard key. */}
+      <Button icon={<DashboardOutlined />} block href="#/command">
+        Command Center
+      </Button>
 
       {pwa.canInstall && (
         <Button icon={<DownloadOutlined />} block onClick={pwa.install}>

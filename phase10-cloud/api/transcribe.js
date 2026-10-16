@@ -21,6 +21,7 @@
 // a hint, and Whisper takes over if Gemini fails or is out of quota.
 import { TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { geminiText } from "./gemini.js";
+import { recordModel, WHISPER_PRICE_PER_HOUR } from "./usage.js";
 
 const WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 // Whisper wants a file name whose extension matches the audio format.
@@ -73,6 +74,8 @@ async function withWhisper(audio, type, ext) {
     throw new TranscribeError(`Whisper ${res.status}: ${detail.slice(0, 200)}`, 502);
   }
   const data = await res.json();
+  const perHour = WHISPER_PRICE_PER_HOUR[TRANSCRIBE_MODEL];
+  recordModel({ provider: "groq", model: TRANSCRIBE_MODEL, label: "transcribe", ...(perHour ? { costUsd: ((data.duration ?? 0) / 3600) * perHour } : {}) });
   const segments = data.segments ?? [];
   const text = (segments.length ? segments.filter((s) => (s.no_speech_prob ?? 0) < NO_SPEECH).map((s) => s.text).join("") : data.text ?? "").trim();
   return { text, language: data.language ?? null, by: TRANSCRIBE_MODEL };

@@ -1,7 +1,19 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { App as AntApp, theme } from "antd";
 import { XProvider } from "@ant-design/x";
 import App from "./App.jsx";
+
+// Phase 10e: #/command opens the Command Center, loaded only when opened.
+const CommandCenter = lazy(() => import("./CommandCenter.jsx"));
+function useHash() {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const onChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return hash;
+}
 
 // Phase 10 UI: Ant Design + Ant Design X (components made for AI chat).
 // Light or dark follows the device unless the user picks one in the menu;
@@ -31,6 +43,7 @@ function useSystemDark() {
 export default function Root() {
   const [themeMode, setThemeModeState] = useState(readStored);
   const systemDark = useSystemDark();
+  const hash = useHash();
   const isDark = themeMode === "dark" || (themeMode === "system" && systemDark);
 
   function setThemeMode(mode) {
@@ -64,7 +77,13 @@ export default function Root() {
       }}
     >
       <AntApp>
-        <App themeMode={themeMode} setThemeMode={setThemeMode} isDark={isDark} />
+        {hash.startsWith("#/command") ? (
+          <Suspense fallback={null}>
+            <CommandCenter isDark={isDark} />
+          </Suspense>
+        ) : (
+          <App themeMode={themeMode} setThemeMode={setThemeMode} isDark={isDark} />
+        )}
       </AntApp>
     </XProvider>
   );

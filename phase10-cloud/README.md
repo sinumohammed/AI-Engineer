@@ -57,6 +57,7 @@ Every secret, where it lives, and which way it goes. Values are in `.env`
 
 ```
 web chat user --(HOSTED_ACCESS_CODE)--> AI service <--(ADMIN_KEY)-- you: npm run app
+Command Center --(DASHBOARD_KEY, read-only)--> AI service /api/admin/usage
 eval scripts  --(ASK_API_KEY = "eval")--> AI service
 masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> masjid /api/ai/*
                                            AI service --(GROQ_API_KEY, GEMINI_API_KEY)--> models
@@ -72,6 +73,7 @@ masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> mas
 | eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | `eval=...` in `APP_API_KEYS` | - | `npm run new-app-key -- eval` |
 | masjid app key | the masjid server asking the AI | - | `masjid=...` in `APP_API_KEYS` | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run new-app-key -- masjid` |
 | Admin key | `npm run app` (connected apps) | `ADMIN_KEY` | `ADMIN_KEY` | - | `npm run app -- keys` |
+| Dashboard key | the Command Center (`#/command`): usage only, read-only | - | `DASHBOARD_KEY` | - | `openssl rand -base64 24` |
 | App secrets key | encrypts app tokens in Redis | `APP_SECRETS_KEY` | `APP_SECRETS_KEY` | - | `npm run app -- keys` (then re-add every app) |
 | Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid.json` |
 
@@ -899,3 +901,75 @@ isolation, daily limits. Live (guest): "When is Sinu TK on food duty this
 month?" -> October 26 and "MR1 in November" -> November 24, both matching the
 app's own yearly schedule.
 
+
+### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
+
+With more apps coming, the question is "who uses the service, how much, and
+what does it cost - per app". Before this step the service could not say:
+it kept a count of questions per app per day (Redis, deleted after 48 h),
+the tokens of each answer were sent back and then forgotten, and traces
+stayed in Vercel's logs for about 30 minutes.
+
+**Metering** (`api/usage.js`). Every request runs inside `metered()`, an
+`AsyncLocalStorage` scope, the same trick as the notices in `llmClient.js`.
+Whatever happens inside reports to it without being passed along:
+
+```
+request (web chat / POST /api/ask / voice / file)
+  metered(() => ...)
+     chat()        -> recordModel: model that answered, tokens   (llmClient.js, after any fallback)
+     geminiText()  -> recordModel: tokens incl. thinking         (gemini.js)
+     Whisper       -> recordModel: cost per hour of audio        (transcribe.js)
+     app call      -> recordAppCall: app, operation, ok, ms      (apps.js)
+     specialist    -> recordAgent                                (multiAgent.js)
+  recordUsage -> one row in usage_events (Postgres: Neon when hosted)
+```
+
+The row: caller (`web` or the app whose key asked), channel (`chat`, `ask`,
+`transcribe`, `attachment`), agents, every model with calls/tokens/cost,
+app calls, time, ok/error, and `user_ref` - the app's own id for its user,
+sent as `user: { ref }` on `/api/ask`, so use per user inside an app can be
+shown. **Never the question or the answer.** The table is created on the
+first write. Cost = tokens x list price (`PRICES`, USD per million tokens,
+checked 2026-10-16: gpt-oss-120b $0.15/$0.60, gpt-oss-20b $0.075/$0.30;
+`MODEL_PRICES` adds or overrides models). On Groq's free tier the real bill
+is $0 - the dashboard shows what the same use would cost on the paid tier,
+which is what an app would be billed. A hosted model without a price is
+flagged, not shown as $0.
+
+**`GET /api/admin/usage?days=30`** (`adminApi.js`): totals, per app (the
+billing view), per day per app, per agent, per model, per app operation,
+latency p50/p95, the last 30 requests. Opened by `ADMIN_KEY` or by the new
+**`DASHBOARD_KEY`**, which reads usage and nothing else - the browser never
+holds the key that changes connected apps.
+
+**Command Center** (`web/src/CommandCenter.jsx`, at `#/command`, linked in the
+sidebar, loaded only when opened):
+
+- *Console.* Type, tap the mic, or turn on **Clap to wake**: two claps
+  0.2-0.9 s apart, a chime, then speak; a 1.4 s pause sends it. Answers can
+  be read out loud (the browser's speech). Asked through the same multi-agent
+  stream as the chat, in its own conversation.
+- *Agent map + log.* The question's path You -> Router -> specialists ->
+  Combiner -> Answer lights up from the stream's events: the router's reason,
+  each task handed to a specialist, each one's time, the merge - written as a
+  log of the agents talking. Vertical on phones.
+- *Usage and cost.* KPI tiles; questions per day stacked by app; billing by
+  app (questions, users, voice, files, tokens, est. cost and share, errors,
+  last used - apps with no use show too); agents; models; connected-app calls
+  with failures; recent requests. Refreshes every 30 s.
+
+Clap detection (`useClapWake.js`) runs in the browser only: nothing is
+recorded or sent until the double clap. A clap is a jump far above the
+room's level that dies away within 160 ms; speech and music last, so they do
+not count. Found while testing: a browser starts audio suspended until the
+page is tapped - with the switch remembered as on, the detector heard
+silence after a reload; it now resumes, or asks for one tap.
+
+Tests: local, both on Ollama and on Groq - a web question and an `/api/ask`
+question recorded with the right caller, agents, models and cost (cost =
+tokens x price, checked by hand); the dashboard key reads usage and gets
+401 on every other admin call; `eval:masjid` 40/40 with metering in place;
+clap to wake with synthetic audio: two claps wake it, one clap, two
+speech-like sounds and two claps 1.5 s apart do not; screenshots on desktop
+(dark) and phone (light), no sideways scrolling, no console errors.

@@ -2,6 +2,7 @@
 // (transcribe.js) and attachments (attachments.js) - the jobs the Groq
 // models cannot do: hearing Malayalam, and reading photos and scanned pages.
 import { GEMINI_API_KEY } from "./config.js";
+import { recordModel } from "./usage.js";
 
 const URL = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -30,5 +31,8 @@ export async function geminiText(model, parts, { thinking, timeoutMs } = {}) {
     throw new GeminiError(`Gemini ${res.status}: ${detail.slice(0, 200)}`, res.status);
   }
   const data = await res.json();
+  // Phase 10e: thinking tokens are billed as output (usage.js).
+  const u = data.usageMetadata ?? {};
+  recordModel({ provider: "gemini", model, label: "gemini", promptTokens: u.promptTokenCount ?? 0, completionTokens: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) });
   return (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
 }

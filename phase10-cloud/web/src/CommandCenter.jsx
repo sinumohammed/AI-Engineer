@@ -1,0 +1,749 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, App as AntApp, Button, Card, Grid, Input, Segmented, Switch, Table, Tag, Tooltip, Typography, theme } from "antd";
+import XMarkdown from "@ant-design/x-markdown";
+import {
+  ArrowLeftOutlined,
+  AudioOutlined,
+  CheckCircleFilled,
+  ClearOutlined,
+  CloseCircleFilled,
+  LockOutlined,
+  ReloadOutlined,
+  SendOutlined,
+  SoundOutlined,
+  StopOutlined,
+} from "@ant-design/icons";
+import { API_BASE } from "./useChatSession.js";
+import { AGENT_LABELS } from "./Sidebar.jsx";
+import { useVoiceInput, voiceSupported } from "./useVoiceInput.js";
+import { useClapWake } from "./useClapWake.js";
+import { useCommand } from "./useCommand.js";
+import { BarList, DailyChart, callerColors, fmtInt, fmtMs, fmtTokens, fmtUsd } from "./Charts.jsx";
+import "./command.css";
+
+const { Text } = Typography;
+
+// Phase 10e: the Command Center - one screen to run and watch the AI
+// service. Two halves:
+//   1. a console: ask by typing, by voice, or hands-free (clap twice), and
+//      watch the router hand the question to the specialists, live; the
+//      answer can be read out loud.
+//   2. usage and cost per app - who uses the service, how much, which agents
+//      and models, what failed (GET /api/admin/usage, api/usage.js).
+// Opened at #/command. Needs the dashboard key (DASHBOARD_KEY or ADMIN_KEY on
+// the server) and, on the hosted API, the access code.
+
+const SPECIALISTS = ["company_docs", "coding", "general", "attachment", "connected_apps"];
+// Each specialist keeps one palette slot, here and in the usage charts.
+export const AGENT_COLORS = {
+  company_docs: "var(--s1)",
+  coding: "var(--s2)",
+  general: "var(--s3)",
+  attachment: "var(--s4)",
+  connected_apps: "var(--s5)",
+  single_agent: "var(--s7)",
+  synthesizer: "var(--other)",
+};
+const RANGES = [
+  { label: "7 days", value: 7 },
+  { label: "30 days", value: 30 },
+  { label: "90 days", value: 90 },
+];
+
+function stored(key) {
+  try {
+    return localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+function store(key, value) {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    // storage blocked: kept for this page only
+  }
+}
+
+// --- reading answers out loud ---
+
+// Markdown, citations and code read badly; the screen shows them anyway.
+function speakable(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, " The code is on the screen. ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\[\d+\]/g, "")
+    .replace(/[*_#>|]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(speakable(text).slice(0, 1200));
+  u.rate = 1.03;
+  window.speechSynthesis.speak(u);
+}
+
+// A short rising two-note chime: "I'm listening".
+function chime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    [660, 990].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = f;
+      const t = ctx.currentTime + i * 0.11;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.18);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 600);
+  } catch {
+    // no Web Audio: no chime
+  }
+}
+
+// --- data ---
+
+function useUsage(dashKey, days, onUnauthorized) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    if (!dashKey) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/usage?days=${days}`, { headers: { Authorization: `Bearer ${dashKey}` } });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 404) {
+        onUnauthorized(body.error ?? "That key was not accepted.");
+        return;
+      }
+      if (!res.ok) throw new Error(body.error ?? `Usage could not be loaded (${res.status}).`);
+      setData(body);
+      setError(null);
+    } catch (err) {
+      setError(err.message === "Failed to fetch" ? "The API cannot be reached." : err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [dashKey, days, onUnauthorized]);
+
+  useEffect(() => {
+    load();
+    // Every 30 seconds while the page is visible.
+    const timer = setInterval(() => document.visibilityState === "visible" && load(), 30000);
+    return () => clearInterval(timer);
+  }, [load]);
+  return { data, error, loading, reload: load };
+}
+
+// --- the page ---
+
+export default function CommandCenter({ isDark }) {
+  const { token } = theme.useToken();
+  const [dashKey, setDashKey] = useState(() => stored("dashboardKey"));
+  const [accessCode, setAccessCode] = useState(() => stored("accessCode"));
+  const [access, setAccess] = useState({ checked: false, needed: false, voice: false });
+  const [lockReason, setLockReason] = useState(null);
+  const [days, setDays] = useState(30);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/access`, { headers: accessCode ? { "x-access-code": accessCode } : {} })
+      .then((r) => r.json())
+      .then((a) => setAccess({ checked: true, needed: a.required && !a.ok, voice: Boolean(a.voice) }))
+      .catch(() => setAccess({ checked: true, needed: false, voice: false }));
+  }, [accessCode]);
+
+  const lock = useCallback((reason) => {
+    store("dashboardKey", "");
+    setDashKey("");
+    setLockReason(reason);
+  }, []);
+  const usage = useUsage(dashKey, days, lock);
+
+  const cssVars = {
+    "--bg": token.colorBgLayout,
+    "--panel": token.colorBgContainer,
+    "--border": token.colorBorderSecondary,
+    "--text": token.colorText,
+    "--muted": token.colorTextSecondary,
+    "--primary": token.colorPrimary,
+    "--primary-soft": token.colorPrimaryBg,
+  };
+  const root = `cc ${isDark ? "cc-dark" : "cc-light"}`;
+
+  if (!access.checked) return <div className={root} style={cssVars} />;
+  if (!dashKey || access.needed) {
+    return (
+      <div className={root} style={cssVars}>
+        <Unlock
+          needsKey={!dashKey}
+          needsCode={access.needed}
+          reason={lockReason ?? (access.needed && accessCode ? "That access code was not accepted." : null)}
+          onSubmit={({ key, code }) => {
+            if (key) {
+              store("dashboardKey", key);
+              setDashKey(key);
+            }
+            if (code) {
+              store("accessCode", code);
+              setAccessCode(code);
+            }
+            setLockReason(null);
+          }}
+        />
+      </div>
+    );
+  }
+
+  const d = usage.data;
+  return (
+    <div className={root} style={cssVars}>
+      <header className="cc-top">
+        <Button type="text" icon={<ArrowLeftOutlined />} href="#/" aria-label="Back to the chat" />
+        <div className="cc-title">
+          <img src="/favicon.svg" alt="" width={28} height={28} />
+          <div>
+            <h1>Command Center</h1>
+            <span className="muted small">AI service · agents, apps and usage</span>
+          </div>
+        </div>
+        <div className="grow" />
+        <StatusPill data={d} error={usage.error} loading={usage.loading} />
+        <Tooltip title="Lock - forget the dashboard key in this browser">
+          <Button type="text" icon={<LockOutlined />} onClick={() => lock(null)} aria-label="Lock" />
+        </Tooltip>
+      </header>
+
+      <main className="cc-main">
+        <Console accessCode={accessCode} voiceOnServer={access.voice} onAnswered={usage.reload} />
+
+        <section className="cc-section">
+          <div className="cc-section-head">
+            <h2>Usage and cost</h2>
+            <div className="grow" />
+            <Segmented size="small" options={RANGES} value={days} onChange={setDays} />
+            <Tooltip title="Refresh now (it also refreshes every 30 seconds)">
+              <Button size="small" type="text" icon={<ReloadOutlined spin={usage.loading} />} onClick={usage.reload} aria-label="Refresh" />
+            </Tooltip>
+          </div>
+          {usage.error && <Alert type="warning" showIcon title={usage.error} className="slim" />}
+          {d ? <UsagePanels d={d} /> : !usage.error && <p className="muted">Loading usage…</p>}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function StatusPill({ data, error, loading }) {
+  if (error) return <Tag color="error">API unreachable</Tag>;
+  if (!data) return <Tag>{loading ? "Connecting…" : "—"}</Tag>;
+  return (
+    <Tooltip title={`Updated ${new Date(data.generatedAt).toLocaleTimeString()}`}>
+      <Tag color="success" className="pill">
+        <span className="dot-live" /> Online
+      </Tag>
+    </Tooltip>
+  );
+}
+
+function Unlock({ needsKey, needsCode, reason, onSubmit }) {
+  const [key, setKey] = useState("");
+  const [code, setCode] = useState("");
+  return (
+    <div className="cc-unlock">
+      <Card>
+        <div className="cc-title">
+          <img src="/favicon.svg" alt="" width={32} height={32} />
+          <div>
+            <h1>Command Center</h1>
+            <span className="muted small">Usage, cost and the agents at work</span>
+          </div>
+        </div>
+        <Text type="secondary">
+          {needsKey ? "Enter the dashboard key (DASHBOARD_KEY on the server). It is kept in this browser only." : "Enter the access code for the AI service."}
+        </Text>
+        {reason && <Alert type="error" showIcon title={reason} className="slim" />}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if ((!needsKey || key.trim()) && (!needsCode || code.trim())) onSubmit({ key: key.trim(), code: code.trim() });
+          }}
+        >
+          {needsKey && <Input.Password size="large" placeholder="Dashboard key" value={key} onChange={(e) => setKey(e.target.value)} autoFocus />}
+          {needsCode && <Input.Password size="large" placeholder="Access code" value={code} onChange={(e) => setCode(e.target.value)} autoFocus={!needsKey} />}
+          <Button type="primary" size="large" htmlType="submit" block>
+            Open
+          </Button>
+        </form>
+        <Button type="link" href="#/" icon={<ArrowLeftOutlined />}>
+          Back to the chat
+        </Button>
+      </Card>
+    </div>
+  );
+}
+
+// --- the console: ask, watch the agents, hear the answer ---
+
+function Console({ accessCode, voiceOnServer, onAnswered }) {
+  const { message } = AntApp.useApp();
+  const [input, setInput] = useState("");
+  const [clapOn, setClapOn] = useState(() => stored("clapWake") === "1");
+  const [speakOn, setSpeakOn] = useState(() => stored("speakAnswers") !== "0");
+  const speakRef = useRef(speakOn);
+  speakRef.current = speakOn;
+  const [speaking, setSpeaking] = useState(false);
+
+  const { run, ask, cancel, forget } = useCommand({
+    accessCode,
+    onDone: (r) => {
+      onAnswered();
+      if (speakRef.current && r.answer) {
+        setSpeaking(true);
+        speak(r.answer);
+        const poll = setInterval(() => {
+          if (!window.speechSynthesis.speaking) {
+            clearInterval(poll);
+            setSpeaking(false);
+          }
+        }, 300);
+      }
+    },
+  });
+  const busy = ["routing", "working", "answering"].includes(run.phase);
+
+  const canSpeak = voiceOnServer && voiceSupported();
+  const voice = useVoiceInput({
+    silenceMs: 1400,
+    onText: (text) => {
+      setInput("");
+      ask(text);
+    },
+    onError: (msg) => message.warning(msg),
+  });
+
+  const wake = useCallback(() => {
+    if (voice.status !== "idle" || busy) return;
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
+    chime();
+    setTimeout(() => voice.start(), 250);
+  }, [voice, busy]);
+  const clap = useClapWake({ enabled: clapOn && canSpeak, paused: busy || voice.status !== "idle" || speaking, onWake: wake });
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    if (!clap.lastClap) return undefined;
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 220);
+    return () => clearTimeout(t);
+  }, [clap.lastClap]);
+
+  function send() {
+    const q = input.trim();
+    if (!q || busy) return;
+    window.speechSynthesis?.cancel();
+    setInput("");
+    ask(q);
+  }
+
+  const orbState =
+    voice.status === "recording" ? "listening" : voice.status === "transcribing" ? "hearing" : busy ? "thinking" : speaking ? "speaking" : clap.status === "listening" ? "standby" : clap.status === "needs-tap" ? "blocked" : "idle";
+  const orbText = {
+    listening: "Listening… pause when you are done",
+    hearing: "Turning speech into text…",
+    thinking: run.phase === "routing" ? "Routing the question…" : "Agents at work…",
+    speaking: "Speaking…",
+    standby: "Clap twice to wake me",
+    blocked: "Tap anywhere to start listening for claps",
+    idle: canSpeak ? "Type, tap the mic, or turn on clap to wake" : "Type a command",
+  }[orbState];
+  const level = voice.status === "recording" ? Math.max(...voice.levels.slice(-4)) : 0;
+
+  return (
+    <section className="cc-console">
+      <div className="cc-console-left">
+        <div className={`orb orb-${orbState}${flash ? " orb-flash" : ""}`} style={{ "--level": level }}>
+          <div className="orb-ring" />
+          <div className="orb-ring r2" />
+          <div className="orb-core">
+            {orbState === "listening" ? <AudioOutlined /> : orbState === "speaking" ? <SoundOutlined /> : <span className="orb-glyph">AI</span>}
+          </div>
+        </div>
+        <div className="orb-text" aria-live="polite">
+          {orbText}
+        </div>
+
+        <div className="cc-controls">
+          <Tooltip title={canSpeak ? "Listen for two claps. The microphone stays in this browser until you clap." : "Voice is off on this server or browser"}>
+            <label className="ctl">
+              <Switch
+                size="small"
+                checked={clapOn && canSpeak}
+                disabled={!canSpeak}
+                onChange={(v) => {
+                  setClapOn(v);
+                  store("clapWake", v ? "1" : "0");
+                }}
+              />
+              Clap to wake
+            </label>
+          </Tooltip>
+          <label className="ctl">
+            <Switch
+              size="small"
+              checked={speakOn}
+              onChange={(v) => {
+                setSpeakOn(v);
+                store("speakAnswers", v ? "1" : "0");
+                if (!v) {
+                  window.speechSynthesis?.cancel();
+                  setSpeaking(false);
+                }
+              }}
+            />
+            Speak answers
+          </label>
+        </div>
+        {clap.error && <Alert type="warning" showIcon title={clap.error} className="slim" />}
+
+        <div className="cc-ask">
+          <Input
+            size="large"
+            placeholder="Ask the agents anything…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onPressEnter={send}
+            disabled={voice.status !== "idle"}
+          />
+          {canSpeak && (
+            <Tooltip title={voice.status === "recording" ? "Stop and send" : "Speak a command"}>
+              <Button
+                size="large"
+                shape="circle"
+                type={voice.status === "recording" ? "primary" : "default"}
+                icon={<AudioOutlined />}
+                loading={voice.status === "transcribing"}
+                onClick={() => (voice.status === "recording" ? voice.stop() : wake())}
+                disabled={busy}
+                aria-label="Voice command"
+              />
+            </Tooltip>
+          )}
+          {busy ? (
+            <Button size="large" shape="circle" icon={<StopOutlined />} onClick={cancel} aria-label="Stop" />
+          ) : (
+            <Button size="large" shape="circle" type="primary" icon={<SendOutlined />} onClick={send} disabled={!input.trim()} aria-label="Send" />
+          )}
+        </div>
+      </div>
+
+      <div className="cc-console-right">
+        <div className="cc-panel-head">
+          <h2>Agents</h2>
+          <span className="muted small">{run.phase === "idle" ? "Waiting for a command" : run.question}</span>
+          <div className="grow" />
+          {run.phase !== "idle" && (
+            <Tooltip title="New conversation - forget earlier commands">
+              <Button size="small" type="text" icon={<ClearOutlined />} onClick={forget} disabled={busy} aria-label="New conversation" />
+            </Tooltip>
+          )}
+        </div>
+        <AgentMap run={run} />
+        <CommsLog run={run} />
+        {(run.answer || run.error) && (
+          <div className="cc-answer">
+            {run.answer && <XMarkdown content={run.answer} className="answer" streaming={{ hasNextChunk: run.phase === "answering" }} openLinksInNewTab />}
+            {run.error && <Alert type="warning" showIcon title={run.error} className="slim" />}
+            {run.phase === "done" && (
+              <div className="muted small cc-answer-foot">
+                {fmtMs(run.finishedAt - run.startedAt)}
+                {run.usage && ` · ${run.usage.llmCalls ?? 1} model calls · ${fmtTokens((run.usage.promptTokens ?? 0) + (run.usage.completionTokens ?? 0))} tokens`}
+                {run.answer && (
+                  <Button size="small" type="link" icon={<SoundOutlined />} onClick={() => speak(run.answer)}>
+                    Read out
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// The question's path: You -> Router -> specialists -> Combiner -> Answer.
+// A specialist lights up when the router gives it a task, pulses while it
+// works, and shows its time when done. Left to right on wide screens; top
+// to bottom on phones, where the wide map would shrink below reading size.
+const WIDE = {
+  W: 640, H: 250, nodeW: 136,
+  you: [46, 125], router: [168, 125], combine: [506, 125], answer: [600, 125],
+  spec: SPECIALISTS.map((_, i) => [336, 25 + i * 50]),
+};
+const TALL = {
+  W: 340, H: 380, nodeW: 136,
+  you: [170, 20], router: [170, 80], combine: [170, 300], answer: [170, 358],
+  spec: [[90, 140], [250, 140], [90, 190], [250, 190], [170, 240]],
+};
+
+function AgentMap({ run }) {
+  const tall = !Grid.useBreakpoint().sm;
+  const L = tall ? TALL : WIDE;
+  const { W, H } = L;
+  const assigned = new Set(run.tasks.map((t) => t.agent));
+  const started = run.phase !== "idle";
+  const routed = run.tasks.length > 0;
+  const allDone = routed && run.tasks.every((t) => run.agents[t.agent]?.status === "done");
+  const combineOn = run.combining || (allDone && run.tasks.length > 0);
+  const answered = Boolean(run.answer);
+  const state = (agent) => run.agents[agent]?.status ?? (assigned.has(agent) ? "assigned" : "off");
+
+  // An edge leaves a node's right side (wide) or bottom (tall).
+  const out = ([x, y], w) => (tall ? [x, y + 17] : [x + w / 2, y]);
+  const into = ([x, y], w) => (tall ? [x, y - 17] : [x - w / 2, y]);
+  const edge = (from, to, on, key) => {
+    const [x1, y1] = from;
+    const [x2, y2] = to;
+    const d = tall
+      ? `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`
+      : `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`;
+    return <path key={key} d={d} className={`edge${on ? " on" : ""}`} />;
+  };
+
+  return (
+    <svg className={`agentmap${tall ? " tall" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Which agents are working on the question">
+      {edge(out(L.you, 60), into(L.router, 76), started, "e0")}
+      {SPECIALISTS.map((a, i) => edge(out(L.router, 76), into(L.spec[i], L.nodeW), assigned.has(a), `r${a}`))}
+      {SPECIALISTS.map((a, i) => edge(out(L.spec[i], L.nodeW), into(L.combine, 76), state(a) === "done", `c${a}`))}
+      {edge(out(L.combine, 76), into(L.answer, 60), answered, "e9")}
+
+      <Node x={L.you[0]} y={L.you[1]} w={60} label="You" on={started} />
+      <Node x={L.router[0]} y={L.router[1]} w={76} label="Router" on={started} busy={run.phase === "routing"} />
+      {SPECIALISTS.map((a, i) => {
+        const s = state(a);
+        const ms = run.agents[a]?.latencyMs;
+        return (
+          <Node
+            key={a}
+            x={L.spec[i][0]}
+            y={L.spec[i][1]}
+            w={L.nodeW}
+            label={AGENT_LABELS[a]}
+            sub={s === "done" && ms != null ? `${(ms / 1000).toFixed(1)} s` : s === "running" ? "working" : null}
+            color={AGENT_COLORS[a]}
+            on={s !== "off"}
+            busy={s === "running"}
+            done={s === "done"}
+          />
+        );
+      })}
+      <Node x={L.combine[0]} y={L.combine[1]} w={76} label="Combiner" on={Boolean(combineOn)} busy={run.combining === true} />
+      <Node x={L.answer[0]} y={L.answer[1]} w={60} label="Answer" on={answered} done={run.phase === "done"} />
+    </svg>
+  );
+}
+
+function Node({ x, y, w, label, sub, color, on, busy, done }) {
+  return (
+    <g className={`node${on ? " on" : ""}${busy ? " busy" : ""}${done ? " done" : ""}`} transform={`translate(${x - w / 2},${y - 17})`} style={color ? { "--node": color } : undefined}>
+      <rect width={w} height={34} rx={17} />
+      {color && <circle cx={15} cy={17} r={4} />}
+      <text x={color ? w / 2 + 6 : w / 2} y={sub ? 15 : 21} textAnchor="middle">
+        {label}
+      </text>
+      {sub && (
+        <text x={color ? w / 2 + 6 : w / 2} y={27} textAnchor="middle" className="node-sub">
+          {sub}
+        </text>
+      )}
+    </g>
+  );
+}
+
+// The hand-offs, as messages between the agents.
+function CommsLog({ run }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [run.log.length]);
+  if (!run.log.length) return null;
+  const t0 = run.startedAt;
+  return (
+    <ol className="comms" ref={ref} aria-label="Agent log">
+      {run.log.map((l, i) => (
+        <li key={i}>
+          <span className="comms-t">+{((l.at - t0) / 1000).toFixed(1)}s</span>
+          <span className="comms-who">
+            {l.from}
+            {l.to && <span className="muted"> → {l.to}</span>}
+          </span>
+          <span className="comms-text">{l.text}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// --- usage panels ---
+
+function UsagePanels({ d }) {
+  const callers = [...new Set([...d.byApp.map((a) => a.caller), ...d.connectedApps.flatMap((a) => (a.callers ?? []).filter((c) => c !== "web")), "web"])];
+  const colors = callerColors(callers);
+  const totalCost = d.totals.costUsd;
+  const errorRate = d.totals.questions ? d.totals.errors / d.totals.questions : 0;
+
+  // Every app that may ask, used or not - an app with no use is worth seeing too.
+  const rows = callers
+    .map((c) => d.byApp.find((a) => a.caller === c) ?? { caller: c, questions: 0, questions_today: 0, errors: 0, voice: 0, files: 0, users: 0, prompt_tokens: 0, completion_tokens: 0, cost_usd: 0, last_at: null })
+    .sort((a, b) => b.cost_usd - a.cost_usd || b.questions - a.questions);
+
+  const columns = [
+    {
+      title: "App",
+      dataIndex: "caller",
+      render: (c) => (
+        <span className="app-cell">
+          <i style={{ background: colors[c] }} />
+          {c === "web" ? "Web chat" : c}
+        </span>
+      ),
+    },
+    { title: "Questions", dataIndex: "questions", align: "right", render: fmtInt, sorter: (a, b) => a.questions - b.questions },
+    { title: "Today", dataIndex: "questions_today", align: "right", render: fmtInt, responsive: ["md"] },
+    { title: "Users", dataIndex: "users", align: "right", render: (v) => (v ? fmtInt(v) : "—"), responsive: ["lg"] },
+    { title: "Voice", dataIndex: "voice", align: "right", render: fmtInt, responsive: ["lg"] },
+    { title: "Files", dataIndex: "files", align: "right", render: fmtInt, responsive: ["xl"] },
+    { title: "Tokens", key: "tokens", align: "right", render: (_, r) => fmtTokens(r.prompt_tokens + r.completion_tokens), responsive: ["sm"] },
+    {
+      title: "Est. cost",
+      dataIndex: "cost_usd",
+      align: "right",
+      sorter: (a, b) => a.cost_usd - b.cost_usd,
+      render: (v) => (
+        <span className="cost-cell">
+          <span className="share">
+            <span style={{ width: `${totalCost ? (v / totalCost) * 100 : 0}%` }} />
+          </span>
+          {fmtUsd(v)}
+        </span>
+      ),
+    },
+    {
+      title: "Errors",
+      dataIndex: "errors",
+      align: "right",
+      render: (v) => (v ? <Tag color="error">{v}</Tag> : <span className="muted">0</span>),
+      responsive: ["md"],
+    },
+    { title: "Last used", dataIndex: "last_at", render: (v) => (v ? new Date(v).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : <span className="muted">never</span>), responsive: ["lg"] },
+  ];
+
+  const unpriced = d.byModel.filter((m) => !m.priced);
+  return (
+    <>
+      <div className="kpis">
+        <Kpi label="Questions today" value={fmtInt(d.totals.questionsToday)} />
+        <Kpi label={`Questions, ${d.days} days`} value={fmtInt(d.totals.questions)} />
+        <Kpi label="Est. cost" value={fmtUsd(totalCost)} hint="What this use would cost at the providers' paid prices. On free tiers the bill is $0." />
+        <Kpi label="Tokens" value={fmtTokens(d.totals.tokens)} />
+        <Kpi label="Typical answer" value={fmtMs(d.totals.p50Ms)} hint={`Half of the answers took less than this. 95% took less than ${fmtMs(d.totals.p95Ms)}.`} />
+        <Kpi
+          label="Errors"
+          value={
+            <span className={errorRate > 0.05 ? "bad" : undefined}>
+              {errorRate > 0.05 ? <CloseCircleFilled /> : <CheckCircleFilled className="good" />} {(errorRate * 100).toFixed(errorRate && errorRate < 0.1 ? 1 : 0)}%
+            </span>
+          }
+          hint={`${fmtInt(d.totals.errors)} failed requests`}
+        />
+      </div>
+
+      <div className="cc-grid">
+        <Card className="span2" title="Questions per day" size="small">
+          <DailyChart rows={d.byDay} days={d.days} colors={colors} />
+        </Card>
+
+        <Card className="span2" title="Billing by app" size="small" extra={<span className="muted small">Each app's own key is its billing identity</span>}>
+          <Table size="small" rowKey="caller" columns={columns} dataSource={rows} pagination={false} scroll={{ x: true }} />
+        </Card>
+
+        <Card title="Agents" size="small" extra={<span className="muted small">Requests handled</span>}>
+          <BarList items={d.byAgent.map((a) => ({ key: a.agent, label: AGENT_LABELS[a.agent] ?? a.agent.replace("_", " "), value: a.requests, dot: AGENT_COLORS[a.agent] }))} />
+        </Card>
+
+        <Card title="Models" size="small" extra={<span className="muted small">Est. cost</span>}>
+          <BarList items={d.byModel.map((m) => ({ key: m.model, label: `${m.model.replace(/^openai\//, "")} · ${fmtInt(m.calls)} calls`, value: m.cost_usd }))} format={fmtUsd} empty="No model calls yet" />
+          {unpriced.length > 0 && <p className="muted small">No price set for {unpriced.map((m) => m.model).join(", ")} - add it to MODEL_PRICES.</p>}
+        </Card>
+
+        <Card title="Connected-app calls" size="small" extra={<span className="muted small">What the agents read from apps</span>}>
+          {d.appCalls.length ? (
+            <Table
+              size="small"
+              rowKey={(r) => `${r.app}:${r.operation}`}
+              pagination={false}
+              dataSource={d.appCalls}
+              columns={[
+                { title: "Call", key: "op", render: (_, r) => <span className="mono">{r.app} · {r.operation}</span> },
+                { title: "Calls", dataIndex: "calls", align: "right", render: fmtInt },
+                { title: "Failed", dataIndex: "failures", align: "right", render: (v) => (v ? <Tag color="error">{v}</Tag> : <span className="muted">0</span>) },
+                { title: "Avg", dataIndex: "avg_ms", align: "right", render: fmtMs },
+              ]}
+            />
+          ) : (
+            <p className="muted small">No app calls yet</p>
+          )}
+        </Card>
+
+        <Card title="Recent requests" size="small" extra={<span className="muted small">Newest first · no question text is stored</span>}>
+          <ul className="recent">
+            {d.recent.map((r, i) => (
+              <li key={i}>
+                {r.ok ? <CheckCircleFilled className="good" /> : <Tooltip title={r.error}><CloseCircleFilled className="bad" /></Tooltip>}
+                <span className="app-cell">
+                  <i style={{ background: colors[r.caller] ?? "var(--other)" }} />
+                  {r.caller === "web" ? "Web" : r.caller}
+                </span>
+                <span className="muted">{r.channel}</span>
+                <span className="recent-agents">
+                  {(r.agents ?? []).map((a) => (
+                    <span key={a} className="chip" style={{ "--node": AGENT_COLORS[a] ?? "var(--other)" }}>
+                      {AGENT_LABELS[a] ?? a.replace("_", " ")}
+                    </span>
+                  ))}
+                </span>
+                <span className="recent-nums">
+                  <span className="muted num">{fmtTokens(r.tokens)} tok</span>
+                  <span className="num">{fmtUsd(r.cost_usd)}</span>
+                  <span className="muted num">{fmtMs(r.latency_ms)}</span>
+                  <span className="muted num when">{new Date(r.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                </span>
+              </li>
+            ))}
+            {!d.recent.length && <li className="muted">No requests yet - ask something above.</li>}
+          </ul>
+        </Card>
+      </div>
+    </>
+  );
+}
+
+function Kpi({ label, value, hint }) {
+  const body = (
+    <div className="kpi">
+      <span className="kpi-label">{label}</span>
+      <span className="kpi-value">{value}</span>
+    </div>
+  );
+  return hint ? <Tooltip title={hint}>{body}</Tooltip> : body;
+}

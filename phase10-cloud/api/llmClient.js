@@ -13,12 +13,14 @@
 // `tools` is sent only when the list is not empty.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { withRetry } from "./retry.js";
+import { recordModel } from "./usage.js";
 import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, FALLBACK_MODELS, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
 
 export async function chat({ model = CHAT_MODEL, messages, format, tools, label = "chat", reasoningEffort = REASONING_EFFORT }) {
   const send = LLM_FORMAT === "openai" ? sendOpenAI : sendOllama;
   const call = (m) => withRetry(() => send({ model: m, messages, format, tools, label, reasoningEffort }), { label: `${LLM_PROVIDER} ${label} request` });
   let res;
+  let used = model;
   try {
     res = await call(model);
   } catch (err) {
@@ -42,6 +44,7 @@ export async function chat({ model = CHAT_MODEL, messages, format, tools, label 
     for (const fallback of FALLBACK_MODELS.filter((m) => m !== model)) {
       try {
         res = await call(fallback);
+        used = fallback;
         notice(`${fallback} stood in for ${model}: today's free limit for ${model} is used up.`);
         break;
       } catch (err2) {
@@ -52,6 +55,8 @@ export async function chat({ model = CHAT_MODEL, messages, format, tools, label 
     }
     if (!res) throw limitReached(lastErr, lastModel);
   }
+  // Phase 10e: the model that actually answered, for usage and cost (usage.js).
+  recordModel({ provider: LLM_PROVIDER, model: used, label, promptTokens: res.promptTokens, completionTokens: res.completionTokens });
   return { ...res, content: plainText(res.content) };
 }
 

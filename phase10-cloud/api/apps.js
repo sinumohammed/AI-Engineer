@@ -30,6 +30,7 @@ import { describeOperation } from "./openapiTools.js";
 import { appAllowed } from "./dataPolicy.js";
 import { currentAccess, callerMayUse } from "./appAccess.js";
 import { createHash } from "node:crypto";
+import { recordAppCall } from "./usage.js";
 
 const MAX_CALLS = 3;
 // What one result may put in the prompt: ~1,500 tokens. Groq's free tier
@@ -312,6 +313,7 @@ async function planAndFetch(question, { onCall, onResult } = {}) {
     calls.map(async ({ app, op, args }) => {
       onCall?.({ app: app.name, operation: op.id, args });
       const r = await callOperation(app, op, args);
+      recordAppCall({ app: app.name, operation: op.id, ok: r.ok, status: r.status, latencyMs: r.latencyMs });
       onResult?.({ app: app.name, operation: op.id, ok: r.ok, status: r.status, latencyMs: r.latencyMs, error: r.error });
       return { app: app.name, operation: op.id, args, ok: r.ok, status: r.status, latencyMs: r.latencyMs, error: r.error, chunk: toChunk(app, op, r) };
     })

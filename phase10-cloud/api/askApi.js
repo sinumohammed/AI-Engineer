@@ -5,7 +5,7 @@
 // from it without touching the others.
 //
 //   POST /api/ask  { "question": "...", "conversationId"?: "...", "mode"?: "single" | "multi", "agent"?: "...",
-//                    "user"?: { "token": "..." } }
+//                    "user"?: { "token"?: "...", "ref"?: "..." } }
 //   -> { answer, sources, fromCompanyDocs, notices, usage, conversationId, mode }
 //   DELETE /api/ask/conversations/:conversationId  - forget a conversation
 //   POST /api/ask/transcribe?lang=Malayalam  (raw audio body) -> { text, language } - voice input
@@ -31,9 +31,11 @@ import { APP_API_KEYS, APP_DAILY_LIMIT, ACCESS_CODE } from "./config.js";
 import { getHistory, getSummary, appendTurn, clearSession, countAppQuestion } from "./sessionStore.js";
 import { withAccess } from "./appAccess.js";
 import { transcribe, TranscribeError } from "./transcribe.js";
+import { metered, meteredJob, recordUsage } from "./usage.js";
 
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
+const USER_REF = CONVERSATION_ID;
 
 // Compared through hashes with timingSafeEqual, as the access code is (server.js).
 const digest = (s) => createHash("sha256").update(String(s)).digest();
@@ -66,8 +68,12 @@ askApi.post("/", async (req, res) => {
     return res.status(400).json({ error: '"conversationId" must be 1-100 characters: letters, digits, _ . : -' });
   }
   if (!["single", "multi"].includes(mode)) return res.status(400).json({ error: '"mode" must be "single" or "multi".' });
-  if (user !== undefined && !(user && typeof user.token === "string" && user.token.length > 0 && user.token.length <= 4096)) {
-    return res.status(400).json({ error: '"user" must be { "token": "..." } - a token of up to 4096 characters.' });
+  // Phase 10e: user.ref - the app's own id for its user ("member-42", or a hash),
+  // so the usage dashboard can show use per user inside an app. Never a name.
+  const validToken = user?.token === undefined || (typeof user.token === "string" && user.token.length > 0 && user.token.length <= 4096);
+  const validRef = user?.ref === undefined || (typeof user.ref === "string" && USER_REF.test(user.ref));
+  if (user !== undefined && !(user && (user.token !== undefined || user.ref !== undefined) && validToken && validRef)) {
+    return res.status(400).json({ error: '"user" must be { "token"?: "...", "ref"?: "..." } - a token of up to 4096 characters, a ref of 1-100 letters, digits, _ . : -' });
   }
 
   const asked = await countAppQuestion(req.appName);
@@ -78,18 +84,25 @@ askApi.post("/", async (req, res) => {
   const sessionId = conversationId && `app:${req.appName}:${conversationId}`;
   const askedAt = new Date().toISOString();
   const started = Date.now();
+  // Phase 10e: one usage row per question, for this app (usage.js).
+  const record = (ok, meter, error) => recordUsage({ caller: req.appName, channel: "ask", mode, userRef: user?.ref ?? null, ok, error, latencyMs: Date.now() - started, meter });
   try {
-    const [history, summary] = sessionId ? await Promise.all([getHistory(sessionId), getSummary(sessionId)]) : [[], null];
-    const q = question.trim();
-    // Notices (e.g. "answered by the fallback model") are returned with the answer.
-    const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token }, () =>
-      collectNotices(() => (mode === "multi" ? runMultiAgent(q, history, { summary, forceAgent: agent }) : runAgent(q, history, { summary })))
-    );
-    const { answer, usage, fromCompanyDocs, sources = [] } = result;
-    if (sessionId) await appendTurn(sessionId, q, answer, { fromCompanyDocs, askedAt, answeredAt: new Date().toISOString() });
+    const { result: reply, meter } = await metered(async () => {
+      const [history, summary] = sessionId ? await Promise.all([getHistory(sessionId), getSummary(sessionId)]) : [[], null];
+      const q = question.trim();
+      // Notices (e.g. "answered by the fallback model") are returned with the answer.
+      const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token }, () =>
+        collectNotices(() => (mode === "multi" ? runMultiAgent(q, history, { summary, forceAgent: agent }) : runAgent(q, history, { summary })))
+      );
+      const { answer, usage, fromCompanyDocs, sources = [] } = result;
+      if (sessionId) await appendTurn(sessionId, q, answer, { fromCompanyDocs, askedAt, answeredAt: new Date().toISOString() });
+      return { answer, sources, fromCompanyDocs, notices, usage, conversationId: conversationId ?? null, mode };
+    });
+    await record(true, meter);
     console.log(`[ask] app=${req.appName} mode=${mode} ${Date.now() - started} ms${sessionId ? " (conversation)" : ""}`);
-    res.json({ answer, sources, fromCompanyDocs, notices, usage, conversationId: conversationId ?? null, mode });
+    res.json(reply);
   } catch (err) {
+    await record(false, err.meter, err.message);
     console.error(`[ask] app=${req.appName} failed: ${err.message}`);
     // A used-up model quota is the model's 429 with a readable message
     // (llmClient.js); anything else is not the caller's fault.
@@ -103,7 +116,7 @@ askApi.post("/", async (req, res) => {
 // the text is checked by the user, then asked through POST /api/ask.
 askApi.post("/transcribe", express.raw({ type: () => true, limit: "4mb" }), async (req, res) => {
   try {
-    res.json(await transcribe(req.body, req.get("content-type"), req.query.lang));
+    res.json(await meteredJob({ caller: req.appName, channel: "transcribe" }, () => transcribe(req.body, req.get("content-type"), req.query.lang)));
   } catch (err) {
     if (!(err instanceof TranscribeError)) console.error(`[ask] app=${req.appName} transcribe: ${err.message}`);
     res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });

@@ -26,8 +26,12 @@ function friendlyError(err) {
   return err?.message || "Could not record.";
 }
 
+// Phase 10e, for the Command Center: with silenceMs, the recording stops by
+// itself once the user has spoken and then been quiet that long.
+const SPEAKING = 0.08;
+
 // status: "idle" | "recording" | "transcribing"
-export function useVoiceInput({ onText, onError, language }) {
+export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
   const [status, setStatus] = useState("idle");
   const [seconds, setSeconds] = useState(0);
   const [levels, setLevels] = useState(() => Array(BARS).fill(0));
@@ -82,6 +86,15 @@ export function useVoiceInput({ onText, onError, language }) {
         const level = Math.min(1, Math.sqrt(sum / data.length) / 40);
         r.peak = Math.max(r.peak ?? 0, level);
         setLevels((prev) => [...prev.slice(1), level]);
+        if (silenceMs) {
+          if (level >= SPEAKING) {
+            r.heard = true;
+            r.quietSince = null;
+          } else if (r.heard) {
+            r.quietSince ??= t;
+            if (t - r.quietSince >= silenceMs && r.recorder.state === "recording") r.recorder.stop();
+          }
+        }
       };
       r.raf = requestAnimationFrame(tick);
     } catch {
