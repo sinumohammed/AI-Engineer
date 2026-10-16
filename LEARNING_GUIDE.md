@@ -445,6 +445,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.3 | Which documents may go to which services: public, internal, confidential | Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota |
 | 10d.4 | Connected apps: answers from other applications' live data, added as configuration | Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment |
 | 10d.5 | First real app (masjid): who may ask, and as which user | Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23 |
+| 10d.6 | The masjid assistant in daily use: limits in Settings, a phone-first chat, hands-free voice, rupees, Malayalam names, a repeatable test | Live: "Sinu TK" finds സിനു ടി കെ, "this month" gives October; `eval:masjid` 40/40 |
 
 - **Challenges, in plain terms:**
 
@@ -556,6 +557,19 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   ```
   The user's login token never leaves the masjid server. Every key, where it lives and which way it
   goes: "Keys at a glance" in `phase10-cloud/README.md`.
+- **The masjid assistant in daily use (10d.6):** what members asked for, each fixed where it belongs:
+  ```
+  4 questions a day      -> masjid app: counted in its Postgres; the admin changes it in Settings
+  phone: box off screen  -> masjid app: the chat is as tall as the visible screen (visualViewport);
+         and zoomed in      every text field 16px (iPhone zooms into smaller ones)
+  voice: tap twice       -> masjid app: a 1.5 s pause ends the recording; Auto-send asks at once
+  "$" amounts            -> masjid API says "amounts in INR (₹)"
+  "Sinu TK" not found    -> masjid API: Malayalam names turned into English letters and compared
+                            loosely (initials, ids, a letter or two off) - all 35 real names are Malayalam
+  "this month" = January -> AI service: every app result says today's date
+  ```
+  `cd phase10-cloud/eval && npm run eval:masjid` runs the masjid app end to end with made-up data
+  (40 checks) - after any change on either side.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -647,6 +661,12 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 76 | 10d.5 | A guest's "tomorrow" was asked as "the next 1 day" (today) | A duty-on-date operation in the masjid API | Live: tomorrow's member named |
 | 77 | 10d.5 | Live: a member asked (in Malayalam) for the pending-payments list and was told "no members have pending dues" - their own list was empty, the admin's page showed many | Filtered data says it is filtered ("only your own; the full list is for the admin"); the chat shows "Asking as" | The member is told they owe nothing and only the admin sees others; the admin gets the full list |
 | 78 | 10d.5 | Members wanted to speak questions, see recent ones and a fair share of the free quota | Voice through the AI service's speech-to-text (`/api/ask/transcribe`); recent questions; 10 questions a day per user, counted in the app's own database | Live: Malayalam voice read, the count goes 10 -> 9, voice not counted |
+| 79 | 10d.6 | The limit had to change without a deploy | 4 a day by default; the admin edits members / visitors / admin limits in Settings (stored in the app's database) | A change applies from the next question |
+| 80 | 10d.6 | On a phone the chat box fell below the screen, and typing zoomed the page past the edges | The chat sized to the visible screen (visualViewport, shrinks with the keyboard); all fields 16px on phones | 9/9 on an emulated iPhone, also with a 380 px "keyboard" |
+| 81 | 10d.6 | Voice needed a second tap; answers said "$"; "[1]" puzzled members | A pause ends the recording, Auto-send asks at once; the API says amounts are INR; source numbers hidden, "From: Masjid records" shown | Stopped at 4.9 s (1 s quiet + 2.4 s speech + 1.5 s pause) and answered; amounts in ₹ |
+| 82 | 10d.6 | The masjid checks were one-off scripts: two bugs reached the user first | `eval:masjid`: the real masjid backend on a throwaway database, every role and limit check | 34 -> 40 checks; found that fetch refuses port 5061 ("bad port") |
+| 83 | 10d.6 | "Dues of Sinu TK" found nobody - every real name is in Malayalam, the test names were English | Masjid code turns Malayalam names into English letters and compares loosely (initials, ids, near spellings) | All typed forms find the right member among the 35 real names; live: "Sinu TK" -> MR#001 |
+| 84 | 10d.6 | "This month" was answered with January | Each app result says today's date in the app's time zone | Live: October 26, matching the app's own schedule |
 
 Where things stand (Phase 10 code):
 
@@ -667,6 +687,7 @@ Where things stand (Phase 10 code):
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
+| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation | 40/40 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 
 ---
 
@@ -730,6 +751,9 @@ what changed.
     (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule.
     **And filtered data must say it is filtered:** an empty list "for this member" read as "nobody
     owes anything" until the response said whose list it was.
+18. **Test data must look like the real data.** The test members had English names; every real
+    member's name is in Malayalam, so "Sinu TK" failing was invisible until a user asked (10d.6).
+    Now the masjid eval includes a Malayalam-named member searched in English letters.
 
 ### What changed when the data got real (Phase 9)
 
@@ -778,6 +802,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
 | Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
 | Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps` |
+| The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; needs the masjid repo at `MASJID_REPO`) |
 | A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
@@ -827,6 +852,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `6e005c0` | Phase 10d.3: data policy - which documents may go to which services |
 | `6019c98` | Phase 10d.4: connected apps - answers from other applications' live data |
 | `63f3258`, `cd00e5f` | Phase 10d.5: routing fixes; callers, users and roles (masjid repo: `c2d7cdb`, `fbb0286`) |
+| `6a1f23d`, `e3d4d57`, `4129b76` | Phase 10d.6: voice for apps, `eval:masjid`, today's date in app results (masjid repo: `744c56c` limits, `2e75da3` phone UI, `33bfecc` voice and ₹, `061b97d` Malayalam names) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

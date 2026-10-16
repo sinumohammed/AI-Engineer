@@ -846,6 +846,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.3</td><td>Which documents may go to which services: public, internal, confidential</td><td class="res">Confidential excerpts reach a local model only (before: Groq too); files go to Gemini on the live app only; 15/15 checks, no model quota</td></tr>
                 <tr><td class="n">10d.4</td><td>Connected apps: answers from other applications' live data, added as configuration</td><td class="res">Demo app: 36/36 (planner, answers in both modes, safety); adding an app needs no deployment</td></tr>
                 <tr><td class="n">10d.5</td><td>First real app (masjid): who may ask, and as which user</td><td class="res">Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23</td></tr>
+                <tr><td class="n">10d.6</td><td>The masjid assistant in daily use: limits in Settings, a phone-first chat, hands-free voice, rupees, Malayalam names, a repeatable test</td><td class="res">Live: "Sinu TK" finds സിനു ടി കെ, "this month" gives October; <code>eval:masjid</code> 40/40</td></tr>
               </tbody>
             </table>
           </div>
@@ -1145,6 +1146,12 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">76</td><td class="n">10d.5</td><td>A guest's "tomorrow" was asked as "the next 1 day"</td><td>A duty-on-date operation in the masjid API</td><td class="res">Live: tomorrow's member named</td></tr>
             <tr><td class="n">77</td><td class="n">10d.5</td><td>Live: a member asked for the pending-payments list and was told "no members have pending dues" - their own list was empty</td><td>Filtered data says it is filtered; the chat shows "Asking as"</td><td class="res">The member is told they owe nothing; the admin gets the full list</td></tr>
             <tr><td class="n">78</td><td class="n">10d.5</td><td>Members wanted voice, recent questions and a fair share of the free quota</td><td>Voice through the AI service's speech-to-text; recent questions; 10 questions a day per user in the app's database</td><td class="res">Live: Malayalam voice read, the count goes 10 to 9</td></tr>
+            <tr><td class="n">79</td><td class="n">10d.6</td><td>The limit had to change without a deploy</td><td>4 a day by default; the admin edits the limits in Settings</td><td class="res">Applies from the next question</td></tr>
+            <tr><td class="n">80</td><td class="n">10d.6</td><td>On a phone the chat box fell below the screen, and typing zoomed the page</td><td>Chat sized to the visible screen (visualViewport); fields 16px on phones</td><td class="res">9/9 on an emulated iPhone, also with the keyboard open</td></tr>
+            <tr><td class="n">81</td><td class="n">10d.6</td><td>Voice needed a second tap; "$" amounts; "[1]" puzzled members</td><td>A pause ends the recording and Auto-send asks; amounts said to be INR; source numbers hidden</td><td class="res">Stopped at 4.9 s and answered; amounts in ₹</td></tr>
+            <tr><td class="n">82</td><td class="n">10d.6</td><td>Masjid checks were one-off scripts; two bugs reached the user first</td><td><code>eval:masjid</code> on a throwaway database</td><td class="res">40 checks; found fetch refuses port 5061</td></tr>
+            <tr><td class="n">83</td><td class="n">10d.6</td><td>"Dues of Sinu TK" found nobody: every real name is in Malayalam</td><td>Malayalam names turned into English letters and compared loosely, in the masjid code</td><td class="res">Live: "Sinu TK" finds MR#001</td></tr>
+            <tr><td class="n">84</td><td class="n">10d.6</td><td>"This month" answered with January</td><td>Each app result says today's date</td><td class="res">Live: October 26, matching the app</td></tr>
           </tbody>
         </table>
       </div>
@@ -1168,6 +1175,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
+            <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation</td><td class="n">40/40</td><td class="n">live: 2/2 match the app's schedule</td></tr>
           </tbody>
         </table>
       </div>
@@ -1194,6 +1202,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Where data is stored and where it is sent are two different rules.</strong> Private documents were never stored on a hosted database, yet their excerpts were sent to a hosted model every time one answered (10d.3). Follow the data through every call, not only to where it rests.</li>
         <li><strong>Make the variable part data, not code.</strong> Each app differs only in its address, its endpoints and its token, so those became a configuration entry; the code that calls apps safely is written once (10d.4). A new app is a command, not a deployment.</li>
         <li><strong>Who may see data is the data owner's decision, enforced where the data is.</strong> The AI service only says who is asking; the masjid app decides what an admin, a member or a guest sees (10d.5). A prompt saying "don't show other members' dues" would be advice; a 403 is a rule. And filtered data must say it is filtered: an empty list "for this member" read as "nobody owes anything" until the response said whose list it was.</li>
+        <li><strong>Test data must look like the real data.</strong> The test members had English names; every real member's name is in Malayalam, so "Sinu TK" failing was invisible until a user asked (10d.6). The masjid eval now has a Malayalam-named member searched in English letters.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1244,6 +1253,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>Check which documents may go where</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:policy</code> (no model calls)</td></tr>
             <tr><td>Connected apps</td><td><code>cd phase10-cloud/api &amp;&amp; npm run app -- list</code> (also <code>add &lt;file&gt;</code>, <code>try "question"</code>, <code>remove &lt;name&gt;</code>); test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:apps</code></td></tr>
+            <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice)</td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>

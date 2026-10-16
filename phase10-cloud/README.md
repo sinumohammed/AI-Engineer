@@ -877,3 +877,25 @@ own Postgres - the app knows its users, this service only sees the app.
 `npm run app -- add ...` with `API_URL` pointing at the server - the Mac or
 https://ai-engineer-api-jet.vercel.app. The live app needs the app's API on the
 internet (a Mac-only app works only with the local server).
+
+### 10d.6 The masjid assistant in daily use (2026-10-16)
+
+What members asked for after going live, each fixed where it belongs:
+
+| Asked / found | Fix | Where |
+|---|---|---|
+| Fewer questions, changeable without a deploy | 4 a day (members; visitors per IP), admin none; edited in Settings, stored in `app_settings` | masjid app |
+| Phone: the box below the screen, typing zoomed the page | chat as tall as the visible screen (`useFitToViewport`, visualViewport); fields 16px on phones | masjid app |
+| Voice: a second tap to stop | a 1.5 s pause stops it (8 s with no speech too); Auto-send switch | masjid app |
+| Answers in "$"; "[1]" in the text | money responses say `amountsIn: INR (₹)`; source numbers hidden, "From: Masjid records" | masjid app |
+| "Dues of Sinu TK" found nobody - all 35 real names are Malayalam | `nameMatch.js`: Malayalam -> English letters, loose word-by-word match, initials, ids; no match returns every name spelled in English | masjid app |
+| "This month" answered with January | each app result carries today's date in the app's time zone | this service (`apps.js`) |
+| Voice for apps | `POST /api/ask/transcribe` with the app key | this service (`askApi.js`) |
+
+`npm run eval:masjid` (40 checks): the masjid backend from its repo on a
+throwaway database and this API beside it - tokens and roles, limit
+settings, answers as admin / member / guest, names in English letters,
+isolation, daily limits. Live (guest): "When is Sinu TK on food duty this
+month?" -> October 26 and "MR1 in November" -> November 24, both matching the
+app's own yearly schedule.
+
