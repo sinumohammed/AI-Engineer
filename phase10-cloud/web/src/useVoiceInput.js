@@ -27,8 +27,12 @@ function friendlyError(err) {
 }
 
 // Phase 10e, for the Command Center: with silenceMs, the recording stops by
-// itself once the user has spoken and then been quiet that long.
-const SPEAKING = 0.08;
+// itself once the user has spoken and then been quiet that long, or after
+// NO_SPEECH_MS if nothing was said - the masjid app's tested values. Between
+// the two levels nothing changes, so breathing or a fan does not end it.
+const SPEAKING = 0.07;
+const QUIET = 0.035;
+const NO_SPEECH_MS = 8000;
 
 // status: "idle" | "recording" | "transcribing"
 export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
@@ -71,11 +75,18 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       r.audioCtx = new Ctx();
+      // Started without a tap (clap to wake), a phone keeps audio paused: the
+      // meter would read silence, so the recording would never stop by itself
+      // and would be thrown away as silent. Then: no meter - it is sent as it
+      // is, and the user taps to stop.
+      await r.audioCtx.resume().catch(() => {});
+      if (r.audioCtx.state !== "running") throw new Error("audio paused");
       const analyser = r.audioCtx.createAnalyser();
       analyser.fftSize = 512;
       r.audioCtx.createMediaStreamSource(stream).connect(analyser);
       const data = new Uint8Array(analyser.fftSize);
       let last = 0;
+      const begun = performance.now();
       const tick = (t) => {
         r.raf = requestAnimationFrame(tick);
         if (t - last < 70) return;
@@ -86,19 +97,22 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
         const level = Math.min(1, Math.sqrt(sum / data.length) / 40);
         r.peak = Math.max(r.peak ?? 0, level);
         setLevels((prev) => [...prev.slice(1), level]);
-        if (silenceMs) {
+        if (silenceMs && r.recorder.state === "recording") {
           if (level >= SPEAKING) {
             r.heard = true;
-            r.quietSince = null;
-          } else if (r.heard) {
-            r.quietSince ??= t;
-            if (t - r.quietSince >= silenceMs && r.recorder.state === "recording") r.recorder.stop();
+            r.lastLoud = t;
+          } else if (level >= QUIET) {
+            r.lastLoud = t; // still sounding - not a pause yet
           }
+          if ((r.heard && t - r.lastLoud > silenceMs) || (!r.heard && t - begun > NO_SPEECH_MS)) r.recorder.stop();
         }
       };
       r.raf = requestAnimationFrame(tick);
     } catch {
-      // no meter - recording still works
+      // no meter - recording still works, sent without the silence check
+      r.audioCtx?.close().catch(() => {});
+      r.audioCtx = null;
+      r.peak = null;
     }
 
     const startedAt = Date.now();

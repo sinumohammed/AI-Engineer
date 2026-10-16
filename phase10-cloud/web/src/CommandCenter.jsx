@@ -297,7 +297,14 @@ function Unlock({ needsKey, needsCode, reason, onSubmit }) {
 function Console({ accessCode, voiceOnServer, onAnswered }) {
   const { message } = AntApp.useApp();
   const [input, setInput] = useState("");
-  const [clapOn, setClapOn] = useState(() => stored("clapWake") === "1");
+  // Clap to wake holds the microphone open, so it is never switched on by
+  // itself: off on every visit, and off when the page is hidden.
+  const [clapOn, setClapOn] = useState(false);
+  useEffect(() => {
+    const onHide = () => document.visibilityState === "hidden" && setClapOn(false);
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
   const [speakOn, setSpeakOn] = useState(() => stored("speakAnswers") !== "0");
   const speakRef = useRef(speakOn);
   speakRef.current = speakOn;
@@ -331,14 +338,29 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
     onError: (msg) => message.warning(msg),
   });
 
-  const wake = useCallback(() => {
-    if (voice.status !== "idle" || busy) return;
+  function stopSpeaking() {
     window.speechSynthesis?.cancel();
     setSpeaking(false);
+  }
+  // From a tap: start recording inside the tap itself - a phone only lets
+  // audio run when it starts from the user's touch (found on a phone: started
+  // a moment later, the recording heard nothing and never stopped).
+  function listen() {
+    if (voice.status !== "idle" || busy) return;
+    stopSpeaking();
+    voice.start();
+  }
+  // From two claps: a chime first, then record.
+  const wake = useCallback(() => {
+    if (voice.status !== "idle" || busy) return;
+    stopSpeaking();
     chime();
-    setTimeout(() => voice.start(), 250);
+    setTimeout(() => voice.start(), 300);
   }, [voice, busy]);
-  const clap = useClapWake({ enabled: clapOn && canSpeak, paused: busy || voice.status !== "idle" || speaking, onWake: wake });
+  // The clap listener holds the mic only while nothing else is going on: it
+  // lets go while a question is recorded, answered or read out.
+  const idleNow = voice.status === "idle" && !busy && !speaking;
+  const clap = useClapWake({ enabled: clapOn && canSpeak && idleNow, paused: false, onWake: wake });
   const [flash, setFlash] = useState(false);
   useEffect(() => {
     if (!clap.lastClap) return undefined;
@@ -371,7 +393,13 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
   return (
     <section className="cc-console">
       <div className="cc-console-left">
-        <div className={`orb orb-${orbState}${flash ? " orb-flash" : ""}`} style={{ "--level": level }}>
+        <div
+          className={`orb orb-${orbState}${flash ? " orb-flash" : ""}`}
+          style={{ "--level": level }}
+          role={orbState === "listening" || orbState === "speaking" ? "button" : undefined}
+          aria-label={orbState === "listening" ? "Stop and send" : orbState === "speaking" ? "Stop reading out" : undefined}
+          onClick={() => (orbState === "listening" ? voice.stop() : orbState === "speaking" ? stopSpeaking() : null)}
+        >
           <div className="orb-ring" />
           <div className="orb-ring r2" />
           <div className="orb-core">
@@ -381,19 +409,29 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
         <div className="orb-text" aria-live="polite">
           {orbText}
         </div>
+        {voice.status === "recording" && (
+          <Button type="primary" danger shape="round" icon={<StopOutlined />} onClick={voice.stop}>
+            Stop and send
+          </Button>
+        )}
+        {speaking && (
+          <Button shape="round" icon={<StopOutlined />} onClick={stopSpeaking}>
+            Stop reading
+          </Button>
+        )}
+        {clapOn && canSpeak && (
+          <div className="mic-on" role="status">
+            <span className="dot-live" /> Mic on - listening for claps
+            <Button size="small" type="link" onClick={() => setClapOn(false)}>
+              Turn off
+            </Button>
+          </div>
+        )}
 
         <div className="cc-controls">
           <Tooltip title={canSpeak ? "Listen for two claps. The microphone stays in this browser until you clap." : "Voice is off on this server or browser"}>
             <label className="ctl">
-              <Switch
-                size="small"
-                checked={clapOn && canSpeak}
-                disabled={!canSpeak}
-                onChange={(v) => {
-                  setClapOn(v);
-                  store("clapWake", v ? "1" : "0");
-                }}
-              />
+              <Switch size="small" checked={clapOn && canSpeak} disabled={!canSpeak} onChange={setClapOn} />
               Clap to wake
             </label>
           </Tooltip>
@@ -425,18 +463,17 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
             disabled={voice.status !== "idle"}
           />
           {canSpeak && (
-            <Tooltip title={voice.status === "recording" ? "Stop and send" : "Speak a command"}>
-              <Button
+            <Button
                 size="large"
                 shape="circle"
                 type={voice.status === "recording" ? "primary" : "default"}
-                icon={<AudioOutlined />}
+                danger={voice.status === "recording"}
+                icon={voice.status === "recording" ? <StopOutlined /> : <AudioOutlined />}
                 loading={voice.status === "transcribing"}
-                onClick={() => (voice.status === "recording" ? voice.stop() : wake())}
+                onClick={() => (voice.status === "recording" ? voice.stop() : listen())}
                 disabled={busy}
-                aria-label="Voice command"
+                aria-label={voice.status === "recording" ? "Stop and send" : "Voice command"}
               />
-            </Tooltip>
           )}
           {busy ? (
             <Button size="large" shape="circle" icon={<StopOutlined />} onClick={cancel} aria-label="Stop" />
