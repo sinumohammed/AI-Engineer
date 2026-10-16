@@ -73,19 +73,43 @@ function speakable(text) {
   return text
     .replace(/```[\s\S]*?```/g, " The code is on the screen. ")
     .replace(/`([^`]*)`/g, "$1")
-    .replace(/\[\d+\]/g, "")
+    .replace(/\s*\[\d+\]/g, "")
     .replace(/[*_#>|]/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 }
+// Phones (iPhone Safari, some Android browsers) only read aloud if the first
+// speak() happens inside a tap; the answer arrives seconds later, so it was
+// silently blocked (found on a phone). Every tap that can lead to an answer
+// says an empty, silent phrase first, which unlocks speech for the page.
+let speechUnlocked = false;
+function unlockSpeech() {
+  if (speechUnlocked || !("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(" ");
+  u.volume = 0;
+  window.speechSynthesis.speak(u);
+  speechUnlocked = true;
+}
+
+// Sentence by sentence, in pieces of up to ~220 characters: some browsers
+// stop one long utterance after about 15 seconds.
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(speakable(text).slice(0, 1200));
-  u.rate = 1.03;
-  window.speechSynthesis.speak(u);
+  const synth = window.speechSynthesis;
+  synth.cancel();
+  const pieces = [];
+  for (const sentence of speakable(text).slice(0, 1500).match(/[^.!?]+[.!?]*\s*/g) ?? []) {
+    if (pieces.length && (pieces.at(-1) + sentence).length <= 220) pieces[pieces.length - 1] += sentence;
+    else pieces.push(sentence);
+  }
+  for (const piece of pieces) {
+    const u = new SpeechSynthesisUtterance(piece.trim());
+    u.rate = 1.03;
+    synth.speak(u);
+  }
 }
+const stillSpeaking = () => window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending);
 
 // A short rising two-note chime: "I'm listening".
 function chime() {
@@ -318,7 +342,7 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
         setSpeaking(true);
         speak(r.answer);
         const poll = setInterval(() => {
-          if (!window.speechSynthesis.speaking) {
+          if (!stillSpeaking()) {
             clearInterval(poll);
             setSpeaking(false);
           }
@@ -348,6 +372,7 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
   function listen() {
     if (voice.status !== "idle" || busy) return;
     stopSpeaking();
+    if (speakOn) unlockSpeech();
     voice.start();
   }
   // From two claps: a chime first, then record.
@@ -373,6 +398,7 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
     const q = input.trim();
     if (!q || busy) return;
     window.speechSynthesis?.cancel();
+    if (speakOn) unlockSpeech();
     setInput("");
     ask(q);
   }
@@ -431,7 +457,15 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
         <div className="cc-controls">
           <Tooltip title={canSpeak ? "Listen for two claps. The microphone stays in this browser until you clap." : "Voice is off on this server or browser"}>
             <label className="ctl">
-              <Switch size="small" checked={clapOn && canSpeak} disabled={!canSpeak} onChange={setClapOn} />
+              <Switch
+                size="small"
+                checked={clapOn && canSpeak}
+                disabled={!canSpeak}
+                onChange={(v) => {
+                  if (v && speakOn) unlockSpeech(); // answers after a clap have no tap of their own
+                  setClapOn(v);
+                }}
+              />
               Clap to wake
             </label>
           </Tooltip>
@@ -442,6 +476,7 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
               onChange={(v) => {
                 setSpeakOn(v);
                 store("speakAnswers", v ? "1" : "0");
+                if (v) unlockSpeech();
                 if (!v) {
                   window.speechSynthesis?.cancel();
                   setSpeaking(false);
