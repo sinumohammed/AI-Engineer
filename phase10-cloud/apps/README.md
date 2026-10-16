@@ -53,7 +53,7 @@ range, a status, the latest 20 - rather than returning whole tables.
 ### 2. An access token for them
 
 One long random token, kept as a secret on the app's server (for example
-`MASJID_AI_TOKEN` on Render), accepted only on `/api/ai/*`. The normal user
+`MASJID_AI_TOKEN` in the masjid project's Vercel env), accepted only on `/api/ai/*`. The normal user
 login stays as it is.
 
 ```js

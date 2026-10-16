@@ -62,7 +62,7 @@ masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> mas
                                            AI service --(GROQ_API_KEY, GEMINI_API_KEY)--> models
 ```
 
-| Key | For | In `.env` as | On Vercel (ai-engineer-api) | On Render (masjid backend) | New one |
+| Key | For | In `.env` as | On Vercel (ai-engineer-api) | On Vercel (masjid-management, its backend) | New one |
 |---|---|---|---|---|---|
 | Groq | answer, judge, router models; Whisper | `GROQ_API_KEY` | `GROQ_API_KEY` | - | console.groq.com |
 | Gemini | voice, photos/scans, overviews | `GEMINI_API_KEY` | `GEMINI_API_KEY` | - | aistudio.google.com |

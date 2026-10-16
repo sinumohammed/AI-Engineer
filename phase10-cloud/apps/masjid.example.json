@@ -1,7 +1,7 @@
 {
   "name": "masjid",
   "description": "Masjid management: daily food-duty rotation (which member household supplies food each day) and swaps, members, pending dues, income and expense transactions, bank balances, announcements",
-  "openapi": "https://angular-session.onrender.com/api/ai/openapi.json",
+  "openapi": "https://masjid-management-omega.vercel.app/api/ai/openapi.json",
   "callers": [
     "masjid"
   ],
