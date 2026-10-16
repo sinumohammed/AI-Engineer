@@ -1,0 +1,328 @@
+// The masjid app end to end, on this Mac, with made-up data - never the live
+// database. Starts the masjid backend from its own repo (MASJID_REPO) against a
+// throwaway Postgres database, and this service's API next to it; fills the
+// database through the app's own admin routes; registers the app; then asks:
+//
+//   1. the masjid backend's AI checks: service token, user token, roles - no model
+//   2. the admin's limit settings - no model
+//   3. answers through the masjid app's assistant (/api/assistant/ask), as the
+//      admin, a member and a guest: roles, "I/my", rupees, the schedule
+//   4. isolation: the web chat, another app, the masjid key without a user
+//   5. daily limits: a lowered limit refuses, a failed answer is not counted
+//   6. voice (VOICE=1): a recording through the masjid server to speech-to-text
+//
+// Everything is removed at the end. The model is whatever ../.env says
+// (local Ollama by default; LLM_PROVIDER=groq ... to check the live setup).
+//   npm run eval:masjid        (MASJID_REPO=/path/to/MasjidRahma to override)
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { randomBytes } from "node:crypto";
+import { readFileSync, existsSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
+
+const MASJID_REPO = process.env.MASJID_REPO ?? "/Users/sinosartk/Code/Developer/work/MasjidRahma";
+const MASJID_SERVER = `${MASJID_REPO}/masjid-management/server`;
+if (!existsSync(`${MASJID_SERVER}/app.js`)) {
+  console.error(`No masjid backend at ${MASJID_SERVER} - set MASJID_REPO.`);
+  process.exit(1);
+}
+const apiRequire = createRequire(new URL("../api/package.json", import.meta.url));
+const pg = apiRequire("pg");
+const { createClient } = apiRequire("redis");
+const jwt = createRequire(`${MASJID_SERVER}/package.json`)("jsonwebtoken");
+const { createHmac } = await import("node:crypto");
+
+const DB = `masjid_eval_${process.pid}`;
+const PG_ADMIN = process.env.MASJID_EVAL_PG ?? "postgres://rag:rag@localhost:5432/rag";
+// Not 5060/5061: fetch refuses those ports (SIP) with "bad port".
+const MASJID_PORT = 5071;
+const AI_PORT = 3016;
+const M = `http://localhost:${MASJID_PORT}/api`;
+const AI = `http://localhost:${AI_PORT}`;
+const JWT_SECRET = randomBytes(24).toString("hex");
+const MASJID_AI_TOKEN = randomBytes(24).toString("base64url");
+const MASJID_ASK_KEY = `ak_${randomBytes(18).toString("base64url")}`;
+const OTHER_ASK_KEY = `ak_${randomBytes(18).toString("base64url")}`;
+const ADMIN_KEY = randomBytes(24).toString("base64url");
+const APPS_KEY = `apps:registry:masjid-eval-${process.pid}`;
+
+let passed = 0;
+let total = 0;
+function check(label, ok, detail = "") {
+  total++;
+  passed += Boolean(ok);
+  console.log(`${ok ? "✅" : "❌"} ${label}${detail ? ` - ${String(detail).replace(/\n/g, " ").slice(0, 160)}` : ""}`);
+}
+
+async function call(url, { method = "GET", body, token, headers = {}, raw, type = "application/json" } = {}) {
+  const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": type, ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+    body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
+    signal: AbortSignal.timeout(600000),
+  });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+// --- start and stop ---
+const children = [];
+function start(cmd, args, cwd, env) {
+  const child = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "ignore", "inherit"] });
+  children.push(child);
+  return child;
+}
+async function waitFor(url) {
+  for (let i = 0; i < 60; i++) {
+    try {
+      if ((await fetch(url)).ok) return;
+    } catch {
+      // not up yet
+    }
+    await sleep(500);
+  }
+  throw new Error(`${url} did not start`);
+}
+const admin = new pg.Client({ connectionString: PG_ADMIN });
+const redis = createClient({ url: process.env.REDIS_URL ?? "redis://localhost:6379" });
+
+async function cleanup() {
+  for (const c of children) c.kill();
+  await sleep(500);
+  try {
+    await admin.query(`DROP DATABASE IF EXISTS ${DB}`);
+  } catch (err) {
+    console.error(`could not drop ${DB}: ${err.message}`);
+  }
+  await admin.end().catch(() => {});
+  try {
+    await redis.del(APPS_KEY);
+    for await (const keys of redis.scanIterator({ MATCH: "session:app:masjid:u-*", COUNT: 200 })) {
+      for (const k of Array.isArray(keys) ? keys : [keys]) await redis.del(k);
+    }
+    for await (const keys of redis.scanIterator({ MATCH: "session:app:masjid:g-eval-*", COUNT: 200 })) {
+      for (const k of Array.isArray(keys) ? keys : [keys]) await redis.del(k);
+    }
+  } catch {
+    // Redis down: nothing stored there
+  }
+  await redis.quit().catch(() => {});
+}
+
+const masjidEnv = {
+  DATABASE_URL: `postgres://rag:rag@localhost:5432/${DB}`,
+  JWT_SECRET,
+  MASJID_AI_TOKEN,
+  AI_ASK_URL: `${AI}/api/ask`,
+  AI_ASK_KEY: MASJID_ASK_KEY,
+  PORT: String(MASJID_PORT),
+  AI_DAILY_LIMIT_MEMBER: "4",
+  AI_DAILY_LIMIT_GUEST: "4",
+  AI_DAILY_LIMIT_ADMIN: "0",
+};
+const aiEnv = {
+  APPS_KEY,
+  APP_SECRETS_KEY: randomBytes(32).toString("base64"),
+  ADMIN_KEY,
+  APP_API_KEYS: `masjid=${MASJID_ASK_KEY},other=${OTHER_ASK_KEY}`,
+  PORT: String(AI_PORT),
+  ACCESS_CODE: "",
+};
+const startMasjid = () => start(process.execPath, ["index.js"], MASJID_SERVER, masjidEnv);
+const startAi = () => start(process.execPath, ["--env-file=../.env", "server.js"], new URL("../api/", import.meta.url).pathname, aiEnv);
+
+// A user token as the masjid server mints it (for the direct /api/ai checks).
+const AI_USER_SECRET = createHmac("sha256", JWT_SECRET).update("masjid-ai-user-token").digest("base64");
+const userToken = (claims) => jwt.sign({ scope: "ai-read", ...claims }, AI_USER_SECRET, { expiresIn: "5m" });
+
+try {
+  await admin.connect();
+  await redis.connect();
+  await admin.query(`CREATE DATABASE ${DB}`);
+  startMasjid();
+  startAi();
+  await waitFor(`http://localhost:${MASJID_PORT}/health`);
+  await waitFor(`${AI}/api/access`);
+  console.log(`Masjid backend ${MASJID_SERVER} on :${MASJID_PORT} (database ${DB}), AI service on :${AI_PORT}\n`);
+
+  // --- made-up data, through the app's own admin routes ---
+  const adminLogin = (await call(`${M}/auth/setup`, { method: "POST", body: { username: "admin", password: "eval-admin-pass" } })).body.token;
+  const people = [
+    ["Abdul Rasheed", 3, "monthly", 300],
+    ["Fathima Beevi", 4, "monthly", 300],
+    ["Muhammed Ashraf", 5, "yearly", 3000],
+    ["Shameer K", 2, "monthly", 300],
+    ["Paid Up Member", 3, "monthly", 100],
+  ];
+  for (const [i, [name, count, frequency, amount]] of people.entries()) {
+    await call(`${M}/members`, {
+      method: "POST",
+      token: adminLogin,
+      body: { name, address: "Eval street", phone: `900000000${i + 1}`, memberCount: count, paymentFrequency: frequency, paymentAmount: amount, duesStartYear: 2026, duesStartMonthIndex: 0, memberType: "regular" },
+    });
+  }
+  const members = (await call(`${M}/members`)).body;
+  const byName = (n) => members.find((m) => m.name === n);
+  const bank = (await call(`${M}/banks`)).body[0].id;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  const month = today.slice(0, 7);
+  for (const t of [
+    { type: "income", category: "Masjid payment", amount: 900, description: "Jan-Mar dues", date: "2026-03-05", memberId: byName("Fathima Beevi").id },
+    { type: "income", category: "Masjid payment", amount: 1200, description: "2026 dues", date: "2026-03-01", memberId: byName("Paid Up Member").id },
+    { type: "income", category: "Friday collection", amount: 4250, description: "Jumua collection", date: `${month}-02` },
+    { type: "expense", category: "Electricity", amount: 1830, description: "KSEB bill", date: `${month}-03` },
+    { type: "expense", category: "Imam salary", amount: 15000, description: "Monthly salary", date: `${month}-01` },
+  ]) {
+    await call(`${M}/transactions`, { method: "POST", token: adminLogin, body: { ...t, bankId: bank } });
+  }
+  await call(`${M}/push/announce`, { method: "POST", token: adminLogin, body: { title: "Meelad programme on Sunday", message: "Meelad programme after Maghrib on Sunday." } });
+  const login = async (u, p) => (await call(`${M}/auth/login`, { method: "POST", body: { username: u, password: p } })).body.token;
+  const fathima = await login(byName("Fathima Beevi").unique_id, "9000000002");
+  const paidUp = await login(byName("Paid Up Member").unique_id, "9000000005");
+
+  // --- register the app, as npm run app -- add does ---
+  const reg = await call(`${AI}/api/admin/apps/masjid`, {
+    method: "PUT",
+    token: ADMIN_KEY,
+    body: {
+      name: "masjid",
+      description: "Masjid management: daily food-duty rotation (which member household supplies food each day) and swaps, members, pending dues, income and expense transactions, bank balances, announcements",
+      openapi: `${M}/ai/openapi.json`,
+      token: MASJID_AI_TOKEN,
+      callers: ["masjid"],
+      user: "required",
+      whoami: "me",
+      dataLevel: "internal",
+      timezone: "Asia/Kolkata",
+      timeoutMs: 60000,
+    },
+  });
+  if (reg.status !== 200) throw new Error(`registration failed: ${reg.status} ${JSON.stringify(reg.body)}`);
+  console.log(`Registered masjid: ${reg.body.app.operations.length} operations\n`);
+
+  // =====================================================================
+  console.log("1. The masjid backend's AI checks (no model)");
+  const svc = { Authorization: `Bearer ${MASJID_AI_TOKEN}` };
+  const adminUser = userToken({ sub: "x", isAdmin: true, memberId: null });
+  const memberUser = userToken({ sub: "y", isAdmin: false, memberId: byName("Fathima Beevi").id });
+  const guestUser = userToken({ sub: "guest", guest: true, isAdmin: false, memberId: null });
+  let r = await call(`${M}/ai/today-duty`, { headers: svc });
+  check("Service token without a user: refused", r.status === 401, r.body.error);
+  r = await call(`${M}/ai/today-duty`, { headers: { "X-User-Token": adminUser } });
+  check("User token without the service token: refused", r.status === 401);
+  r = await call(`${M}/ai/today-duty`, { headers: { ...svc, "X-User-Token": adminLogin } });
+  check("A login token is not accepted as the AI user token", r.status === 401);
+  r = await call(`${M}/transactions`, { method: "POST", token: adminUser, body: { type: "expense", category: "x", amount: 1 } });
+  check("The AI user token cannot be used as a login (admin write refused)", r.status === 401, `status ${r.status}`);
+  r = await call(`${M}/ai/finance-summary`, { headers: { ...svc, "X-User-Token": memberUser } });
+  check("A member asking for the accounts: 403 with the reason", r.status === 403 && /only the admin/.test(r.body.error), r.body.error);
+  r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": memberUser } });
+  check("A member's dues list is labelled as their own", r.status === 200 && /only the asking member/i.test(r.body.scope ?? "") && r.body.pending?.length === 1, r.body.scope);
+  r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check("The admin's dues list: everyone owing, amounts in rupees", r.body.amountsIn?.includes("INR") && r.body.items?.length === 4, `${r.body.items?.length} owing, ${r.body.amountsIn}`);
+  r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": guestUser } });
+  check("A guest: dues refused, 'log in'", r.status === 403 && /log in/.test(r.body.error));
+  const fathimaDue = (await call(`${M}/ai/me`, { headers: { ...svc, "X-User-Token": memberUser } })).body.dues?.due;
+  check("A member's own record (/ai/me): role and dues", fathimaDue > 0, `due ${fathimaDue}`);
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const tomorrowDuty = (await call(`${M}/ai/duty-on-date?date=${tomorrow}`, { headers: { ...svc, "X-User-Token": guestUser } })).body.member?.name;
+  const todayDuty = (await call(`${M}/ai/today-duty`, { headers: { ...svc, "X-User-Token": guestUser } })).body.member?.name;
+  check("A guest: the duty schedule is open", Boolean(todayDuty && tomorrowDuty), `today ${todayDuty}, tomorrow ${tomorrowDuty}`);
+
+  // =====================================================================
+  console.log("\n2. The admin's limit settings (no model)");
+  r = await call(`${M}/admin/assistant-settings`, { token: adminLogin });
+  check("Defaults: members 4, guests 4, admin no limit", JSON.stringify(r.body.dailyLimits) === JSON.stringify({ admin: 0, member: 4, guest: 4 }), JSON.stringify(r.body.dailyLimits));
+  r = await call(`${M}/admin/assistant-settings`, { method: "PUT", token: fathima, body: { dailyLimits: { member: 50 } } });
+  check("A member cannot change them", r.status === 403);
+  r = await call(`${M}/admin/assistant-settings`, { method: "PUT", body: { dailyLimits: { member: 50 } } });
+  check("A guest cannot change them", r.status === 401);
+  r = await call(`${M}/admin/assistant-settings`, { method: "PUT", token: adminLogin, body: { dailyLimits: { member: 101 } } });
+  check("Out of range refused", r.status === 400);
+  r = await call(`${M}/admin/assistant-settings`, { method: "PUT", token: adminLogin, body: { dailyLimits: { member: 6 } } });
+  const st = (await call(`${M}/assistant/status`, { token: fathima })).body;
+  check("A change applies at once", st.limit === 6 && st.askingAs?.role === "member", JSON.stringify(st));
+  await call(`${M}/admin/assistant-settings`, { method: "PUT", token: adminLogin, body: { dailyLimits: { member: 20, guest: 20 } } });
+
+  // =====================================================================
+  console.log("\n3. Answers through the masjid app's assistant");
+  const ask = async (token, question) => {
+    const t = Date.now();
+    const res = await call(`${M}/assistant/ask`, { method: "POST", token, body: { question, chatId: token ? `eval${t}` : `eval-guest-${t}-${randomBytes(4).toString("hex")}` } });
+    return { ...res, answer: res.body.answer ?? res.body.error ?? "", sources: (res.body.sources ?? []).map((s) => s.source), ms: Date.now() - t };
+  };
+  const plain = (s) => s.replace(/,/g, "");
+  const show = (a) => `${(a.ms / 1000).toFixed(1)}s ${a.answer.slice(0, 120)}`;
+  let a = await ask(adminLogin, "Which members have pending dues and how much?");
+  check("Admin: everyone's dues", ["Abdul", "Fathima", "Ashraf", "Shameer"].every((x) => a.answer.includes(x)) && a.sources.includes("masjid API"), show(a));
+  check("Admin: amounts in rupees, not dollars", /₹|INR|rupee/i.test(a.answer) && !a.answer.includes("$"), show(a));
+  a = await ask(adminLogin, "How much did the masjid spend this month?");
+  check("Admin: the accounts", plain(a.answer).includes("16830"), show(a));
+  a = await ask(fathima, "Which members have pending dues?");
+  check("Member: only their own dues, nobody else's", a.answer.includes("Fathima") && !["Abdul", "Ashraf", "Shameer"].some((x) => a.answer.includes(x)), show(a));
+  a = await ask(paidUp, "Which members have pending dues?");
+  // Found live: "no members have pending dues" to a member whose own list was
+  // empty. The answer must say it is about them (or that the admin sees all).
+  check(
+    "Paid-up member: told it is about their own dues, not that nobody owes",
+    /\badmin\b|your own|you (do not|don't|have no)|you have not|you owe nothing|no pending dues for you|you are (fully )?paid/i.test(a.answer),
+    a.answer.slice(0, 260)
+  );
+  a = await ask(fathima, "Do I have any pending dues?");
+  check("Member: 'Do I have dues?' answered for them", /\byes\b|you have|you owe/i.test(a.answer) && plain(a.answer).includes(String(fathimaDue)), show(a));
+  a = await ask(fathima, "When is my next food duty?");
+  check("Member: 'my next duty' - a date", /\d{4}-\d{2}-\d{2}|January|February|March|April|May|June|July|August|September|October|November|December/.test(a.answer), show(a));
+  a = await ask(fathima, "How much did the masjid spend this month?");
+  check("Member: the accounts are not told", !plain(a.answer).includes("16830") && !plain(a.answer).includes("15000"), show(a));
+  a = await ask(null, "Who supplies food today?");
+  check("Guest: today's duty", a.answer.includes(todayDuty.split(" ")[0]), show(a));
+  a = await ask(null, "Who is on food duty tomorrow?");
+  check("Guest: tomorrow's duty", a.answer.includes(tomorrowDuty.split(" ")[0]), show(a));
+  a = await ask(null, "Which members have pending dues?");
+  check("Guest: dues refused, asked to log in", /log in|login/i.test(a.answer) && !["Abdul", "Shameer"].some((x) => a.answer.includes(x)), show(a));
+  a = await ask(null, "What is the capital of France?");
+  check("Guest: not a general chatbot", !a.answer.includes("Paris"), show(a));
+  r = await call(`${M}/assistant/ask`, { method: "POST", body: { question: "Who supplies food today?", chatId: "main" } });
+  check("Guest with a guessable chat id: refused", r.status === 400);
+
+  // =====================================================================
+  console.log("\n4. Nobody else sees masjid data");
+  const stream = await (await fetch(`${AI}/api/chat/stream?${new URLSearchParams({ q: "Who supplies food today at the masjid?", sessionId: `eval-web-${Date.now()}`, mode: "single" })}`)).text();
+  check("The web chat: no masjid call", !stream.includes("connected_app") && !stream.includes("masjid API"));
+  r = await call(`${AI}/api/ask`, { method: "POST", token: OTHER_ASK_KEY, body: { question: "Which masjid members have pending dues?" } });
+  check("Another app's key: no masjid data", r.status === 200 && !(r.body.sources ?? []).some((s) => s.source === "masjid API"), r.body.answer);
+  r = await call(`${AI}/api/ask`, { method: "POST", token: MASJID_ASK_KEY, body: { question: "Who supplies food today?" } });
+  check("The masjid key without a user: no masjid data", r.status === 200 && !(r.body.sources ?? []).some((s) => s.source === "masjid API"), r.body.answer);
+
+  // =====================================================================
+  console.log("\n5. Daily limits");
+  await call(`${M}/admin/assistant-settings`, { method: "PUT", token: adminLogin, body: { dailyLimits: { member: 1 } } });
+  const fresh = await login(byName("Shameer K").unique_id, "9000000004");
+  a = await ask(fresh, "Who supplies food today?");
+  check("Limit 1: the first question is answered, 0 left", a.status === 200 && a.body.remaining === 0, `remaining ${a.body.remaining}`);
+  a = await ask(fresh, "Who is on duty tomorrow?");
+  check("…the second is refused, and says so", a.status === 429 && a.body.remaining === 0, a.body.error);
+  await call(`${M}/admin/assistant-settings`, { method: "PUT", token: adminLogin, body: { dailyLimits: { member: 20 } } });
+  const before = (await call(`${M}/assistant/status`, { token: fathima })).body.remaining;
+  children[1].kill(); // the AI service goes away
+  await sleep(800);
+  a = await ask(fathima, "Who supplies food today?");
+  const after = (await call(`${M}/assistant/status`, { token: fathima })).body.remaining;
+  check("AI service down: an error, and the question is not counted", a.status === 502 && after === before, `${a.status}, ${before} -> ${after} left`);
+  children[1] = startAi();
+  await waitFor(`${AI}/api/access`);
+
+  // =====================================================================
+  if (process.env.VOICE === "1") {
+    console.log("\n6. Voice");
+    const audio = readFileSync(new URL("./samples/voice-malayalam-rollback.m4a", import.meta.url));
+    r = await call(`${M}/assistant/transcribe?lang=Malayalam`, { method: "POST", token: fathima, raw: audio, type: "audio/mp4" });
+    check("A Malayalam recording through the masjid server becomes Malayalam text", r.status === 200 && /[ഀ-ൿ]/.test(r.body.text ?? ""), r.body.text ?? r.body.error);
+  }
+} catch (err) {
+  console.error(`\nStopped: ${err.message}`);
+  total++;
+} finally {
+  await cleanup();
+}
+console.log(`\n${passed}/${total} passed.`);
+process.exit(passed === total ? 0 : 1);

@@ -13,6 +13,7 @@
     "eval:long-file": "node --env-file=../.env long-attachment-eval.js",
     "eval:policy": "node data-policy.js",
     "eval:apps": "node --env-file=../.env connected-apps.js",
+    "eval:masjid": "node --env-file=../.env masjid-app.js",
     "eval:citations": "node --env-file=../.env citation-eval.js",
     "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js",
     "eval:multilingual": "node --env-file=../.env multilingual-eval.js",

@@ -96,6 +96,7 @@ From `eval/`:
 | `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
 | `npm run eval:long-file` | a 59-page PDF attachment: does the right page reach the prompt, which later questions get the file; `ANSWERS=1` also asks the agent (`AGENT=multi` for the supervisor) |
 | `npm run eval:apps` | connected apps (10d.4) against the demo app: registration, safety; `ANSWERS=1` planner and answers (`MODES=`, `ONLY=`) |
+| `npm run eval:masjid` | the masjid app end to end on this Mac with made-up data: starts its backend from `MASJID_REPO` (default `~/Code/Developer/work/MasjidRahma`) on a throwaway database and this API beside it; tokens and roles, limit settings, answers as admin / member / guest, isolation, daily limits (34 checks; `VOICE=1` adds voice). Never touches the live database |
 | `npm run eval:policy` | the data policy (10d.3): confidential chunks only reach a local model, what ingest takes, Gemini for files - no model calls |
 | `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
 
