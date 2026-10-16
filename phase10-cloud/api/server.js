@@ -8,7 +8,8 @@ import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
 import { transcribe, TranscribeError, voiceAvailable } from "./transcribe.js";
-import { FILES_GO_TO, describePolicy } from "./dataPolicy.js";
+import { FILES_GO_TO, SPEECH_TO_GEMINI, levelOf, describePolicy } from "./dataPolicy.js";
+import { geminiSpeech } from "./gemini.js";
 import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, nameTheFile } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { askApi } from "./askApi.js";
@@ -40,7 +41,7 @@ function hasAccess(req) {
 // `filesGoTo`: the hosted services an attached file is sent to (dataPolicy.js),
 // so the attach button can say so before upload; empty = it stays here.
 app.get("/api/access", (req, res) =>
-  res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req), voice: voiceAvailable, filesGoTo: FILES_GO_TO })
+  res.json({ required: Boolean(ACCESS_CODE), ok: hasAccess(req), voice: voiceAvailable, filesGoTo: FILES_GO_TO, speech: SPEECH_TO_GEMINI })
 );
 // Phase 10d: other apps, with their own keys instead of the access code -
 // so it is mounted before the access-code check below.
@@ -198,6 +199,28 @@ app.post("/api/transcribe", express.raw({ type: () => true, limit: "4mb" }), asy
     res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });
   }
 });
+// Phase 10e: read a piece of an answer aloud, for languages the browser has
+// no voice for. { text, sources } -> audio/wav. `sources` are the answer's
+// cited sources: one from internal or confidential documents means the text
+// may not go to Gemini (dataPolicy.js), so it is refused, with the reason.
+app.post("/api/speak", express.json({ limit: "16kb" }), async (req, res) => {
+  const text = String(req.body?.text ?? "").trim();
+  const sources = Array.isArray(req.body?.sources) ? req.body.sources.map(String) : [];
+  if (!text) return res.status(400).json({ error: 'Missing "text".' });
+  if (text.length > 800) return res.status(400).json({ error: '"text" is too long - up to 800 characters per piece.' });
+  if (!SPEECH_TO_GEMINI) return res.status(501).json({ error: "Reading aloud in this language is off on this server." });
+  if (sources.some((s) => levelOf(s) !== "public")) {
+    return res.status(403).json({ error: "This answer uses internal documents, which are never sent to Gemini - it cannot be read aloud in this language." });
+  }
+  try {
+    const wav = await meteredJob({ caller: "web", channel: "speak" }, () => geminiSpeech(text));
+    res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
+  } catch (err) {
+    console.error(`[speak] ${err.message}`);
+    res.status(502).json({ error: "Could not read this answer aloud - please try again." });
+  }
+});
+
 // Phase 10, attachments step 1: attach a PDF or a photo to a chat. The file
 // is read into text right away (attachments.js) and kept with the chat in
 // Redis - the text, not the file. One file per chat; a new one replaces it.

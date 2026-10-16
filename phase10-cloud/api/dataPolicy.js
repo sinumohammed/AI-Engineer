@@ -64,6 +64,11 @@ export const HIDDEN_PREFIXES = MODEL_IS_LOCAL ? [] : ["private/"];
 // (the live app, where files already go to Groq and Upstash), off elsewhere.
 export const GEMINI_FILES = Boolean(GEMINI_API_KEY) && (process.env.GEMINI_FILES ? process.env.GEMINI_FILES === "1" : Boolean(process.env.VERCEL));
 
+// Phase 10e: reading an answer aloud through Gemini sends the answer's text
+// there - the same switch as files (on on Vercel), and never for an answer
+// that cites internal or confidential documents (server.js, /api/speak).
+export const SPEECH_TO_GEMINI = GEMINI_FILES;
+
 // For the web app: where an attached file goes, so it can say so before upload
 // (a long file's chunks are embedded too - by Gemini if EMBED_PROVIDER is).
 export const FILES_GO_TO = [

@@ -14,6 +14,12 @@ import { usePwaInstall } from "./usePwaInstall.js";
 const { Text } = Typography;
 
 // `synthesizer` is the step that joins several specialists' answers (8b).
+// The languages voice input can be told to expect (also the Command Center's).
+export const VOICE_LANGUAGES = [
+  { value: "auto", label: "I speak: detect automatically" },
+  ...["English", "Malayalam", "Hindi", "Tamil", "Kannada", "Telugu", "Arabic", "Urdu", "Spanish", "French"].map((l) => ({ value: l, label: `I speak: ${l}` })),
+];
+
 export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", attachment: "Attached file", connected_apps: "Connected apps", synthesizer: "Combined" };
 
 const LEVEL_COLORS = { warning: "#d97706", critical: "#dc2626" };
@@ -135,10 +141,7 @@ export default function Sidebar({ state, newChat, setMode, setAgent, themeMode, 
           <Select
             value={voiceLanguage}
             onChange={setVoiceLanguage}
-            options={[
-              { value: "auto", label: "I speak: detect automatically" },
-              ...["English", "Malayalam", "Hindi", "Tamil", "Kannada", "Telugu", "Arabic", "Urdu", "Spanish", "French"].map((l) => ({ value: l, label: `I speak: ${l}` })),
-            ]}
+            options={VOICE_LANGUAGES}
           />
           <label className="switch-row">
             <span>Send as soon as I stop talking</span>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App as AntApp, Button, Card, Grid, Input, Segmented, Switch, Table, Tag, Tooltip, Typography, theme } from "antd";
+import { Alert, App as AntApp, Button, Card, Grid, Input, Segmented, Select, Switch, Table, Tag, Tooltip, Typography, theme } from "antd";
 import XMarkdown from "@ant-design/x-markdown";
 import {
   ArrowLeftOutlined,
@@ -14,7 +14,8 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { API_BASE } from "./useChatSession.js";
-import { AGENT_LABELS } from "./Sidebar.jsx";
+import { AGENT_LABELS, VOICE_LANGUAGES } from "./Sidebar.jsx";
+import { API_BASE as API, codeHeaders } from "./useChatSession.js";
 import { useVoiceInput, voiceSupported } from "./useVoiceInput.js";
 import { useClapWake } from "./useClapWake.js";
 import { useCommand } from "./useCommand.js";
@@ -83,33 +84,98 @@ function speakable(text) {
 // speak() happens inside a tap; the answer arrives seconds later, so it was
 // silently blocked (found on a phone). Every tap that can lead to an answer
 // says an empty, silent phrase first, which unlocks speech for the page.
+// The same goes for playing audio: one player, started inside a tap with a
+// moment of silence, can then play the server's voice later.
+const player = typeof Audio !== "undefined" ? new Audio() : null;
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 let speechUnlocked = false;
 function unlockSpeech() {
-  if (speechUnlocked || !("speechSynthesis" in window)) return;
-  const u = new SpeechSynthesisUtterance(" ");
-  u.volume = 0;
-  window.speechSynthesis.speak(u);
+  if (speechUnlocked) return;
   speechUnlocked = true;
+  if ("speechSynthesis" in window) {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  }
+  if (player) {
+    player.src = SILENCE;
+    player.play().catch(() => {});
+  }
 }
 
-// Sentence by sentence, in pieces of up to ~220 characters: some browsers
-// stop one long utterance after about 15 seconds.
-function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  const synth = window.speechSynthesis;
-  synth.cancel();
-  const pieces = [];
-  for (const sentence of speakable(text).slice(0, 1500).match(/[^.!?]+[.!?]*\s*/g) ?? []) {
-    if (pieces.length && (pieces.at(-1) + sentence).length <= 220) pieces[pieces.length - 1] += sentence;
-    else pieces.push(sentence);
+// Sentence by sentence, in pieces of up to `max` characters: some browsers
+// stop one long utterance after about 15 seconds, and the server voice
+// starts sooner on a short piece.
+function pieces(text, max) {
+  const out = [];
+  for (const sentence of speakable(text).slice(0, 1500).match(/[^.!?।]+[.!?।]*\s*/g) ?? []) {
+    if (out.length && (out.at(-1) + sentence).length <= max) out[out.length - 1] += sentence;
+    else out.push(sentence);
   }
-  for (const piece of pieces) {
-    const u = new SpeechSynthesisUtterance(piece.trim());
-    u.rate = 1.03;
-    synth.speak(u);
+  return out.map((p) => p.trim()).filter(Boolean);
+}
+
+// Which voice reads it: the device's own voice for text in Latin letters
+// (English and most European languages - free, nothing leaves the device);
+// the server's Gemini voice for Malayalam, Arabic, Hindi and other scripts,
+// which most phones and browsers have no voice for (they read "dot dot").
+function needsServerVoice(text) {
+  const letters = text.match(/\p{L}/gu) ?? [];
+  const latin = text.match(/\p{Script=Latin}/gu) ?? [];
+  return letters.length > 0 && latin.length / letters.length < 0.6;
+}
+
+let speechRun = 0; // a newer read-out (or Stop) ends an older one
+function stopAllSpeech() {
+  speechRun++;
+  window.speechSynthesis?.cancel();
+  if (player) {
+    player.pause();
+    player.removeAttribute("src");
   }
 }
-const stillSpeaking = () => window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending);
+
+// Reads `text` aloud; resolves when done. Throws with a reason the user can
+// read when the server voice is refused or fails.
+async function speak(text, { sources = [] } = {}) {
+  stopAllSpeech();
+  const run = speechRun;
+  if (!needsServerVoice(text)) {
+    if (!("speechSynthesis" in window)) return;
+    const parts = pieces(text, 220);
+    await new Promise((resolve) => {
+      parts.forEach((p, i) => {
+        const u = new SpeechSynthesisUtterance(p);
+        u.rate = 1.03;
+        if (i === parts.length - 1) u.onend = u.onerror = resolve;
+        window.speechSynthesis.speak(u);
+      });
+      if (!parts.length) resolve();
+    });
+    return;
+  }
+  // Server voice: fetch the next piece while this one plays.
+  const parts = pieces(text, 350);
+  const fetchPiece = (p) =>
+    fetch(`${API}/api/speak`, { method: "POST", headers: { "Content-Type": "application/json", ...codeHeaders() }, body: JSON.stringify({ text: p, sources: sources.map((s) => s.source) }) }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Could not read it aloud (${r.status}).`);
+      return URL.createObjectURL(await r.blob());
+    });
+  let next = parts.length ? fetchPiece(parts[0]) : null;
+  for (let i = 0; i < parts.length; i++) {
+    const url = await next;
+    next = i + 1 < parts.length ? fetchPiece(parts[i + 1]) : null;
+    next?.catch(() => {}); // a failure is reported when its turn comes
+    if (run !== speechRun || !player) return URL.revokeObjectURL(url);
+    await new Promise((resolve) => {
+      player.onended = player.onerror = resolve;
+      player.src = url;
+      player.play().catch(resolve);
+    });
+    URL.revokeObjectURL(url);
+    if (run !== speechRun) return;
+  }
+}
 
 // A short rising two-note chime: "I'm listening".
 function chime() {
@@ -333,21 +399,14 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
   const speakRef = useRef(speakOn);
   speakRef.current = speakOn;
   const [speaking, setSpeaking] = useState(false);
+  // The language the user speaks: a hint for speech to text, shared with the chat.
+  const [voiceLanguage, setVoiceLanguage] = useState(() => stored("voiceLanguage") || "auto");
 
   const { run, ask, cancel, forget } = useCommand({
     accessCode,
     onDone: (r) => {
       onAnswered();
-      if (speakRef.current && r.answer) {
-        setSpeaking(true);
-        speak(r.answer);
-        const poll = setInterval(() => {
-          if (!stillSpeaking()) {
-            clearInterval(poll);
-            setSpeaking(false);
-          }
-        }, 300);
-      }
+      if (speakRef.current && r.answer) readOut(r);
     },
   });
   const busy = ["routing", "working", "answering"].includes(run.phase);
@@ -360,10 +419,17 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
       ask(text);
     },
     onError: (msg) => message.warning(msg),
+    language: voiceLanguage,
   });
 
+  function readOut(r) {
+    setSpeaking(true);
+    speak(r.answer, { sources: r.sources })
+      .catch((err) => message.warning(err.message))
+      .finally(() => setSpeaking(false));
+  }
   function stopSpeaking() {
-    window.speechSynthesis?.cancel();
+    stopAllSpeech();
     setSpeaking(false);
   }
   // From a tap: start recording inside the tap itself - a phone only lets
@@ -397,7 +463,7 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
   function send() {
     const q = input.trim();
     if (!q || busy) return;
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     if (speakOn) unlockSpeech();
     setInput("");
     ask(q);
@@ -477,15 +543,25 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
                 setSpeakOn(v);
                 store("speakAnswers", v ? "1" : "0");
                 if (v) unlockSpeech();
-                if (!v) {
-                  window.speechSynthesis?.cancel();
-                  setSpeaking(false);
-                }
+                if (!v) stopSpeaking();
               }}
             />
             Speak answers
           </label>
         </div>
+        {canSpeak && (
+          <Select
+            size="small"
+            className="cc-lang"
+            value={voiceLanguage}
+            options={VOICE_LANGUAGES}
+            onChange={(v) => {
+              setVoiceLanguage(v);
+              store("voiceLanguage", v);
+            }}
+            aria-label="The language you speak"
+          />
+        )}
         {clap.error && <Alert type="warning" showIcon title={clap.error} className="slim" />}
 
         <div className="cc-ask">
@@ -540,7 +616,15 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
                 {fmtMs(run.finishedAt - run.startedAt)}
                 {run.usage && ` · ${run.usage.llmCalls ?? 1} model calls · ${fmtTokens((run.usage.promptTokens ?? 0) + (run.usage.completionTokens ?? 0))} tokens`}
                 {run.answer && (
-                  <Button size="small" type="link" icon={<SoundOutlined />} onClick={() => speak(run.answer)}>
+                  <Button
+                    size="small"
+                    type="link"
+                    icon={<SoundOutlined />}
+                    onClick={() => {
+                      unlockSpeech();
+                      readOut(run);
+                    }}
+                  >
                     Read out
                   </Button>
                 )}

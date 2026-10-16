@@ -98,6 +98,10 @@ export const APPS_KEY = process.env.APPS_KEY ?? "apps:registry";
 export const GEMINI_TRANSCRIBE_MODEL = process.env.GEMINI_TRANSCRIBE_MODEL ?? "gemini-3.5-flash-lite";
 // Phase 10: reads attached photos and scanned PDFs into text (attachments.js).
 export const GEMINI_VISION_MODEL = process.env.GEMINI_VISION_MODEL ?? "gemini-3.5-flash-lite";
+// Phase 10e: reading answers aloud in languages the browser has no voice for
+// (Malayalam, Arabic, ...). Detects the language itself; 30 voices.
+export const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL ?? "gemini-3.8-flash-lite-tts";
+export const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE ?? "Kore";
 export const TRANSCRIBE_MODEL = process.env.TRANSCRIBE_MODEL ?? "whisper-large-v3-turbo";
 export const GROQ_API_KEY = process.env.GROQ_API_KEY || null;
 

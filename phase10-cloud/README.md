@@ -959,6 +959,18 @@ sidebar, loaded only when opened):
   last used - apps with no use show too); agents; models; connected-app calls
   with failures; recent requests. Refreshes every 30 s.
 
+Reading answers aloud in every language: English (Latin letters) uses the
+device's own voice - free, nothing leaves the device. Malayalam, Arabic,
+Hindi and other scripts, which most phones and browsers have no voice for
+(they read "dot dot"), use Gemini's voice: `POST /api/speak` { text, sources }
+-> a WAV, `gemini-3.8-flash-lite-tts` (detects the language; ~4.7 s per piece,
+the next fetched while one plays; about $0.001 per two sentences, metered as
+channel `speak`). Same switch as files (`GEMINI_FILES`, on on Vercel), and an
+answer citing internal or confidential documents is refused with the reason
+(dataPolicy.js). Checked by feeding the Malayalam audio back through speech to
+text: the same sentence came back. The console also takes the chat's "I speak"
+language for voice questions.
+
 Clap detection (`useClapWake.js`) runs in the browser only: nothing is
 recorded or sent until the double clap. A clap is a jump far above the
 room's level that dies away within 160 ms; speech and music last, so they do

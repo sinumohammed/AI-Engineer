@@ -27,7 +27,7 @@ function sessionId() {
   }
 }
 
-const idle = { phase: "idle", question: "", answer: "", tasks: [], agents: {}, combining: false, log: [], usage: null, error: null, startedAt: null, finishedAt: null };
+const idle = { phase: "idle", question: "", answer: "", sources: [], tasks: [], agents: {}, combining: false, log: [], usage: null, error: null, startedAt: null, finishedAt: null };
 
 export function useCommand({ accessCode, onDone }) {
   const [run, setRun] = useState(idle);
@@ -77,6 +77,7 @@ export function useCommand({ accessCode, onDone }) {
     on("notice", (d) => update((r) => say(r, "System", null, d.text)));
     on("answer_chunk", (d) => update((r) => ({ ...r, phase: "answering", answer: r.answer + d.text })));
     on("usage", (d) => update((r) => ({ ...r, usage: d })));
+    on("sources", (d) => update((r) => ({ ...r, sources: Array.isArray(d) ? d : [] })));
     on("done", () => {
       source.close();
       update((r) => ({ ...r, phase: "done", finishedAt: Date.now() }));
