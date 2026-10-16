@@ -152,6 +152,8 @@ try {
     ["Muhammed Ashraf", 5, "yearly", 3000],
     ["Shameer K", 2, "monthly", 300],
     ["Paid Up Member", 3, "monthly", 100],
+    // Live names are in Malayalam; people type them in English letters.
+    ["സിനു ടി കെ", 3, "monthly", 200],
   ];
   for (const [i, [name, count, frequency, amount]] of people.entries()) {
     await call(`${M}/members`, {
@@ -218,11 +220,21 @@ try {
   r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": memberUser } });
   check("A member's dues list is labelled as their own", r.status === 200 && /only the asking member/i.test(r.body.scope ?? "") && r.body.pending?.length === 1, r.body.scope);
   r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": adminUser } });
-  check("The admin's dues list: everyone owing, amounts in rupees", r.body.amountsIn?.includes("INR") && r.body.items?.length === 4, `${r.body.items?.length} owing, ${r.body.amountsIn}`);
+  check("The admin's dues list: everyone owing, amounts in rupees", r.body.amountsIn?.includes("INR") && r.body.items?.length === 5, `${r.body.items?.length} owing, ${r.body.amountsIn}`);
   r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": guestUser } });
   check("A guest: dues refused, 'log in'", r.status === 403 && /log in/.test(r.body.error));
   const fathimaDue = (await call(`${M}/ai/me`, { headers: { ...svc, "X-User-Token": memberUser } })).body.dues?.due;
   check("A member's own record (/ai/me): role and dues", fathimaDue > 0, `due ${fathimaDue}`);
+  const sinu = byName("സിനു ടി കെ");
+  const shortId = sinu.unique_id.replace(/^MR#0*/, "MR");
+  r = await call(`${M}/ai/pending-dues?search=${encodeURIComponent("Sinu TK")}`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check('"Sinu TK" finds the Malayalam-named member (pending dues)', r.body.membersFound?.[0]?.id === sinu.unique_id && r.body.pending?.length === 1, JSON.stringify(r.body.membersFound));
+  r = await call(`${M}/ai/members?search=${encodeURIComponent("sinu t k")}`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check('"sinu t k" (spaced initials) finds them too', r.body.items?.length === 1 && r.body.items[0].id === sinu.unique_id, r.body.items?.map((m) => m.nameInEnglishLetters).join(", "));
+  r = await call(`${M}/ai/members?search=${encodeURIComponent(shortId)}`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check(`A short member id ("${shortId}") finds them`, r.body.items?.[0]?.id === sinu.unique_id);
+  r = await call(`${M}/ai/members?search=${encodeURIComponent("Zubair Xyz")}`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check("A name that matches nobody: said so, with every name in English letters", /No member name matched/.test(r.body.noMatch ?? "") && r.body.allMembers?.some((m) => m.nameInEnglishLetters === "sinu ti ke"), r.body.noMatch);
   const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
   const tomorrowDuty = (await call(`${M}/ai/duty-on-date?date=${tomorrow}`, { headers: { ...svc, "X-User-Token": guestUser } })).body.member?.name;
   const todayDuty = (await call(`${M}/ai/today-duty`, { headers: { ...svc, "X-User-Token": guestUser } })).body.member?.name;
@@ -273,6 +285,12 @@ try {
   check("Member: 'my next duty' - a date", /\d{4}-\d{2}-\d{2}|January|February|March|April|May|June|July|August|September|October|November|December/.test(a.answer), show(a));
   a = await ask(fathima, "How much did the masjid spend this month?");
   check("Member: the accounts are not told", !plain(a.answer).includes("16830") && !plain(a.answer).includes("15000"), show(a));
+  a = await ask(adminLogin, "What are the pending dues of Sinu TK?");
+  check('Admin: "dues of Sinu TK" - the Malayalam-named member, with the amount', (a.answer.includes("സിനു") || /sinu/i.test(a.answer)) && /₹|INR|rupee/i.test(a.answer) && !/no (member|record|dues) found|not found|couldn.t find/i.test(a.answer), show(a));
+  a = await ask(adminLogin, "When is Sinu TK on food duty this month?");
+  // "this month" needs today's date in the answer step too - it listed January.
+  const thisMonth = new Date(`${today}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
+  check('Admin: "Sinu TK duty days this month" - this month\'s dates, not "no duty found"', a.answer.includes(thisMonth) && !/no (duty|member|record)s? found|not found|couldn.t find/i.test(a.answer), show(a));
   a = await ask(null, "Who supplies food today?");
   check("Guest: today's duty", a.answer.includes(todayDuty.split(" ")[0]), show(a));
   a = await ask(null, "Who is on food duty tomorrow?");

@@ -222,14 +222,14 @@ function addWhoami(calls, apps, question, access) {
 function toChunk(app, op, r) {
   const head = `${app.name} API: ${r.shown ?? `GET ${op.path}`}`;
   if (r.ok && op.id === app.whoami) {
-    return { source: `${app.name} API`, app: app.name, content: `${head}\n(The user asking this question - "I", "me" and "my" mean this record; live data)\n${r.text}` };
+    return { source: `${app.name} API`, app: app.name, content: `${head}\n(The user asking this question - "I", "me" and "my" mean this record; live data - today is ${today(app.timezone ?? "UTC")})\n${r.text}` };
   }
   return {
     source: `${app.name} API`,
     app: app.name,
     error: !r.ok,
     content: r.ok
-      ? `${head}\n(${op.summary}; live data, fetched just now${r.cut ? `; cut at ${MAX_RESULT_CHARS} characters - only part of the result` : ""})\n${r.text}`
+      ? `${head}\n(${op.summary}; live data, fetched just now - today is ${today(app.timezone ?? "UTC")}${app.timezone ? ` in ${app.timezone}` : " (UTC)"}${r.cut ? `; cut at ${MAX_RESULT_CHARS} characters - only part of the result` : ""})\n${r.text}`
       : `${head}\n(${op.summary}) The request failed: ${r.error}.`,
   };
 }
