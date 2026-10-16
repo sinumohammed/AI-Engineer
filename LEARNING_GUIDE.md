@@ -691,7 +691,9 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 85 | 10e | The service could not say who uses it or what it costs per app: a daily count in Redis for 48 hours, tokens sent back and forgotten, logs kept ~30 minutes | Every request metered (one row in Postgres, never the text); cost = tokens x list price per model | Local, Ollama and Groq: the right app, agents and models; cost checked by hand. Live: 9 questions from the web chat and the masjid app, $0.0086 |
 | 86 | 10e | A dashboard in a browser would hold the admin key, which can change the connected apps | A read-only `DASHBOARD_KEY`: usage and nothing else | Dashboard key: usage 200, every other admin call 401 |
 | 87 | 10e | Clap to wake: two claps did not wake it in the test | The test's fake microphone played only on the first of two streams (React opens it twice in development); and browsers start audio paused until a tap - the page now resumes it or asks for one tap | Synthetic audio 4/4: two claps wake it; one clap, speech-like sound and slow claps do not |
-| 88 | 10e | The Users column was empty: apps did not say who asks | `user.ref` on `/api/ask`; the masjid app sends the member code, "admin" or an anonymous visitor code; a Top users panel | `eval:masjid` 41/41: member codes and visitor codes, no names |
+| 88 | 10e | The Users column was empty: apps did not say who asks | `user.ref` on `/api/ask`; the masjid app sends the member code, "admin" or an anonymous visitor code; a Top users panel | `eval:masjid` 41/41: member codes and visitor codes, no names. Live: a masjid visitor shows as `guest:47c1ef06a6` |
+| 89 | 10e | On a phone the Command Center's mic heard nothing and never stopped; no way to stop it; clap to wake kept the mic on (found by the user) | Recording starts inside the tap (started a moment later, the phone kept audio paused); 8 s with no speech ends it; Stop buttons; clap to wake off on every visit, lets go of the mic while busy, "Mic on · Turn off" shown | Emulated iPhone: stops 1.4 s after speech, gives up at 8 s, short pauses not cut; "Turn off" leaves 0 live mic tracks |
+| 90 | 10e | Answers were read aloud on a computer but not on a phone (found by the user) | Phones allow speech only from a tap: a silent phrase inside the tap unlocks it; long answers read sentence by sentence | Emulated: unlock inside the tap, the answer in 3 pieces of up to 220 characters |
 
 Where things stand (Phase 10 code):
 
@@ -713,7 +715,7 @@ Where things stand (Phase 10 code):
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 | `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes | 41/41 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
-| Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 4/4 | live: web and masjid questions recorded with app calls and cost |
+| Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 4/4; phone voice 3/3, read-aloud unlock | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
 

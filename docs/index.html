@@ -1188,7 +1188,9 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">85</td><td class="n">10e</td><td>The service could not say who uses it or what it costs per app: tokens were forgotten, logs kept ~30 minutes</td><td>Every request metered, one row in Postgres (never the text); cost = tokens x list price</td><td class="res">Right app, agents, models; cost checked by hand. Live: 9 questions, $0.0086</td></tr>
             <tr><td class="n">86</td><td class="n">10e</td><td>A dashboard in a browser would hold the admin key</td><td>A read-only <code>DASHBOARD_KEY</code>: usage only</td><td class="res">Usage 200, every other admin call 401</td></tr>
             <tr><td class="n">87</td><td class="n">10e</td><td>Clap to wake: two claps did not wake it in the test</td><td>The fake microphone played only on the first of two streams; browsers start audio paused until a tap - resumed, or one tap asked for</td><td class="res">4/4: two claps wake it; one clap, speech, slow claps do not</td></tr>
-            <tr><td class="n">88</td><td class="n">10e</td><td>The Users column was empty: apps did not say who asks</td><td><code>user.ref</code>; the masjid app sends a member code or an anonymous visitor code; Top users panel</td><td class="res"><code>eval:masjid</code> 41/41, no names</td></tr>
+            <tr><td class="n">88</td><td class="n">10e</td><td>The Users column was empty: apps did not say who asks</td><td><code>user.ref</code>; the masjid app sends a member code or an anonymous visitor code; Top users panel</td><td class="res"><code>eval:masjid</code> 41/41, no names; live: a visitor as <code>guest:47c1ef06a6</code></td></tr>
+            <tr><td class="n">89</td><td class="n">10e</td><td>On a phone the mic heard nothing and never stopped; no way to stop; clap to wake kept the mic on (found by the user)</td><td>Recording starts inside the tap; 8 s with no speech ends it; Stop buttons; clap to wake off on every visit, "Mic on · Turn off"</td><td class="res">Emulated iPhone: stops 1.4 s after speech, gives up at 8 s; mic released</td></tr>
+            <tr><td class="n">90</td><td class="n">10e</td><td>Answers read aloud on a computer, not on a phone (found by the user)</td><td>A silent phrase inside the tap unlocks speech; long answers in sentence pieces</td><td class="res">Unlock inside the tap, answer in 3 pieces</td></tr>
           </tbody>
         </table>
       </div>
@@ -1213,7 +1215,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
             <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes</td><td class="n">41/41</td><td class="n">live: 2/2 match the app's schedule</td></tr>
-            <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 4/4</td><td class="n">live: web and masjid questions recorded with cost</td></tr>
+            <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 4/4; phone voice 3/3</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
           </tbody>
         </table>
       </div>
