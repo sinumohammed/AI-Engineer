@@ -158,12 +158,14 @@ try {
     ["Paid Up Member", 3, "monthly", 100],
     // Live names are in Malayalam; people type them in English letters.
     ["സിനു ടി കെ", 3, "monthly", 200],
+    // Dues since January last year, nothing paid: a past year to ask about.
+    ["Old Dues Member", 2, "monthly", 100, new Date().getFullYear() - 1],
   ];
-  for (const [i, [name, count, frequency, amount]] of people.entries()) {
+  for (const [i, [name, count, frequency, amount, startYear = 2026]] of people.entries()) {
     await call(`${M}/members`, {
       method: "POST",
       token: adminLogin,
-      body: { name, address: "Eval street", phone: `900000000${i + 1}`, memberCount: count, paymentFrequency: frequency, paymentAmount: amount, duesStartYear: 2026, duesStartMonthIndex: 0, memberType: "regular" },
+      body: { name, address: "Eval street", phone: `900000000${i + 1}`, memberCount: count, paymentFrequency: frequency, paymentAmount: amount, duesStartYear: startYear, duesStartMonthIndex: 0, memberType: "regular" },
     });
   }
   const members = (await call(`${M}/members`)).body;
@@ -224,7 +226,7 @@ try {
   r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": memberUser } });
   check("A member's dues list is labelled as their own", r.status === 200 && /only the asking member/i.test(r.body.scope ?? "") && r.body.pending?.length === 1, r.body.scope);
   r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": adminUser } });
-  check("The admin's dues list: everyone owing, amounts in rupees", r.body.amountsIn?.includes("INR") && r.body.items?.length === 5, `${r.body.items?.length} owing, ${r.body.amountsIn}`);
+  check("The admin's dues list: everyone owing, amounts in rupees", r.body.amountsIn?.includes("INR") && r.body.items?.length === 6, `${r.body.items?.length} owing, ${r.body.amountsIn}`);
   r = await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": guestUser } });
   check("A guest: dues refused, 'log in'", r.status === 403 && /log in/.test(r.body.error));
   const fathimaDue = (await call(`${M}/ai/me`, { headers: { ...svc, "X-User-Token": memberUser } })).body.dues?.due;
@@ -267,6 +269,14 @@ try {
     return { ...res, answer: res.body.answer ?? res.body.error ?? "", sources: (res.body.sources ?? []).map((s) => s.source), ms: Date.now() - t };
   };
   const plain = (s) => s.replace(/,/g, "");
+  // A past year's dues (found by the user: "my pending of last year" got no answer).
+  const lastYear = new Date().getFullYear() - 1;
+  const oldMember = userToken({ sub: "z", isAdmin: false, memberId: byName("Old Dues Member").id });
+  r = await call(`${M}/ai/dues-by-year?year=${lastYear}`, { headers: { ...svc, "X-User-Token": oldMember } });
+  const od = r.body.members?.[0];
+  check(`dues-by-year: a member's own ${lastYear} - 12 months missed, ₹1200 due`, od?.due === 1200 && od?.missedMonths?.length === 12, JSON.stringify(od ?? r.body).slice(0, 160));
+  r = await call(`${M}/ai/dues-by-year?year=${lastYear}&search=${encodeURIComponent("Old Dues Member")}`, { headers: { ...svc, "X-User-Token": memberUser } });
+  check("dues-by-year: another member's year refused to a member", r.status === 403, `${r.status} ${r.body.error ?? ""}`);
   const show = (a) => `${(a.ms / 1000).toFixed(1)}s ${a.answer.slice(0, 120)}`;
   let a = await ask(adminLogin, "Which members have pending dues and how much?");
   check("Admin: everyone's dues", ["Abdul", "Fathima", "Ashraf", "Shameer"].every((x) => a.answer.includes(x)) && a.sources.includes("masjid API"), show(a));
@@ -284,7 +294,10 @@ try {
     a.answer.slice(0, 260)
   );
   a = await ask(fathima, "Do I have any pending dues?");
-  check("Member: 'Do I have dues?' answered for them", /\byes\b|you have|you owe/i.test(a.answer) && plain(a.answer).includes(String(fathimaDue)), show(a));
+  check("Member: 'Do I have dues?' answered for them", /\byes\b|you(, [^,]{1,40},)? have|you owe/i.test(a.answer) && plain(a.answer).includes(String(fathimaDue)), show(a));
+  const oldLogin = await login(byName("Old Dues Member").unique_id, "9000000007");
+  a = await ask(oldLogin, "What were my pending dues for last year?");
+  check("Member: 'my pending for last year' - that year's dues, not just this year's", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
   a = await ask(fathima, "When is my next food duty?");
   check("Member: 'my next duty' - a date", /\d{4}-\d{2}-\d{2}|January|February|March|April|May|June|July|August|September|October|November|December/.test(a.answer), show(a));
   a = await ask(fathima, "How much did the masjid spend this month?");
