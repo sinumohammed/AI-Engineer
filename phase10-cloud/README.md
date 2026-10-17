@@ -1116,14 +1116,14 @@ masjid chat (AssistantAnswer.tsx): the table as a real table, the block drawn wi
 
 Tests: `ONLY=tables` 3/3 on local qwen and on Groq (every figure in the
 table and chart equal to the API's); `eval:apps` 31/31, `eval:mcp` 27/27,
-`eval:policy` 15/15 unchanged. Not deployed yet: the AI API first, then the
-masjid branch.
+`eval:policy` 15/15 unchanged. Live (deployed by the user, AI API first, then
+the masjid app): `/api/ask` checks `display`.
 
 ### 10d.12 The masjid app: redesign, About the masjid, photos in the app (2026-10-17)
 
 Asked by the user: a more professional look, a guest page about the masjid
 instead of a bare login box, and member photos without copying files into
-the code. All in the masjid repo (branch `redesign-1`, not deployed yet);
+the code. All in the masjid repo (branch `redesign-1`, merged and live);
 the details are in its `MASJID_APP_DOCUMENTATION.md`.
 
 - **One palette for every screen**: emerald and gold, tokens in

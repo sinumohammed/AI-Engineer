@@ -451,8 +451,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.8 | Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam | Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; `eval:masjid` 53 checks |
 | 10d.9 | MCP: apps can connect as MCP servers, and masjid became one | Live: the masjid assistant answers over MCP (`today_duty (MCP tool)`), refusals unchanged; `eval:mcp` 47/47, `eval:masjid` over MCP 62/63 |
 | 10d.10 | Claude Code reads the masjid data: personal MCP tokens made in masjid Settings | Live: Claude Code connected to masjid and answered from its data; token checks 12/12 |
-| 10d.11 | Tables and charts in answers, for apps whose screen can show them | Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged (not deployed yet) |
-| 10d.12 | The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions | Screenshots on phone and computer, light and dark; colours checked for colour blindness (not deployed yet) |
+| 10d.11 | Tables and charts in answers, for apps whose screen can show them | Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged |
+| 10d.12 | The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions | Screenshots on phone and computer, light and dark; colours checked for colour blindness |
 
 - **Challenges, in plain terms:**
 
@@ -822,7 +822,7 @@ Where things stand (Phase 10 code):
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Connected apps over MCP (10d.9), demo MCP server: registration (read-only tools only), typed arguments, users, refusals, sessions, time limit; planner and answers | 27/27; with answers 47/47 | masjid over MCP: 2/2 guest questions (answered, refused) |
 | Personal MCP tokens (10d.10): member refused, shown once, tools as the admin, official SDK client, other endpoints refused, revoke | 12/12 (`eval:masjid` 1c) | live: Claude Code connected, questions answered |
-| Tables and charts in answers (10d.11): a table with every member and amount, "as a bar chart" with the same figures, one fact stays a sentence | 3/3 (`eval:masjid ONLY=tables`) | 3/3 on Groq (not deployed yet) |
+| Tables and charts in answers (10d.11): a table with every member and amount, "as a bar chart" with the same figures, one fact stays a sentence | 3/3 (`eval:masjid ONLY=tables`) | 3/3 on Groq |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 | `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model); with the 10 MCP checks (10d.9) 61/63, and over MCP (`CONNECTOR=mcp`) 62/63 | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
