@@ -201,7 +201,9 @@ function typed(op, args) {
 // One tools/call, the same result shape as apps.js callOperation. Never throws.
 export async function callMcpTool(app, op, args, { token, userToken, maxChars }) {
   const params = typed(op, args);
-  const shown = `${op.tool}${Object.keys(params).length ? ` ${JSON.stringify(params)}` : ""}`;
+  // "(MCP tool)" in the label under the answer: with a bare "pending_dues" the
+  // local model left out the data's own note that the list is the member's own.
+  const shown = `${op.tool} (MCP tool)${Object.keys(params).length ? ` ${JSON.stringify(params)}` : ""}`;
   const startedAt = Date.now();
   const key = `${app.name}\n${app.baseUrl}\n${userToken ?? ""}`;
   try {

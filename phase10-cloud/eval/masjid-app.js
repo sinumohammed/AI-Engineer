@@ -15,7 +15,9 @@
 // (local Ollama by default; LLM_PROVIDER=groq ... to check the live setup).
 //   npm run eval:masjid        (MASJID_REPO=/path/to/MasjidRahma to override)
 //   ONLY=chips npm run eval:masjid   the Malayalam ready questions only (after the no-model checks)
+//   CONNECTOR=mcp npm run eval:masjid   the app registered through its MCP server (/api/ai/mcp) instead of openapi.json
 import { spawn } from "node:child_process";
+import { listMcpTools, readMcpTools, callMcpTool } from "../api/mcpTools.js";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
@@ -40,6 +42,7 @@ const RUN_STARTED = new Date();
 const PG_ADMIN = process.env.MASJID_EVAL_PG ?? "postgres://rag:rag@localhost:5432/rag";
 // Not 5060/5061: fetch refuses those ports (SIP) with "bad port".
 const MASJID_PORT = 5071;
+const CONNECTOR = process.env.CONNECTOR ?? "openapi";
 const AI_PORT = 3016;
 const M = `http://localhost:${MASJID_PORT}/api`;
 const AI = `http://localhost:${AI_PORT}`;
@@ -197,7 +200,7 @@ try {
     body: {
       name: "masjid",
       description: "Masjid management: daily food-duty rotation (which member household supplies food each day) and swaps, members, pending dues, income and expense transactions, bank balances, announcements",
-      openapi: `${M}/ai/openapi.json`,
+      ...(CONNECTOR === "mcp" ? { mcp: `${M}/ai/mcp` } : { openapi: `${M}/ai/openapi.json` }),
       token: MASJID_AI_TOKEN,
       callers: ["masjid"],
       user: "required",
@@ -208,7 +211,7 @@ try {
     },
   });
   if (reg.status !== 200) throw new Error(`registration failed: ${reg.status} ${JSON.stringify(reg.body)}`);
-  console.log(`Registered masjid: ${reg.body.app.operations.length} operations\n`);
+  console.log(`Registered masjid (${reg.body.app.kind}): ${reg.body.app.operations.length} operations\n`);
 
   // =====================================================================
   console.log("1. The masjid backend's AI checks (no model)");
@@ -248,6 +251,36 @@ try {
   const tomorrowDuty = (await call(`${M}/ai/duty-on-date?date=${tomorrow}`, { headers: { ...svc, "X-User-Token": guestUser } })).body.member?.name;
   const todayDuty = (await call(`${M}/ai/today-duty`, { headers: { ...svc, "X-User-Token": guestUser } })).body.member?.name;
   check("A guest: the duty schedule is open", Boolean(todayDuty && tomorrowDuty), `today ${todayDuty}, tomorrow ${tomorrowDuty}`);
+
+  // =====================================================================
+  console.log("\n1b. The masjid MCP server, /api/ai/mcp (no model)");
+  const mcpUrl = `${M}/ai/mcp`;
+  const { tools } = await listMcpTools(mcpUrl, { token: MASJID_AI_TOKEN, timeoutMs: 10000 });
+  const spec = (await call(`${M}/ai/openapi.json`, { headers: svc })).body;
+  const opIds = Object.values(spec.paths).map((p) => p.get.operationId);
+  check("Tools listed without a user: one per endpoint, same names as openapi.json, all read-only", tools.length === opIds.length && opIds.every((id) => tools.some((t) => t.name === id)) && tools.every((t) => t.annotations?.readOnlyHint === true), `${tools.length} tools`);
+  const mcpOps = readMcpTools(tools).operations;
+  const tool = (id) => mcpOps.find((o) => o.id === id);
+  const mcpApp = { name: "masjid", baseUrl: mcpUrl, timeoutMs: 10000 };
+  const mcpCall = (id, args, userToken) => callMcpTool(mcpApp, tool(id), args, { token: MASJID_AI_TOKEN, userToken, maxChars: 100000 });
+  r = await mcpCall("today_duty", {});
+  check("A tool call without a user: refused", !r.ok && /user token is required/.test(r.error), r.error);
+  r = await callMcpTool(mcpApp, tool("today_duty"), {}, { token: "wrong", userToken: guestUser, maxChars: 1000 });
+  check("Wrong service token: refused", !r.ok && /refused this service.s access/.test(r.error), r.error);
+  r = await mcpCall("today_duty", {}, guestUser);
+  check("A guest: today's duty, the same as the HTTP endpoint", r.ok && JSON.parse(r.text).member?.name === todayDuty, r.text?.slice(0, 80));
+  r = await mcpCall("pending_dues", {}, guestUser);
+  check("A guest: dues refused with 'log in'", !r.ok && /log in/.test(r.error), r.error);
+  r = await mcpCall("finance_summary", {}, memberUser);
+  check("A member asking for the accounts: the reason passed on", !r.ok && /only the admin/.test(r.error), r.error);
+  r = await mcpCall("pending_dues", {}, adminUser);
+  check("The admin's dues list: everyone owing", r.ok && JSON.parse(r.text).items?.length === 6);
+  r = await mcpCall("dues_by_year", { year: String(Number(today.slice(0, 4)) - 1), everyone: "true" }, adminUser);
+  check("Integer and boolean arguments (dues_by_year, everyone=true)", r.ok && JSON.parse(r.text).membersWithAPlan >= 1, r.shown);
+  r = await mcpCall("members", { search: "Sinu TK" }, adminUser);
+  check('"Sinu TK" finds the Malayalam-named member through MCP too', r.ok && JSON.parse(r.text).items?.[0]?.id === sinu.unique_id);
+  r = await call(mcpUrl, { headers: svc });
+  check("GET on the MCP endpoint: 405 (stateless, POST only)", r.status === 405);
 
   // =====================================================================
   console.log("\n2. The admin's limit settings (no model)");

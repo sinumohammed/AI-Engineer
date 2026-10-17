@@ -93,7 +93,7 @@ console.log("\n2. Calls");
 const hall = await getApp("hall");
 const op = (id) => hall.operations.find((o) => o.id === id);
 const one = await callOperation(hall, op("announcements"), { limit: "1" });
-check('An integer argument goes as a number ("1" -> 1 announcement)', one.ok && JSON.parse(one.text).length === 1 && one.shown === 'announcements {"limit":1}', one.shown);
+check('An integer argument goes as a number ("1" -> 1 announcement)', one.ok && JSON.parse(one.text).length === 1 && one.shown === 'announcements (MCP tool) {"limit":1}', one.shown);
 const pending = await callOperation(hall, op("list_dues"), { status: "pending" });
 check("A call returns the tool's JSON", pending.ok && pending.text.includes("Bilal Qureshi"), `${pending.shown}, ${pending.latencyMs} ms`);
 const asMember = await asEval(() => callOperation(hall, op("list_dues"), { status: "pending" }), "member:M-102");
