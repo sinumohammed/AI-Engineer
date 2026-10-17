@@ -851,6 +851,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.7</td><td>App keys stored in Redis as hashes: a new app is one command, no redeploy</td><td class="res">Live: both apps on stored keys, <code>APP_API_KEYS</code> deleted from Vercel; <code>eval:ask</code> 11/11</td></tr>
                 <tr><td class="n">10d.8</td><td>Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam</td><td class="res">Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; <code>eval:masjid</code> 53 checks</td></tr>
                 <tr><td class="n">10d.9</td><td>MCP: apps can connect as MCP servers, and masjid became one</td><td class="res">Live: the masjid assistant answers over MCP (<code>today_duty (MCP tool)</code>), refusals unchanged; <code>eval:mcp</code> 47/47, <code>eval:masjid</code> over MCP 62/63</td></tr>
+                <tr><td class="n">10d.10</td><td>Claude Code reads the masjid data: personal MCP tokens made in masjid Settings</td><td class="res">Live: Claude Code connected to masjid and answered from its data; token checks 12/12</td></tr>
               </tbody>
             </table>
           </div>
@@ -1162,6 +1163,40 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.9. Phase 4 put tools behind MCP on one machine; now it runs over HTTP between two deployed services. The client is hand-written over <code>fetch</code>, like the rest of the connector; the demo server and masjid's server use the official SDK, so the two sides check each other. Found: the label under an excerpt is part of the prompt - with a bare <code>pending_dues</code> the local model told a paid-up member "nobody owes" every time; <code>pending_dues (MCP tool)</code> fixed it, on identical data.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 230" role="img" aria-label="The admin creates a token in the masjid app's Settings; it is shown once with the claude mcp add command, and masjid keeps only its hash. Claude Code sends the token to /api/ai/mcp; masjid finds the hash, reads that user's role now, and runs the tools. Revoke stops it at once.">
+                <defs><marker id="a18" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">ONCE · THE ADMIN MAKES A TOKEN</text>
+                <rect class="b" x="20" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="120" y="57" text-anchor="middle">Masjid Settings</text>
+                <text class="s" x="120" y="75" text-anchor="middle">Claude access (MCP): Create</text>
+                <line class="ln" x1="220" y1="62" x2="259" y2="62" marker-end="url(#a18)"/>
+                <rect class="b" x="260" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="360" y="57" text-anchor="middle">mcp_... shown once</text>
+                <text class="s" x="360" y="75" text-anchor="middle">with the claude mcp add command</text>
+                <line class="ln" x1="460" y1="62" x2="499" y2="62" marker-end="url(#a18)"/>
+                <rect class="b" x="500" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="600" y="57" text-anchor="middle">mcp_tokens</text>
+                <text class="s" x="600" y="75" text-anchor="middle">sha256(token) -> user</text>
+                <text class="k" x="20" y="130">EACH QUESTION IN CLAUDE CODE</text>
+                <rect class="b" x="20" y="142" width="200" height="56" rx="6"/>
+                <text class="t" x="120" y="165" text-anchor="middle">Claude Code</text>
+                <text class="s" x="120" y="183" text-anchor="middle">Bearer mcp_...</text>
+                <line class="ln" x1="220" y1="170" x2="259" y2="170" marker-end="url(#a18)"/>
+                <rect class="ba" x="260" y="142" width="200" height="56" rx="6"/>
+                <text class="t" x="360" y="165" text-anchor="middle">/api/ai/mcp only</text>
+                <text class="s" x="360" y="183" text-anchor="middle">hash found? role read now</text>
+                <line class="ln" x1="460" y1="170" x2="499" y2="170" marker-end="url(#a18)"/>
+                <rect class="b" x="500" y="142" width="200" height="56" rx="6"/>
+                <text class="t" x="600" y="165" text-anchor="middle">The 11 tools</text>
+                <text class="s" x="600" y="183" text-anchor="middle">as that user may see</text>
+                <path class="ln" style="stroke-dasharray: 4 4" d="M600,90 V116 H360 V141" marker-end="url(#a18)"/>
+                <text class="s" x="20" y="222">Not a login, no other endpoint; Revoke deletes the row and the next call is refused.</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.10. Claude Code could list masjid's tools but not call them: a call needs the 5-minute user token that only the masjid server makes for the AI service. A person's tool needs a person's key. Run <code>claude mcp add</code> with <code>-s user</code>: the default, <code>-s local</code>, ties the server to the folder the command ran in. What Claude reads goes to Anthropic, so tokens are admin-only for now.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1177,6 +1212,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Hash what you only check, encrypt what you must send: an app's ask-key is only recognised, so a one-way hash is kept; an app's token is sent to the app, so it is encrypted.</li>
               <li>Test in the user's language, on the model the user gets: the local model planned the Malayalam questions right and misread the answers (4/6); Groq, which the live app uses, got 6/6.</li>
               <li>Everything the model reads is prompt, even a label: the same JSON under <code>pending_dues</code> instead of <code>GET /ai/pending-dues</code> turned a right answer into a wrong one, every time.</li>
+              <li>A service's key and a person's key are different keys: the AI service gets a 5-minute user token per question; Claude Code, used by a person, got its own revocable token with that person's role read at every use.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
@@ -1299,6 +1335,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">103</td><td class="n">10d.9</td><td>Apps could connect only through an OpenAPI file; many products offer MCP servers instead</td><td>A second connector type: <code>"mcp": "&lt;url&gt;"</code>, the server's read-only tools stored as operations, <code>tools/call</code> per question; a demo MCP server (official SDK)</td><td class="res"><code>eval:mcp</code> 27/27, with answers 47/47; <code>eval:apps</code> 31/31 unchanged. Port 4045 is refused by fetch, like 5060</td></tr>
             <tr><td class="n">104</td><td class="n">10d.9</td><td>Masjid's data only reachable through its OpenAPI endpoints</td><td><code>/api/ai/mcp</code>: tools made from its OpenAPI, each running the endpoint's own handler</td><td class="res">10 MCP checks in <code>eval:masjid</code>; <code>CONNECTOR=mcp</code> 62/63 (a Malayalam answer on local qwen)</td></tr>
             <tr><td class="n">105</td><td class="n">10d.9</td><td>Over MCP a paid-up member heard "no members have pending dues" (0/5); over OpenAPI 5/5, same data byte for byte</td><td>The label <code>pending_dues</code> became <code>pending_dues (MCP tool)</code></td><td class="res">5/5. Live (Groq): masjid switched to MCP; a guest's duty question answered, a dues question refused with "log in"</td></tr>
+            <tr><td class="n">106</td><td class="n">10d.10</td><td>Claude Code could list masjid's tools but not call them: a call needs the 5-minute user token only the masjid server makes</td><td>Personal MCP tokens: made by the admin in Settings, shown once with the <code>claude mcp add</code> command, hashed, role read at each use, <code>/api/ai/mcp</code> only</td><td class="res">12/12 in <code>eval:masjid</code>, incl. the official SDK client; live: Claude Code connected and answered</td></tr>
+            <tr><td class="n">107</td><td class="n">10d.10</td><td>"MCP server masjid already exists in local config"; then no masjid tools in another folder (found by the user)</td><td>Remove and add again; <code>-s local</code> belongs to one folder, <code>-s user</code> to every folder</td><td class="res">Working from any folder</td></tr>
           </tbody>
         </table>
       </div>
@@ -1322,6 +1360,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
             <tr><td>Connected apps over MCP, demo MCP server: read-only tools only, typed arguments, users, refusals, sessions, time limit; planner and answers</td><td class="n">27/27; with answers 47/47</td><td class="n">masjid over MCP: 2/2 guest questions</td></tr>
+            <tr><td>Personal MCP tokens: member refused, shown once, tools as the admin, official SDK client, other endpoints refused, revoke</td><td class="n">12/12</td><td class="n">live: Claude Code connected, questions answered</td></tr>
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
             <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions</td><td class="n">51/53 (2 misses: Malayalam answers on the local model); with 10 MCP checks 61/63, over MCP 62/63</td><td class="n">Malayalam ready questions 6/6; live: 2/2 match the app's schedule</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
@@ -1357,6 +1396,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Hash what you only check; encrypt what you must send.</strong> An app's ask-key only has to be recognised, so the service keeps a one-way hash; an app's token has to be sent to the app, so it is encrypted and can be read back (10d.7). Pick by what the secret is for.</li>
         <li><strong>Test in the user's language, on the model the user gets.</strong> The local model planned the Malayalam questions right and still misread the answers; Groq, which the live app uses, got all six (10d.8). A test that passes on one model says little about another.</li>
         <li><strong>Everything the model reads is prompt - even a label.</strong> The same JSON with the label <code>pending_dues</code> instead of <code>GET /ai/pending-dues</code> turned a right answer into a wrong one, every time (10d.9). When two paths give different answers, compare what the model actually read, byte for byte, before blaming the model.</li>
+        <li><strong>A service's key and a person's key are different keys.</strong> The AI service holds one long-lived service token and gets a fresh 5-minute token per user per question; a person's tool (Claude Code) has neither, so it got its own: made by that person, revocable, with their role read at every use and opening only one door (10d.10). Decide who holds a key before deciding its shape.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1407,6 +1447,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>Check which documents may go where</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:policy</code> (no model calls)</td></tr>
             <tr><td>Connected apps</td><td><code>cd phase10-cloud/api &amp;&amp; npm run app -- list</code> (also <code>add &lt;file&gt;</code>, <code>try "question"</code>, <code>remove &lt;name&gt;</code>); test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:apps</code>; an MCP app: <code>"mcp": "&lt;url&gt;"</code> instead of <code>"openapi"</code> (<code>apps/demo-hall-mcp.json</code>), test <code>npm run eval:mcp</code>; masjid over MCP: <code>CONNECTOR=mcp npm run eval:masjid</code></td></tr>
+            <tr><td>Claude Code with the masjid tools</td><td>masjid app → Settings → Claude access (MCP) → Create, then <code>claude mcp add -s user --transport http masjid https://masjid-management-omega.vercel.app/api/ai/mcp --header "Authorization: Bearer mcp_..."</code>; check with <code>claude mcp list</code> and <code>/mcp</code></td></tr>
             <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice; <code>ONLY=chips</code> only the Malayalam ready questions - run those with the Groq settings)</td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new &lt;name&gt;</code> - works at once (also <code>askkey list</code>, <code>askkey revoke &lt;id or name&gt;</code>)</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>

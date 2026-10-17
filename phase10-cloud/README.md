@@ -1038,6 +1038,45 @@ answers on qwen). Live (Groq): masjid switched to MCP (`apps/masjid-mcp.json`,
 food today?" answered from `masjid API: today_duty (MCP tool)`, and
 "Which members have pending dues?" refused with masjid's "log in" reason.
 
+### 10d.10 Claude Code reads the masjid data: personal MCP tokens (2026-10-17)
+
+With masjid an MCP server (10d.9), Claude Code could connect and list the
+tools, but every tool call was refused: a call needs `X-User-Token`, the
+5-minute user token only the masjid server makes, per question, for this AI
+service. A person's MCP client needs its own key.
+
+```
+masjid app, Settings -> "Claude access (MCP)" -> Create (admin)
+  -> mcp_... shown once, with the ready command; masjid keeps sha256(token) -> user
+claude mcp add -s user --transport http masjid https://masjid-management-omega.vercel.app/api/ai/mcp \
+  --header "Authorization: Bearer mcp_..."
+Claude Code --Bearer mcp_...--> /api/ai/mcp -> hash found -> that user, role read now -> tools
+```
+
+| What | Where |
+|---|---|
+| `mcp_tokens` table: user, name, SHA-256 hash, last 4 characters, created, last used; delete = revoke | masjid `server/app.js` (masjid `37cbae3`) |
+| `requireAiToken`: an `mcp_` bearer opens `/api/ai/mcp` only, in place of `MASJID_AI_TOKEN` + the user token; the user's role is read at each use (no longer admin: 403); not a login | `mcpTokenUser`, `requireAiToken` |
+| `GET/POST/DELETE /api/admin/mcp-tokens` (admin) | `server/app.js` |
+| Settings card: list, create (token + the `claude mcp add` command shown once, with Copy), revoke | masjid `src/components/McpTokensCard.tsx`, `src/services/api.ts` |
+| 12 checks, incl. the official MCP SDK client with the token alone, as Claude Code connects | `eval/masjid-app.js` section 1c |
+
+- Admin only for now: a member's token would follow the member's rules (the
+  same handlers), but it sends that member's data to Anthropic - left for an
+  admin switch, if wanted.
+- Claude Code: `-s local` (the default) saves the server for the folder the
+  command ran in - it ran in the masjid repo, so other folders had no masjid
+  tools; `-s user` makes it available everywhere. "MCP server masjid already
+  exists": `claude mcp remove masjid -s local`, then add again.
+- These questions go from Claude Code straight to masjid: no Groq, no AI
+  service, no assistant daily limit. What Claude reads goes to Anthropic.
+
+Tests: `eval:masjid` section 1c 12/12 (member refused; token shown once, never
+listed; tools listed and called as the admin; the official SDK client; other
+`/api/ai` endpoints and admin routes refused; last used recorded; unknown and
+revoked tokens refused). Live (the user): token made in Settings, Claude Code
+connected (`claude mcp list`, `/mcp`), questions answered from masjid data.
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and

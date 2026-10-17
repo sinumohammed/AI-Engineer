@@ -450,6 +450,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.7 | App keys stored in Redis as hashes: a new app is one command, no redeploy | Live: both apps on stored keys, `APP_API_KEYS` deleted from Vercel; `eval:ask` 11/11 |
 | 10d.8 | Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam | Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; `eval:masjid` 53 checks |
 | 10d.9 | MCP: apps can connect as MCP servers, and masjid became one | Live: the masjid assistant answers over MCP (`today_duty (MCP tool)`), refusals unchanged; `eval:mcp` 47/47, `eval:masjid` over MCP 62/63 |
+| 10d.10 | Claude Code reads the masjid data: personal MCP tokens made in masjid Settings | Live: Claude Code connected to masjid and answered from its data; token checks 12/12 |
 
 - **Challenges, in plain terms:**
 
@@ -643,6 +644,20 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   each other. Found: the label under the excerpt matters - with a bare `pending_dues` the local
   model told a paid-up member "nobody owes" every time; `pending_dues (MCP tool)` fixed it, on
   identical data.
+- **Claude Code reads the masjid data (10d.10):** with masjid an MCP server, Claude Code could
+  list its tools but every call was refused - a call needs the 5-minute user token that only the
+  masjid server makes, per question, for the AI service. A person's tool needs a person's key:
+  ```
+  masjid Settings -> "Claude access (MCP)" -> Create      (admin)
+    -> mcp_... shown once + the ready `claude mcp add` command
+    -> masjid keeps only sha256(token) -> your user
+  Claude Code --Bearer mcp_...--> /api/ai/mcp -> your user, your role read now -> the 11 tools
+  ```
+  The token opens `/api/ai/mcp` only, is not a login, and Revoke stops it at once. Two Claude
+  Code details found on the way: "already exists in local config" means remove the entry and add
+  again; and `-s local` (the default) ties the server to the folder the command ran in - `-s user`
+  makes it work everywhere. These questions go straight from Claude Code to masjid (no Groq, no
+  AI service); what Claude reads goes to Anthropic, so tokens are admin-only for now.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -761,6 +776,8 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 103 | 10d.9 | Apps could connect only through an OpenAPI file; many products offer MCP servers instead | A second connector type: `"mcp": "<url>"`, the server's read-only tools stored as operations, `tools/call` per question (hand-written client); a demo MCP server with the official SDK | `eval:mcp` 27/27, with answers 47/47 (single and supervisor); `eval:apps` 31/31 unchanged. The test's slow server on port 4045 got "fetch failed": fetch refuses that port, like 5060 |
 | 104 | 10d.9 | Masjid's data only reachable through its OpenAPI endpoints | `/api/ai/mcp` on the masjid backend: tools made from its OpenAPI description, each running the endpoint's own handler; listing needs the service token, a call also the user's | 10 new MCP checks in `eval:masjid`; `CONNECTOR=mcp` runs every check over MCP: 62/63 (the miss: a Malayalam answer on local qwen) |
 | 105 | 10d.9 | Over MCP a paid-up member heard "no members have pending dues" (0/5); over OpenAPI 5/5 - on the same data, byte for byte | The excerpt label `pending_dues` became `pending_dues (MCP tool)` (OpenAPI's is `GET /ai/pending-dues`) | 5/5. Live (Groq): masjid switched to MCP; a guest's duty question answered from `today_duty (MCP tool)`, a dues question refused with "log in" |
+| 106 | 10d.10 | Claude Code could list masjid's tools but not call them: a call needs the 5-minute user token only the masjid server makes | Personal MCP tokens: made by the admin in Settings, shown once with the `claude mcp add` command, stored as a hash, role read at each use, `/api/ai/mcp` only | 12/12 in `eval:masjid`, incl. the official MCP SDK client with the token alone; live: Claude Code connected and answered |
+| 107 | 10d.10 | "MCP server masjid already exists in local config"; then no masjid tools in another folder (found by the user) | Remove the entry and add again; `-s local` belongs to the folder it ran in, `-s user` to every folder | Working from any folder |
 
 Where things stand (Phase 10 code):
 
@@ -782,6 +799,7 @@ Where things stand (Phase 10 code):
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Connected apps over MCP (10d.9), demo MCP server: registration (read-only tools only), typed arguments, users, refusals, sessions, time limit; planner and answers | 27/27; with answers 47/47 | masjid over MCP: 2/2 guest questions (answered, refused) |
+| Personal MCP tokens (10d.10): member refused, shown once, tools as the admin, official SDK client, other endpoints refused, revoke | 12/12 (`eval:masjid` 1c) | live: Claude Code connected, questions answered |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 | `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model); with the 10 MCP checks (10d.9) 61/63, and over MCP (`CONNECTOR=mcp`) 62/63 | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
@@ -870,6 +888,10 @@ what changed.
     `pending_dues` instead of `GET /ai/pending-dues` turned a right answer into a wrong one, every
     time (10d.9). When two paths give different answers, compare what the model actually read,
     byte for byte, before blaming the model.
+24. **A service's key and a person's key are different keys.** The AI service holds one long-lived
+    service token and gets a fresh 5-minute token per user per question; a person's tool (Claude
+    Code) has neither, so it got its own: made by that person, revocable, with their role read at
+    every use and opening only one door (10d.10). Decide who holds a key before deciding its shape.
 
 ### What changed when the data got real (Phase 9)
 
@@ -918,6 +940,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
 | Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
 | Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps`; an MCP app: `"mcp": "<url>"` instead of `"openapi"` in its file (`apps/demo-hall-mcp.json`), test `npm run eval:mcp`; masjid over MCP: `CONNECTOR=mcp npm run eval:masjid` |
+| Claude Code with the masjid tools | masjid app → Settings → Claude access (MCP) → Create, then `claude mcp add -s user --transport http masjid https://masjid-management-omega.vercel.app/api/ai/mcp --header "Authorization: Bearer mcp_..."`; check with `claude mcp list` and `/mcp` |
 | The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; `ONLY=chips` only the Malayalam ready questions - run those with the Groq settings; needs the masjid repo at `MASJID_REPO`) |
 | A key for a new app | `cd phase10-cloud/api && API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new <name>` - works at once (also `askkey list`, `askkey revoke <id or name>`) |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
@@ -975,6 +998,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `48ad8b9` | Phase 10d.7: app ask-keys in Redis, hashed |
 | `2132350`, `edf5ae5` | Phase 10d.8: `eval:masjid` checks for last year's dues and the Malayalam ready questions (masjid repo: `a1ef56c` everyone's dues for a year, `0cec43b` the new look and Malayalam questions) |
 | `4f95df4`, `d474218` | Phase 10d.9: the MCP connector type, `eval:mcp`, `eval:masjid` over MCP (masjid repo: `4d0c969` the MCP server at `/api/ai/mcp`) |
+| `37dca3b` | Phase 10d.10: `eval:masjid` checks for personal MCP tokens (masjid repo: `37cbae3` personal MCP tokens in Settings) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
