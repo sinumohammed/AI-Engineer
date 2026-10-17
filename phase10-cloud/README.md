@@ -955,6 +955,43 @@ a key already stored for another app (409) refused; open on the Mac until the
 first stored key, then 401 without it, open again after revoking it;
 `eval:ask` 11/11 with a stored key (Ollama).
 
+Live (2026-10-17): the `eval` key imported (`askkey import eval ASK_API_KEY`);
+masjid got a new key (`askkey new masjid`, set as `AI_ASK_KEY` on the masjid
+Vercel project - its old value could not be read back from Vercel); then
+`APP_API_KEYS` deleted from Vercel and the API redeployed. Both apps answer on
+Redis keys only; live `eval:ask` 11/11.
+
+### 10d.8 The masjid assistant: last year's dues for everyone, a new look, Malayalam ready questions (2026-10-17)
+
+Found live: the admin's "previous year pending" got no data. The planner
+called `dues_by_year` correctly, but that operation handled one member, and an
+admin not linked to a household got a 400 ("say which member").
+
+| What | Where |
+|---|---|
+| `everyone` mode: with no member named, the admin gets every member still owing that year, with the total; a member asking for everyone gets 403 | masjid `server/app.js` `/ai/dues-by-year`, described in `server/aiOpenapi.js` (masjid `a1ef56c`) |
+| A masjid-bot mark (a dome as a bot's head, crescent on top), a green launcher, header "Masjid Assistant · AI" with whom it answers as, answer cards with bullets, "Checking the masjid records…" | masjid `src/components/AssistantIcon.tsx`, `AssistantChat.tsx`, `AssistantChat.css`, `App.tsx` (masjid `0cec43b`) |
+| Ready questions in Malayalam per role, as cards on the welcome and chips above the composer | `ADMIN_SUGGESTIONS`, `MEMBER_SUGGESTIONS`, `GUEST_SUGGESTIONS` in `AssistantChat.tsx` |
+| A check per Malayalam question; `ONLY=chips` runs just those (after the no-model checks), to use little Groq quota | `eval/masjid-app.js` |
+
+- Admin: last month's accounts, this month's spending, members with dues,
+  last year's dues, bank balances, today's duty. Member: my dues, my next
+  duty, last year, my payments, latest announcement, today's duty. Guest:
+  duty today, tomorrow, this week, Friday.
+- Malayalam answers: Groq (the live models) 6/6; local qwen 4/6 - it planned
+  the right calls but misread the data when answering in Malayalam. Check
+  Malayalam on Groq: `ONLY=chips` plus the Groq settings.
+- Order matters: deploy the masjid app, *then* `npm run app -- refresh
+  masjid`. The first refresh ran before the deploy finished and stored the
+  old operations (no `everyone`); a second refresh fixed it.
+
+Tests: `eval:masjid` 51/53 on Ollama (the 2: Malayalam answers on qwen),
+47/47 before the Malayalam checks; screenshots for admin, member and guest,
+phone and computer, light and dark - nothing wider than the screen, no page
+errors. Live: the admin's last-year question called `dues_by_year` with
+success (it was a 400), the new launcher and Malayalam questions in the
+deployed frontend.
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and
