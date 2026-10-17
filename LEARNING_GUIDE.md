@@ -595,7 +595,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   device's), **conversation mode** (after two claps it listens again by itself after each answer,
   talk or tap to interrupt, ~8 s of silence ends it), the agents answer questions about usage
   ("how many questions today?") through the service's own usage registered as a connected app, and
-  the Errors tile lists what failed. Rows 92-96 were built and tested locally and wait for a deploy.
+  the Errors tile lists what failed. Live: "how many questions today, did anything fail?" answered from the numbers (5 questions, $0.072), the web chat sees none.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -704,6 +704,7 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 93 | 10e | The console could not answer "how many questions today?" or "what did masjid cost?" (asked by the user) | The service's own usage registered as an ordinary connected app, `usage` (read-only views, dashboard key); its only caller is `command`, which the Command Center becomes by sending its key | Local, Groq: routed to the usage app, answered from the numbers; the web chat without the key: no usage data |
 | 94 | 10e | The Errors count did not say what failed (asked by the user) | The Errors tile and each app's count open a list: failed requests with their error, and answered questions where an app call failed; a 403 (the app refusing by role) shown as expected | Local: 1 real failure and 10 expected refusals, told apart; the agents can list them too |
 | 95 | 10e | Every turn needed a clap or a tap, and a long answer could not be interrupted (asked by the user) | Conversation mode: listens again by itself after each answer; talking over the answer or tapping the orb interrupts; ends after ~8 s of silence, "stop" / "bye" / "മതി", or End | Simulated on a phone-sized page: two turns, then ended at 8 s; a 20 s answer stopped 1.1 s after the user spoke; "Stop" ends |
+| 97 | 10e | Live, found by the new "what failed" list: 3 read-aloud failures - Gemini's voice allows 10 requests a day on the free tier, and each 2-3 sentence piece was one request | Not fixed yet (next): one request per answer, a clear "today's free voice limit is used up", the device voice as a fallback | The users saw only "please try again"; the list showed the 429 and the limit at once |
 | 96 | 10e | Request times showed the clock only, and were hidden on phones | Today: the time; "Yesterday 6:32 PM"; older: the date; tap or hover for the full date | Phone: visible, a tap shows "Saturday, October 17, 2026 at 6:09 AM" |
 
 Where things stand (Phase 10 code):
