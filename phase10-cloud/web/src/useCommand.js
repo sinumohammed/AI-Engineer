@@ -29,7 +29,9 @@ function sessionId() {
 
 const idle = { phase: "idle", question: "", answer: "", sources: [], tasks: [], agents: {}, combining: false, log: [], usage: null, error: null, startedAt: null, finishedAt: null };
 
-export function useCommand({ accessCode, onDone }) {
+// dashKey: sent with the question so the service asks as the Command Center
+// (caller "command"), the only caller that may read its own usage.
+export function useCommand({ accessCode, dashKey, onDone }) {
   const [run, setRun] = useState(idle);
   const latest = useRef(idle);
   const es = useRef(null);
@@ -48,7 +50,7 @@ export function useCommand({ accessCode, onDone }) {
     const q = question.trim();
     if (!q) return;
     update(() => say({ ...idle, phase: "routing", question: q, startedAt: Date.now() }, "You", "Router", q));
-    const code = accessCode ? `&code=${encodeURIComponent(accessCode)}` : "";
+    const code = (accessCode ? `&code=${encodeURIComponent(accessCode)}` : "") + (dashKey ? `&dk=${encodeURIComponent(dashKey)}` : "");
     const source = new EventSource(`${API_BASE}/api/chat/stream?sessionId=${encodeURIComponent(sid.current)}&mode=multi${code}&q=${encodeURIComponent(q)}`);
     es.current = source;
     const on = (name, fn) => source.addEventListener(name, (e) => fn(e.data ? JSON.parse(e.data) : {}));

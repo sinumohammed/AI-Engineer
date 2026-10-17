@@ -19,7 +19,7 @@ import { API_BASE as API, codeHeaders } from "./useChatSession.js";
 import { useVoiceInput, voiceSupported } from "./useVoiceInput.js";
 import { useClapWake } from "./useClapWake.js";
 import { useCommand } from "./useCommand.js";
-import { BarList, DailyChart, callerColors, fmtInt, fmtMs, fmtTokens, fmtUsd } from "./Charts.jsx";
+import { BarList, DailyChart, callerColors, callerLabel, fmtInt, fmtMs, fmtTokens, fmtUsd } from "./Charts.jsx";
 import "./command.css";
 
 const { Text } = Typography;
@@ -314,7 +314,7 @@ export default function CommandCenter({ isDark }) {
       </header>
 
       <main className="cc-main">
-        <Console accessCode={accessCode} voiceOnServer={access.voice} onAnswered={usage.reload} />
+        <Console accessCode={accessCode} dashKey={dashKey} voiceOnServer={access.voice} onAnswered={usage.reload} />
 
         <section className="cc-section">
           <div className="cc-section-head">
@@ -384,7 +384,7 @@ function Unlock({ needsKey, needsCode, reason, onSubmit }) {
 
 // --- the console: ask, watch the agents, hear the answer ---
 
-function Console({ accessCode, voiceOnServer, onAnswered }) {
+function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
   const { message } = AntApp.useApp();
   const [input, setInput] = useState("");
   // Clap to wake holds the microphone open, so it is never switched on by
@@ -404,6 +404,7 @@ function Console({ accessCode, voiceOnServer, onAnswered }) {
 
   const { run, ask, cancel, forget } = useCommand({
     accessCode,
+    dashKey,
     onDone: (r) => {
       onAnswered();
       if (speakRef.current && r.answer) readOut(r);
@@ -770,7 +771,7 @@ function UsagePanels({ d }) {
       render: (c) => (
         <span className="app-cell">
           <i style={{ background: colors[c] }} />
-          {c === "web" ? "Web chat" : c}
+          {callerLabel(c)}
         </span>
       ),
     },
@@ -896,7 +897,7 @@ function UsagePanels({ d }) {
                 {r.ok ? <CheckCircleFilled className="good" /> : <Tooltip title={r.error}><CloseCircleFilled className="bad" /></Tooltip>}
                 <span className="app-cell">
                   <i style={{ background: colors[r.caller] ?? "var(--other)" }} />
-                  {r.caller === "web" ? "Web" : r.caller}
+                  {callerLabel(r.caller)}
                 </span>
                 <span className="muted">{r.channel}</span>
                 <span className="recent-agents">

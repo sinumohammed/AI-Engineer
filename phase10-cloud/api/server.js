@@ -17,7 +17,7 @@ import { adminApi } from "./adminApi.js";
 import { withAccess } from "./appAccess.js";
 import { listApps } from "./appRegistry.js";
 import { metered, meteredJob, recordUsage } from "./usage.js";
-import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, ADMIN_KEY, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
+import { LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, JUDGE_MODEL, FALLBACK_MODELS, EMBED_PROVIDER, EMBED_MODEL, EMBED_BASE_URL, DOCS_TABLE, DATABASE_URL, REDIS_URL, TRACE_TO, ACCESS_CODE, ALLOWED_ORIGIN, APP_API_KEYS, APP_DAILY_LIMIT, ADMIN_KEY, DASHBOARD_KEY, describeUrl, TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { ROUTER_MODEL, SPECIALIST_MODEL } from "./llm.js";
 import { getHistory, appendTurn, saveUsage, getUsage, getSummary, clearSession, MAX_TURNS_STORED, saveAttachment, getAttachment, removeAttachment } from "./sessionStore.js";
 
@@ -29,6 +29,11 @@ app.use(cors(ALLOWED_ORIGIN ? { origin: ALLOWED_ORIGIN } : undefined));
 // headers. Compared through hashes with timingSafeEqual, so the time a check
 // takes says nothing about how much of a guess was right.
 const digest = (s) => createHash("sha256").update(String(s)).digest();
+const keyMatches = (given, key) => typeof given === "string" && given.length > 0 && Boolean(key) && timingSafeEqual(digest(given), digest(key));
+// Phase 10e: the Command Center asks as the caller "command" when it sends the
+// dashboard key (?dk= on the stream) - the only caller the "usage" app allows,
+// so the service's own usage is never open to every web chat user.
+const callerOf = (req) => (keyMatches(req.query.dk, DASHBOARD_KEY) || keyMatches(req.query.dk, ADMIN_KEY) ? "command" : "web");
 function hasAccess(req) {
   if (!ACCESS_CODE) return true;
   const given = req.get("x-access-code") ?? req.query.code;
@@ -101,6 +106,7 @@ app.get("/api/chat/stream", async (req, res) => {
   // two and compare them on the same question. Anything else (including no
   // `mode` at all) keeps the single agent, so older clients behave as before.
   const mode = req.query.mode === "multi" ? "multi" : "single";
+  const caller = callerOf(req);
 
   // Phase 10e: everything this question uses - model calls, app calls, the
   // summary of older turns - is metered and saved as one usage row (usage.js).
@@ -125,7 +131,7 @@ app.get("/api/chat/stream", async (req, res) => {
       // for this request by the model client and sent before the answer.
       // Phase 10 #4: the web chat is the caller "web" - it sees only the
       // connected apps whose entry names "web" (appAccess.js).
-      const { result, notices } = await withAccess({ caller: "web" }, () => collectNotices(() =>
+      const { result, notices } = await withAccess({ caller }, () => collectNotices(() =>
         mode === "multi"
           ? runMultiAgent(asked, history, {
               onRoute: (decision) => send("route", decision),
@@ -177,7 +183,7 @@ app.get("/api/chat/stream", async (req, res) => {
     failure = err;
     send("error", { message: err.message });
   } finally {
-    await recordUsage({ caller: "web", channel: "chat", mode, ok: !failure, error: failure?.message, latencyMs: Date.now() - startedAt, meter });
+    await recordUsage({ caller, channel: "chat", mode, ok: !failure, error: failure?.message, latencyMs: Date.now() - startedAt, meter });
     res.end();
   }
 });

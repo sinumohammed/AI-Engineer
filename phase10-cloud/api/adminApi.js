@@ -13,6 +13,9 @@
 //                                          as a caller would (apps with user: "required" need one).
 //   GET    /api/admin/usage?days=30        Phase 10e: usage and cost per app, user, agent, model and
 //                                          app call, latency, recent requests (usage.js) - the Command Center
+//   GET    /api/admin/usage/{summary,users,daily,recent,app-calls}, /usage/openapi.json
+//                                          the same, compact, for the Command Center's agents
+//                                          (registered as the connected app "usage", usageOpenapi.js)
 //
 // `npm run app` (appAdmin.js) is the command-line client.
 import { timingSafeEqual, createHash } from "node:crypto";
@@ -22,6 +25,7 @@ import { listApps, saveApp, refreshApp, removeApp, publicView, AppConfigError } 
 import { appContext } from "./apps.js";
 import { withAccess } from "./appAccess.js";
 import { usageReport } from "./usage.js";
+import { USAGE_OPENAPI } from "./usageOpenapi.js";
 
 const digest = (s) => createHash("sha256").update(String(s)).digest();
 
@@ -33,8 +37,9 @@ adminApi.use((req, res, next) => {
   const given = req.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
   if (keyMatches(given, ADMIN_KEY)) return next();
   // Phase 10e: the dashboard key reads usage and nothing else.
-  if (req.method === "GET" && req.path === "/usage" && keyMatches(given, DASHBOARD_KEY)) return next();
-  res.status(401).json({ error: req.path === "/usage" ? "Dashboard key required" : "Admin key required" });
+  const usagePath = req.path === "/usage" || req.path.startsWith("/usage/");
+  if (req.method === "GET" && usagePath && keyMatches(given, DASHBOARD_KEY)) return next();
+  res.status(401).json({ error: usagePath ? "Dashboard key required" : "Admin key required" });
 });
 
 const handle = (fn) => async (req, res) => {
@@ -79,5 +84,59 @@ adminApi.get(
     const [report, apps] = await Promise.all([usageReport(days), listApps()]);
     // The registry too, so an app with no use yet still shows (with zeros).
     return { ...report, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
+  })
+);
+
+// Phase 10e: compact views for the agents - small enough for one excerpt each.
+const daysOf = (req) => Math.min(365, Math.max(1, Math.round(Number(req.query.days) || 30)));
+const appOf = (req) => (typeof req.query.app === "string" && req.query.app ? req.query.app : null);
+const usd = (v) => Number(Number(v ?? 0).toFixed(6));
+adminApi.get("/usage/openapi.json", (req, res) => res.json(USAGE_OPENAPI));
+adminApi.get(
+  "/usage/summary",
+  handle(async (req) => {
+    const d = await usageReport(daysOf(req));
+    return {
+      periodDays: d.days,
+      asOf: d.generatedAt,
+      costNote: "estimated USD at paid-tier prices; real bill $0 on free tiers",
+      totals: { ...d.totals, costUsd: usd(d.totals.costUsd) },
+      apps: d.byApp.map((a) => ({ app: a.caller, questions: a.questions, questionsToday: a.questions_today, users: a.users, voice: a.voice, files: a.files, tokens: a.prompt_tokens + a.completion_tokens, costUsd: usd(a.cost_usd), errors: a.errors, lastUsed: a.last_at })),
+      models: d.byModel.map((m) => ({ model: m.model, calls: m.calls, tokens: m.prompt_tokens + m.completion_tokens, costUsd: usd(m.cost_usd) })),
+      agents: d.byAgent,
+    };
+  })
+);
+adminApi.get(
+  "/usage/users",
+  handle(async (req) => {
+    const d = await usageReport(daysOf(req));
+    const app = appOf(req);
+    return { periodDays: d.days, users: d.byUser.filter((u) => !app || u.caller === app).map((u) => ({ user: u.user_ref, app: u.caller, questions: u.questions, errors: u.errors, costUsd: usd(u.cost_usd), lastUsed: u.last_at })) };
+  })
+);
+adminApi.get(
+  "/usage/daily",
+  handle(async (req) => {
+    const d = await usageReport(daysOf(req));
+    const app = appOf(req);
+    return { periodDays: d.days, days: d.byDay.filter((r) => !app || r.caller === app).map((r) => ({ day: r.day, app: r.caller, questions: r.questions, costUsd: usd(r.cost_usd) })) };
+  })
+);
+adminApi.get(
+  "/usage/recent",
+  handle(async (req) => {
+    const limit = Math.min(30, Math.max(1, Math.round(Number(req.query.limit) || 10)));
+    const d = await usageReport(1);
+    return {
+      requests: d.recent.slice(0, limit).map((r) => ({ at: r.at, app: r.caller, kind: r.channel, agents: r.agents, tokens: r.tokens, costUsd: usd(r.cost_usd), ms: r.latency_ms, ok: r.ok, error: r.error ?? undefined, appCalls: (r.app_calls ?? []).map((c) => `${c.app}.${c.operation}${c.ok ? "" : " (failed)"}`) })),
+    };
+  })
+);
+adminApi.get(
+  "/usage/app-calls",
+  handle(async (req) => {
+    const d = await usageReport(daysOf(req));
+    return { periodDays: d.days, calls: d.appCalls.map((c) => ({ app: c.app, operation: c.operation, calls: c.calls, failures: c.failures, avgMs: c.avg_ms })) };
   })
 );

@@ -959,6 +959,19 @@ sidebar, loaded only when opened):
   last used - apps with no use show too); agents; models; connected-app calls
   with failures; recent requests. Refreshes every 30 s.
 
+Asking about usage: the console can answer "how many questions today?",
+"what did masjid cost this month?", "who are the top users?" from live data.
+The service's own usage is registered as an ordinary connected app, `usage`
+(`apps/usage.json`, `api/usageOpenapi.js`: compact read-only views under
+`/api/admin/usage/*`, opened by the dashboard key). Its only caller is
+`command`: the Command Center sends its dashboard key with each question
+(`?dk=` on the stream, like the access code), and only then asks as
+"command" instead of "web" - so the public web chat never sees usage data
+(tested: with the key, routed to the usage app and answered from it; without,
+"I don't have information"). Days are counted in UTC. After a deploy that
+changes the usage API: `API_URL=https://ai-engineer-api-jet.vercel.app npm run
+app -- add ../apps/usage.json`.
+
 Reading answers aloud in every language: English (Latin letters) uses the
 device's own voice - free, nothing leaves the device. Malayalam, Arabic,
 Hindi and other scripts, which most phones and browsers have no voice for

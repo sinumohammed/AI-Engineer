@@ -1,0 +1,17 @@
+{
+  "name": "usage",
+  "description": "This AI service's own usage and cost: how many questions were asked (today, this week, this month), by which app (the web chat, the Command Center, masjid) and which user inside an app, tokens, estimated cost in US dollars, errors, response times, agents and models used, recent requests, connected-app calls",
+  "openapi": "https://ai-engineer-api-jet.vercel.app/api/admin/usage/openapi.json",
+  "callers": ["command"],
+  "user": "none",
+  "token": "$DASHBOARD_KEY",
+  "dataLevel": "internal",
+  "timezone": "UTC",
+  "timeoutMs": 20000,
+  "examples": [
+    "How many questions came in today?",
+    "What has the masjid app cost this month?",
+    "Who are the top users?",
+    "Did anything fail recently?"
+  ]
+}

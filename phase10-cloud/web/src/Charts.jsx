@@ -5,6 +5,9 @@ import { useLayoutEffect, useRef, useState } from "react";
 // light and dark, given out in a fixed order: a caller keeps its colour
 // whatever the date range, and a 9th caller folds into "Other".
 
+// Callers by name: the web chat, the Command Center, or a connected app.
+export const callerLabel = (c) => (c === "web" ? "Web chat" : c === "command" ? "Command Center" : c);
+
 export const fmtInt = (n) => Number(n ?? 0).toLocaleString();
 export function fmtTokens(n) {
   const v = Number(n ?? 0);
@@ -88,7 +91,7 @@ export function DailyChart({ rows, days, colors }) {
           {callers.map((c) => (
             <span key={c}>
               <i style={{ background: colors[c] }} />
-              {c === "web" ? "Web chat" : c}
+              {callerLabel(c)}
             </span>
           ))}
         </div>
@@ -143,7 +146,7 @@ export function DailyChart({ rows, days, colors }) {
             .map((c) => (
               <span key={c} className="tip-row">
                 <i style={{ background: colors[c] }} />
-                {c === "web" ? "Web chat" : c}
+                {callerLabel(c)}
                 <b>{fmtInt(byDay[dates[hover]][c])}</b>
               </span>
             ))}
