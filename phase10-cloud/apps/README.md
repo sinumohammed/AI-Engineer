@@ -105,6 +105,36 @@ knows nothing about the app.
 `servers[0].url` may be relative ("/api" - relative to where the file is) or a
 full https URL. Only GET operations are used; at most 15 per app.
 
+## Or: an MCP server instead of `openapi.json` (10d.9)
+
+An app that already offers its data as an MCP server (Streamable HTTP) needs no
+OpenAPI file: its entry gives `"mcp": "<server URL>"` in place of `"openapi"`.
+At `add` and `refresh` this service asks the server for its tools
+(`initialize`, `tools/list`) and stores them like OpenAPI operations; a
+question calls them with `tools/call` (`../api/mcpTools.js`). Everything else -
+planner, `callers`, `user`, `whoami`, the token, citations as "<app> API" - is
+the same.
+
+- **Read-only:** MCP has no GET, so only tools the server marks
+  `annotations: { readOnlyHint: true }` are used. A tool without the mark is
+  left out even when `allow` names it - the server's owner adds the mark.
+- `allow` lists tool names: `["duty_on_date", "list_dues"]`.
+- The same headers as OpenAPI calls: `Authorization: Bearer <token>` and
+  `X-User-Token`. A tool refusing a user returns `isError: true` with its reason
+  as text ("not allowed for this user: ..."), which the answer passes on.
+- Sessions: a server that gives an `Mcp-Session-Id` is kept for 10 minutes per
+  user and started again if the server forgets it; stateless servers work too.
+
+`../examples/demo-mcp/server.js` is a runnable example (official MCP SDK): the
+demo hall data as tools, wrapping `../examples/demo-app` - how an existing API
+can be put behind MCP without changing it. Entry: `demo-hall-mcp.json`.
+
+```
+node examples/demo-app/server.js & node examples/demo-mcp/server.js &   (npm install in examples/ first)
+npm run app -- add ../apps/demo-hall-mcp.json
+npm run eval:mcp            (in eval/; ANSWERS=1 adds the model questions)
+```
+
 ## The app's entry here
 
 `masjid.example.json` - copy to `masjid.json`, put the token in `../.env` as
@@ -115,6 +145,7 @@ full https URL. Only GET operations are used; at most 15 per app.
 | `name` | a-z 0-9 -, shown as "<name> API" under answers |
 | `description` | what data the app has - the router and planner decide by it |
 | `openapi` | URL of the app's OpenAPI file (https; http only on this machine) |
+| `mcp` | instead of `openapi`: URL of the app's MCP server (Streamable HTTP, e.g. `https://app.example.com/mcp`) - see above |
 | `token` | `"$ENV_NAME"` reads it from `../.env`; stored encrypted |
 | `callers` | **required** - who may ask this app's data: `"web"` (this service's web chat) and/or `/api/ask` app names (the name of the app's ask-key: `npm run app -- askkey new <name>`, or `APP_API_KEYS`). The masjid entry is `["masjid"]`: only the masjid app's own chat, never the general web chat |
 | `user` | `"none"` (default), `"optional"` or `"required"` - pass the caller's logged-in user on to the app (header `X-User-Token`), so it answers as that user may see it; `"required"`: never used without a user |
@@ -122,10 +153,10 @@ full https URL. Only GET operations are used; at most 15 per app.
 | `dataLevel` | `public`, `internal` (default) or `confidential` - see 10d.3; confidential apps only work with a local model |
 | `timezone` | the app's time zone, so "today" is the app's day (e.g. `Asia/Kolkata`) |
 | `timeoutMs` | per call, default 60000 (a free Render backend can take ~50 s to wake up) |
-| `allow` | optional `["GET /ai/today-duty", ...]` - use only these operations |
+| `allow` | optional `["GET /ai/today-duty", ...]` - use only these operations (MCP: tool names) |
 | `examples` | 3-5 questions users ask - kept with the app for testing |
 
-After the app adds or changes an endpoint in its `openapi.json`:
+After the app adds or changes an endpoint in its `openapi.json` (or a tool on its MCP server):
 `npm run app -- refresh <name>`.
 
 ## Who sees what: callers and users

@@ -5,6 +5,7 @@
 //               parameters? none, if the question is not about the apps' data
 //            -> code checks each call against the app's stored operations
 //            -> GET <app's API>/<path> with the app's token -> JSON
+//               (an MCP app: tools/call on its server, mcpTools.js)
 //            -> each result is one numbered excerpt, cited like a handbook
 //               page: "masjid API: GET /ai/today-duty?date=2026-10-16"
 //
@@ -14,7 +15,8 @@
 // "model calls the same tool forever" (the Phase 7 get_current_time bug).
 //
 // Rules in code, whatever an app's entry says:
-// - GET only, and only operations stored from the app's OpenAPI file
+// - GET only, and only operations stored from the app's OpenAPI file (MCP:
+//   only tools the server marks read-only)
 // - the URL must stay under the app's base URL; https only (http on this
 //   machine for tests); redirects refused, so the token goes nowhere else
 // - a time limit per call (the app's timeoutMs) and a size limit on what
@@ -27,6 +29,7 @@ import { chat } from "./llmClient.js";
 import { JUDGE_MODEL, JUDGE_REASONING_EFFORT } from "./config.js";
 import { listApps, appToken, checkUrl } from "./appRegistry.js";
 import { describeOperation } from "./openapiTools.js";
+import { callMcpTool } from "./mcpTools.js";
 import { appAllowed } from "./dataPolicy.js";
 import { currentAccess, callerMayUse } from "./appAccess.js";
 import { createHash } from "node:crypto";
@@ -142,6 +145,13 @@ export function buildUrl(app, op, args) {
 // One GET call. Never throws: a failure becomes a result the model can
 // report ("the masjid app did not answer in 60 s").
 export async function callOperation(app, op, args, access = currentAccess()) {
+  if (app.kind === "mcp") {
+    try {
+      return await callMcpTool(app, op, args, { token: appToken(app), userToken: app.user !== "none" ? access.userToken : undefined, maxChars: MAX_RESULT_CHARS });
+    } catch (err) {
+      return { ok: false, error: err.message }; // e.g. a token that cannot be decrypted
+    }
+  }
   let url;
   try {
     url = buildUrl(app, op, args);
@@ -221,7 +231,7 @@ function addWhoami(calls, apps, question, access) {
 // A result as a numbered excerpt. The first line is the source label under
 // the answer (citations.js); `app` marks it for the prompt note below.
 function toChunk(app, op, r) {
-  const head = `${app.name} API: ${r.shown ?? `GET ${op.path}`}`;
+  const head = `${app.name} API: ${r.shown ?? op.tool ?? `GET ${op.path}`}`;
   if (r.ok && op.id === app.whoami) {
     return { source: `${app.name} API`, app: app.name, content: `${head}\n(The user asking this question - "I", "me" and "my" mean this record; live data - today is ${today(app.timezone ?? "UTC")})\n${r.text}` };
   }

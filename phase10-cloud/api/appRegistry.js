@@ -4,10 +4,12 @@
 // with no deployment of this service.
 //
 // An entry, as given by the admin:
-//   { name, description, openapi, callers, user?, token?, dataLevel?, timezone?, timeoutMs?, allow?, examples? }
+//   { name, description, openapi | mcp, callers, user?, token?, dataLevel?, timezone?, timeoutMs?, allow?, examples? }
 // - description: what the router and planner read to decide when to ask this app
 // - openapi: the URL of the app's OpenAPI 3 file; read at registration, so the
 //   app's GET operations are stored with the entry (openapiTools.js)
+// - mcp: instead of openapi - the URL of the app's MCP server (Streamable
+//   HTTP); its read-only tools are stored the same way (mcpTools.js, 10d.9)
 // - token: sent as "Authorization: Bearer <token>"; stored encrypted
 // - dataLevel: public | internal | confidential (dataPolicy.js, default internal)
 // - callers: who may ask this app's data - "web" (the web chat) and/or the
@@ -21,12 +23,14 @@
 //   sends to this app also gets that call, so "Do I have pending dues?" is
 //   answered for the asking user (apps.js).
 //
-// Safety does not depend on the entry: only GET, only the operations in the
-// stored list, only https (http on this machine for tests) - apps.js.
+// Safety does not depend on the entry: only GET (MCP: only tools marked
+// read-only), only the operations in the stored list, only https (http on
+// this machine for tests) - apps.js.
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { redis } from "./sessionStore.js";
 import { APPS_KEY, APP_SECRETS_KEY } from "./config.js";
 import { readOpenApi } from "./openapiTools.js";
+import { listMcpTools, readMcpTools } from "./mcpTools.js";
 
 export const DATA_LEVELS = ["public", "internal", "confidential"];
 export const USER_MODES = ["none", "optional", "required"];
@@ -132,7 +136,8 @@ function validate(input, existing) {
   if (!/^[a-z0-9-]{1,30}$/.test(e.name ?? "")) throw new AppConfigError('name: 1-30 characters, a-z 0-9 and "-"');
   if (typeof e.description !== "string" || e.description.trim().length < 10) throw new AppConfigError("description: say in a sentence what data the app has (the router reads it)");
   e.description = e.description.trim().slice(0, 300);
-  checkUrl(e.openapi, "openapi");
+  if (Boolean(e.openapi) === Boolean(e.mcp)) throw new AppConfigError('give the app\'s "openapi" file URL or its "mcp" server URL - one of the two');
+  checkUrl(e.openapi ?? e.mcp, e.openapi ? "openapi" : "mcp");
   e.dataLevel = e.dataLevel ?? existing?.dataLevel ?? "internal";
   if (!DATA_LEVELS.includes(e.dataLevel)) throw new AppConfigError(`dataLevel: one of ${DATA_LEVELS.join(", ")}`);
   e.callers = e.callers ?? existing?.callers;
@@ -141,7 +146,7 @@ function validate(input, existing) {
   }
   e.user = e.user ?? existing?.user ?? "none";
   if (!USER_MODES.includes(e.user)) throw new AppConfigError(`user: one of ${USER_MODES.join(", ")}`);
-  if (e.whoami !== undefined && (typeof e.whoami !== "string" || !e.whoami)) throw new AppConfigError("whoami: an operation id from the app's OpenAPI file");
+  if (e.whoami !== undefined && (typeof e.whoami !== "string" || !e.whoami)) throw new AppConfigError("whoami: an operation id from the app's OpenAPI file, or a tool name of its MCP server");
   if (e.timezone) {
     try {
       new Intl.DateTimeFormat("en", { timeZone: e.timezone });
@@ -151,7 +156,9 @@ function validate(input, existing) {
   }
   e.timeoutMs = Number(e.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   if (!(e.timeoutMs >= 1000 && e.timeoutMs <= 120000)) throw new AppConfigError("timeoutMs: 1000 to 120000");
-  if (e.allow !== undefined && !(Array.isArray(e.allow) && e.allow.every((a) => typeof a === "string"))) throw new AppConfigError('allow: a list like ["GET /ai/today-duty"]');
+  if (e.allow !== undefined && !(Array.isArray(e.allow) && e.allow.every((a) => typeof a === "string"))) {
+    throw new AppConfigError(`allow: a list like ${e.mcp ? '["duty_on_date"] (tool names)' : '["GET /ai/today-duty"]'}`);
+  }
   if (e.examples !== undefined && !(Array.isArray(e.examples) && e.examples.length <= 10 && e.examples.every((q) => typeof q === "string"))) {
     throw new AppConfigError("examples: up to 10 questions");
   }
@@ -165,15 +172,16 @@ export async function saveApp(input) {
   const existing = await rawApp(input?.name);
   const e = validate(input, existing);
   const token = e.token ?? (existing?.tokenEnc ? decrypt(existing.tokenEnc) : null);
-  const { baseUrl, title, operations, skipped } = await readSpec(e.openapi, token, e.timeoutMs, e.allow);
-  checkUrl(baseUrl, "the OpenAPI servers[0].url");
+  const { baseUrl, title, operations, skipped } = e.mcp ? await readMcpServer(e.mcp, token, e.timeoutMs, e.allow) : await readSpec(e.openapi, token, e.timeoutMs, e.allow);
+  checkUrl(baseUrl, e.mcp ? "mcp" : "the OpenAPI servers[0].url");
   if (e.whoami && !operations.some((o) => o.id === e.whoami)) {
-    throw new AppConfigError(`whoami: "${e.whoami}" is not one of the app's GET operations (${operations.map((o) => o.id).join(", ")})`);
+    throw new AppConfigError(`whoami: "${e.whoami}" is not one of the app's ${e.mcp ? "read-only tools" : "GET operations"} (${operations.map((o) => o.id).join(", ")})`);
   }
   const entry = {
     name: e.name,
+    kind: e.mcp ? "mcp" : "openapi",
     description: e.description,
-    openapi: e.openapi,
+    ...(e.mcp ? { mcp: e.mcp } : { openapi: e.openapi }),
     baseUrl,
     title,
     dataLevel: e.dataLevel,
@@ -202,17 +210,34 @@ async function readSpec(openapiUrl, token, timeoutMs, allow) {
   }
 }
 
+// An MCP app: its tools, read now and stored, as for an OpenAPI file. The
+// server's own URL is the "base URL" every call goes to.
+async function readMcpServer(url, token, timeoutMs, allow) {
+  let listed;
+  try {
+    listed = await listMcpTools(url, { token, timeoutMs });
+  } catch (err) {
+    const why = err.name === "TimeoutError" ? `no answer in ${timeoutMs / 1000} s` : err.status === 401 || err.status === 403 ? `${err.message} - check the token` : err.message;
+    throw new AppConfigError(`could not read the MCP server's tools: ${why}`, 502);
+  }
+  try {
+    return { baseUrl: url.replace(/\/$/, ""), title: listed.title, ...readMcpTools(listed.tools, { allow }) };
+  } catch (err) {
+    throw new AppConfigError(`MCP server: ${err.message}`, 422);
+  }
+}
+
 async function rawApp(name) {
   if (typeof name !== "string") return null;
   const v = await redis.hGet(APPS_KEY, name);
   return v ? JSON.parse(v) : null;
 }
 
-// Read the app's OpenAPI file again - after the app added or changed an endpoint.
+// Read the app's OpenAPI file (or MCP tools) again - after the app added or changed an endpoint.
 export async function refreshApp(name) {
   const existing = await rawApp(name);
   if (!existing) throw new AppConfigError(`no app named "${name}"`, 404);
-  const { tokenEnc, operations, baseUrl, title, updatedAt, ...config } = existing;
+  const { tokenEnc, operations, baseUrl, title, updatedAt, kind, ...config } = existing;
   return saveApp(config);
 }
 

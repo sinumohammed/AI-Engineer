@@ -2,7 +2,7 @@
 //
 //   npm run app -- list
 //   npm run app -- add <app.json>        add or replace an app (see ../apps/*.example.json)
-//   npm run app -- refresh <name>        read its OpenAPI file again after the app changed
+//   npm run app -- refresh <name>        read its OpenAPI file (or MCP tools) again after the app changed
 //   npm run app -- remove <name>
 //   npm run app -- try "<question>" [user-token]   which app calls a question makes, and what came back
 //                                        (user-token: as a logged-in user of an app with "user")
@@ -69,9 +69,9 @@ async function call(method, path, body) {
 
 function showApp(a) {
   console.log(`${a.name} - ${a.description}`);
-  console.log(`  ${a.baseUrl}  (${a.dataLevel}${a.timezone ? `, ${a.timezone}` : ""}, token ${a.hasToken ? "stored" : "none"}, updated ${a.updatedAt})`);
+  console.log(`  ${a.kind === "mcp" ? "MCP " : ""}${a.baseUrl}  (${a.dataLevel}${a.timezone ? `, ${a.timezone}` : ""}, token ${a.hasToken ? "stored" : "none"}, updated ${a.updatedAt})`);
   console.log(`  asked by: ${(a.callers ?? []).join(", ") || "nobody"}; user: ${a.user ?? "none"}`);
-  for (const op of a.operations) console.log(`  GET ${op.path}  - ${op.summary}${op.params.length ? `  [${op.params.map((p) => `${p.name}${p.required ? "" : "?"}`).join(", ")}]` : ""}`);
+  for (const op of a.operations) console.log(`  ${op.tool ? `tool ${op.tool}` : `GET ${op.path}`}  - ${op.summary}${op.params.length ? `  [${op.params.map((p) => `${p.name}${p.required ? "" : "?"}`).join(", ")}]` : ""}`);
 }
 
 if (cmd === "list") {
@@ -91,7 +91,7 @@ if (cmd === "list") {
   const { app, skipped } = await call("PUT", `/apps/${encodeURIComponent(entry.name)}`, entry);
   console.log(`Saved at ${API_URL}:`);
   showApp(app);
-  const notes = [skipped.notGet && `${skipped.notGet} non-GET ignored`, skipped.notAllowed && `${skipped.notAllowed} not in "allow"`, skipped.overLimit && `${skipped.overLimit} over the limit of 15`].filter(Boolean);
+  const notes = [skipped.notGet && `${skipped.notGet} non-GET ignored`, skipped.notReadOnly && `${skipped.notReadOnly} tool${skipped.notReadOnly > 1 ? "s" : ""} not marked read-only ignored`, skipped.notAllowed && `${skipped.notAllowed} not in "allow"`, skipped.overLimit && `${skipped.overLimit} over the limit of 15`].filter(Boolean);
   if (notes.length) console.log(`  (${notes.join(", ")})`);
 } else if (cmd === "refresh") {
   const { app } = await call("POST", `/apps/${encodeURIComponent(arg)}/refresh`);

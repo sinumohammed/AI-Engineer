@@ -82,12 +82,14 @@ export function readOpenApi(doc, { openapiUrl, allow } = {}) {
 
 // One line per operation, for the planner's prompt:
 //   masjid.today_duty - GET /ai/today-duty - Who is on duty today. Params: date (query, string, date, optional): ...
+// An MCP app's tool (mcpTools.js) has no method or path, and its parameters are arguments:
+//   hall.duty_on_date - tool - Volunteers on duty on one day. Params: date (string, optional): ...
 export function describeOperation(appName, op) {
   const params = op.params.length
     ? " Params: " +
       op.params
-        .map((p) => `${p.name} (${p.in}, ${p.type}${p.format ? `, ${p.format}` : ""}${p.enum ? `, one of ${p.enum.join("|")}` : ""}, ${p.required ? "required" : "optional"})${p.description ? `: ${p.description}` : ""}`)
+        .map((p) => `${p.name} (${p.in === "arg" ? "" : `${p.in}, `}${p.type}${p.format ? `, ${p.format}` : ""}${p.enum ? `, one of ${p.enum.join("|")}` : ""}, ${p.required ? "required" : "optional"})${p.description ? `: ${p.description}` : ""}`)
         .join("; ")
     : "";
-  return `${appName}.${op.id} - GET ${op.path} - ${op.summary}${op.description ? ` ${op.description}` : ""}.${params}`;
+  return `${appName}.${op.id} - ${op.tool ? "tool" : `GET ${op.path}`} - ${op.summary}${op.description ? ` ${op.description}` : ""}.${params}`;
 }

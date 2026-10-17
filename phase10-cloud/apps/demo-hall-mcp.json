@@ -1,0 +1,20 @@
+{
+  "name": "hall-mcp",
+  "description": "Community hall (demo data, over MCP): volunteer duty roster by day, members, monthly dues paid or pending, announcements",
+  "mcp": "http://localhost:4020/mcp",
+  "callers": [
+    "web",
+    "eval"
+  ],
+  "user": "optional",
+  "whoami": "me",
+  "token": "demo-token",
+  "dataLevel": "internal",
+  "timezone": "Asia/Kolkata",
+  "timeoutMs": 10000,
+  "examples": [
+    "Who is on duty today?",
+    "Which members have pending dues?",
+    "What was the latest announcement?"
+  ]
+}
