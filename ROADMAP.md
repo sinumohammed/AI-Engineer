@@ -335,7 +335,7 @@ Original picks (Windows laptop):
      - Reachability: the Vercel function can only call an API on the public internet; an app only on the Mac or an office network works from the local setup only.
      - Needed from the user to start: which app, its endpoints or OpenAPI file, how it authenticates, 3-5 example questions (they become the eval).
   - **Order agreed 2026-10-13:** #1 → #3 → #4 → #5.
-  5. **A WhatsApp or Telegram channel** for the same agent.
+  5. ✅ **A WhatsApp or Telegram channel** for the same agent. **Telegram live 2026-10-17 as step 10d.13** (`phase10-cloud/README.md`; masjid `server/telegram.js`): the masjid assistant as a bot - link by sharing one's own phone number or a one-time link from the app, guests get the duty schedule, voice notes, same roles and limits as the app's chat; `eval:masjid ONLY=telegram` 21 checks against a fake Telegram, Groq 67/67. Found on the way: a member's search for another member's dues said "owes nothing" - now refused. Next: WhatsApp (Meta Cloud API) on the same `channel_links` tables.
   - ✅ Fixed 2026-10-14: with a short PDF and no handbook excerpt, qwen cited the PDF's heading number ("3. Hotels" -> [3]) instead of [1], so no source was listed - now a number that matches no excerpt becomes the file's, in code (`fixFileCitations`); 0/3 to 3/3 both modes.
 - Small known issues: when the attachment and the handbook both answer, the synthesizer can put a handbook number on a fact from the file; an answer about a scanned file once called it "the company's internal document"; this Mac's DNS sometimes fails for `api.groq.com` only (local runs; check with `--resolve` and an IP from 8.8.8.8).
 

@@ -1150,6 +1150,41 @@ the details are in its `MASJID_APP_DOCUMENTATION.md`.
   database), screenshots on a phone and a computer, light and dark, nothing
   wider than the screen.
 
+### 10d.13 The masjid assistant on Telegram (2026-10-17)
+
+Roadmap #5, Telegram first (WhatsApp later on the same link tables). The
+user's choice: the bot is the masjid assistant. It lives in the masjid repo
+(`server/telegram.js`, live), not here: the logins, roles and daily limits
+are there, and this service stays generic - the bot asks `/api/ask` with the
+masjid key like the app's chat does.
+
+```
+Telegram --POST /api/telegram/webhook (secret header, made from the bot token)--> masjid server
+   200 at once, the rest in runInBackground (waitUntil); update_id seen before -> skipped
+   channel_links: Telegram account -> masjid user (none: a guest, counted as tg:<id>)
+   voice note -> getFile -> /api/assistant transcribe path (Malayalam by default, /voice)
+   askAssistant(): extracted from /api/assistant/ask - same roles, limits, user.ref
+<-- sendMessage: Markdown -> Telegram HTML (tables as <pre>), plain text if refused
+```
+
+- Linking by the person: **Share my phone number** (Telegram's contact button;
+  `contact.user_id` must be the sender; last 10 digits vs `members.phone`, the
+  number members log in with; not for the admin), or a one-time `t.me` link
+  from the app (Profile for members, Settings for the admin; 10 minutes, once).
+  Private chats only. `/whoami /new /voice /unlink /help`.
+- Settings → Telegram (admin): bot status, linked accounts, **Connect the
+  bot** (`setWebhook` + the command menu). Set up: `TELEGRAM_BOT_TOKEN` in
+  the masjid Vercel project, redeploy, Connect.
+- Tests: `ONLY=telegram npm run eval:masjid` runs a fake Telegram (port 5082)
+  - 21 checks: secret, phone linking (own number only, unknown number), link
+  once only, retries, groups, roles over Telegram, voice (`VOICE=1`). qwen
+  21/21, Groq 67/67 with the earlier checks.
+- Found by it: `/api/ai/pending-dues?search=<another member>` asked by a member
+  returned `hasPendingDues: false` (the list was already cut to their own),
+  and the answer was "he owes nothing". Now 403, as `/dues-by-year`.
+- Live 2026-10-17: the user connected the bot, linked as the admin, and it
+  answered.
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and

@@ -453,6 +453,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.10 | Claude Code reads the masjid data: personal MCP tokens made in masjid Settings | Live: Claude Code connected to masjid and answered from its data; token checks 12/12 |
 | 10d.11 | Tables and charts in answers, for apps whose screen can show them | Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged |
 | 10d.12 | The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions | Screenshots on phone and computer, light and dark; colours checked for colour blindness |
+| 10d.13 | The masjid assistant on Telegram: members link by sharing their phone number, voice notes answered | Live: linked as the admin, the bot answered; 21 bot checks against a fake Telegram, Groq 67/67 |
 
 - **Challenges, in plain terms:**
 
@@ -677,6 +678,21 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   question in a sentence. Red against green failed a colour-blindness check (a script measured
   it - ΔE 3.7); emerald and gold pass. Built while the user watched two local previews: the new
   frontend against the live API, and a local backend on a throwaway database.
+- **The masjid assistant on Telegram (10d.13):** a second door to the same assistant. The bot
+  lives in the masjid app, not in the AI service, because the logins, roles and limits are there:
+  ```
+  Telegram --webhook (secret header)--> masjid server /api/telegram/webhook
+     answers 200 at once, the rest runs in waitUntil; an update seen before is skipped
+     which login? channel_links: Telegram account -> masjid user   (none: a guest)
+     voice note -> download -> speech-to-text (Malayalam by default) -> shown back
+     askAssistant(): the same function as the app's chat - same roles, same daily limits
+  <-- sendMessage (the Markdown answer turned into Telegram's HTML)
+  ```
+  Linking is done by the person: "Share my phone number" (Telegram sends the account's own
+  number - checked that the contact is the sender - matched to the member record), or a one-time
+  link from the app (10 minutes, works once). Private chats only, so dues never show in a group.
+  Tested against a fake Telegram, which found an old bug: a member asking about another member's
+  dues was told "he owes nothing" (the list was already cut to the member's own) - now refused.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -800,6 +816,8 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 108 | 10d.11 | Pending dues came as a plain list; tables and graphs on request (asked by the user) | `display` on `/api/ask`; a table rule (and a chart block when asked) in the answer prompt, only for apps that ask; the masjid chat draws them | Tables and charts 3/3 on qwen and Groq, every figure from the API; other evals unchanged |
 | 109 | 10d.11 | Charts empty in a screenshot, a table's amount column off a phone screen | Charts without grow-in animation (the chat resizes often); text columns wrap, amounts never do | All columns on a 390 px screen; charts drawn at once |
 | 110 | 10d.12 | Dashboard charts: one dot per day (~280), no values; red/green for in/out | Month-by-month bars with the answer above, categories with amount and share; emerald/gold - red/green failed the colour-blindness check (ΔE 3.7) | Every check passes, light and dark; opening balances (a third of "income") left out and named |
+| 111 | 10d.13 | The assistant only inside the app; members use their messaging apps every day (roadmap #5) | A Telegram bot in the masjid app: webhook, link by the account's own phone number or a one-time app link, voice notes, the app chat's own ask function | 21 bot checks against a fake Telegram; Groq 67/67; live: linked as the admin and answered |
+| 112 | 10d.13 | A member asking for Abdul Rasheed's dues heard "he has no pending dues" - he owed ₹3000. The check passed: it only looked for the amount | `pending-dues?search=` another member, asked by a member: refused (403), as `dues_by_year` already was; the check also fails on "no pending" and wants "admin" | Refused, pointing to the admin, on Groq and qwen. The app's own chat had the same bug |
 
 Where things stand (Phase 10 code):
 
@@ -825,6 +843,7 @@ Where things stand (Phase 10 code):
 | Tables and charts in answers (10d.11): a table with every member and amount, "as a bar chart" with the same figures, one fact stays a sentence | 3/3 (`eval:masjid ONLY=tables`) | 3/3 on Groq |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 | `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model); with the 10 MCP checks (10d.9) 61/63, and over MCP (`CONNECTOR=mcp`) 62/63 | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
+| Telegram bot (10d.13), against a fake Telegram: wrong secret, linking by phone (own number only, unknown number) and by app link (once only), a retried update not answered twice, groups ignored, roles over Telegram, voice notes | 21/21 (`eval:masjid ONLY=telegram`, voice with `VOICE=1`) | 21/21 on Groq; live: linked as the admin, answered |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -918,6 +937,9 @@ what changed.
 25. **What can be measured, measure - even colour.** Green against red looked fine and failed a
     colour-blindness check by a wide margin (10d.12); a script found it in a second. The same goes
     for a model's numbers in a table: check each one against the data, do not eyeball it (10d.11).
+26. **A check must fail on the wrong answer, not only on the leak.** "Does not show Abdul's
+    amount" passed while the answer said Abdul owed nothing - safe, and false (10d.13). Write down
+    what a right answer says, and check for that.
 
 ### What changed when the data got real (Phase 9)
 
@@ -967,6 +989,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
 | Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps`; an MCP app: `"mcp": "<url>"` instead of `"openapi"` in its file (`apps/demo-hall-mcp.json`), test `npm run eval:mcp`; masjid over MCP: `CONNECTOR=mcp npm run eval:masjid` |
 | Claude Code with the masjid tools | masjid app → Settings → Claude access (MCP) → Create, then `claude mcp add -s user --transport http masjid https://masjid-management-omega.vercel.app/api/ai/mcp --header "Authorization: Bearer mcp_..."`; check with `claude mcp list` and `/mcp`. Remove: `claude mcp remove masjid -s user`, and Revoke in Settings (the one that closes access; do it if the Mac is lost - the token is in plain text in `~/.claude.json` and never expires) |
+| The masjid assistant on Telegram | masjid app → Settings → Telegram (bot status, Connect the bot, Link my Telegram); members: Profile → Telegram, or share their phone number with the bot. Test: `cd phase10-cloud/eval && ONLY=telegram npm run eval:masjid` (a fake Telegram; `VOICE=1` adds a voice note) |
 | The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; `ONLY=chips` only the Malayalam ready questions - run those with the Groq settings; needs the masjid repo at `MASJID_REPO`) |
 | A key for a new app | `cd phase10-cloud/api && API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new <name>` - works at once (also `askkey list`, `askkey revoke <id or name>`) |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
@@ -1027,6 +1050,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `37dca3b` | Phase 10d.10: `eval:masjid` checks for personal MCP tokens (masjid repo: `37cbae3` personal MCP tokens in Settings) |
 | `ba9e0c0` | Phase 10d.11: tables and charts in answers (masjid repo: `a16c824` the chat draws them) |
 | - | Phase 10d.12, masjid repo branch `redesign-1`: `29b24d7` look step 1, `0395be0` About the masjid, `58b2c8e` photos in the app, `4d8d296` / `c4d32aa` / `16678ae` the other pages, `ed2f68a` the assistant page on phones, `75182bb` the dashboard's charts |
+| `7fbd63e` | Phase 10d.13: `eval:masjid` Telegram checks against a fake Telegram (masjid repo: `256f15a` the Telegram bot and the dues-search fix, `2d4d0ec` the Profile spinner fix) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
