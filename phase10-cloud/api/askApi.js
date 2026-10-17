@@ -1,6 +1,7 @@
 // Phase 10d: POST /api/ask - the same agent for other apps, as one JSON
 // request and one JSON answer (no stream, no UI). Each app sends its own key
-// (APP_API_KEYS in config.js) as "Authorization: Bearer <key>" instead of the
+// (stored hashed in Redis, askKeys.js, or in APP_API_KEYS in config.js) as
+// "Authorization: Bearer <key>" instead of the
 // web app's access code, so a key can be given to one app and taken back
 // from it without touching the others.
 //
@@ -32,6 +33,7 @@ import { getHistory, getSummary, appendTurn, clearSession, countAppQuestion } fr
 import { withAccess } from "./appAccess.js";
 import { transcribe, TranscribeError } from "./transcribe.js";
 import { metered, meteredJob, recordUsage } from "./usage.js";
+import { appForKey, hasAskKeys } from "./askKeys.js";
 
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
@@ -39,22 +41,32 @@ const USER_REF = CONVERSATION_ID;
 
 // Compared through hashes with timingSafeEqual, as the access code is (server.js).
 const digest = (s) => createHash("sha256").update(String(s)).digest();
-// Which app a request comes from, or null. Every key is compared, so the time
-// taken does not say which app's key a guess was close to. With no keys set
-// and no access code (the Mac), the endpoint is open as "local".
-function appFor(req) {
-  if (!APP_API_KEYS.length) return ACCESS_CODE ? null : "local";
+// Which app a request comes from, or null. The keys in APP_API_KEYS are all
+// compared, so the time taken does not say which app's key a guess was close
+// to; then the keys stored in Redis, found by their hash (askKeys.js). With no
+// keys anywhere and no access code (the Mac), the endpoint is open as "local".
+async function appFor(req) {
   const given = req.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-  if (!given) return null;
-  let found = null;
-  for (const { name, key } of APP_API_KEYS) if (timingSafeEqual(digest(given), digest(key))) found = name;
-  return found;
+  if (given) {
+    let found = null;
+    for (const { name, key } of APP_API_KEYS) if (timingSafeEqual(digest(given), digest(key))) found = name;
+    if (found) return found;
+    const stored = await appForKey(given);
+    if (stored) return stored;
+  }
+  return !ACCESS_CODE && !(await hasAskKeys()) ? "local" : null;
 }
 
 export const askApi = express.Router();
 askApi.use(express.json({ limit: "64kb" }));
-askApi.use((req, res, next) => {
-  const appName = appFor(req);
+askApi.use(async (req, res, next) => {
+  let appName;
+  try {
+    appName = await appFor(req);
+  } catch (err) {
+    console.error(`[ask] could not check the key: ${err.message}`);
+    return res.status(503).json({ error: "Could not check the API key - please try again." });
+  }
   if (!appName) return res.status(401).json({ error: "Missing or unknown API key - send Authorization: Bearer <key>." });
   req.appName = appName;
   next();

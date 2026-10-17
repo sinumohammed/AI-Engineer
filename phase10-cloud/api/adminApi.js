@@ -11,6 +11,10 @@
 //                                          which app calls a question makes, and what came back.
 //                                          Any app, whatever its callers; a userToken is passed on
 //                                          as a caller would (apps with user: "required" need one).
+//   GET    /api/admin/ask-keys             the /api/ask keys (askKeys.js) - app, id, last 4 characters; never a key
+//   POST   /api/admin/ask-keys             { name, key? } - a new key for an app, shown once in the answer
+//                                          (key: store an existing one, e.g. moved from APP_API_KEYS)
+//   DELETE /api/admin/ask-keys/:idOrName   take back one key (id) or all of an app's keys (name)
 //   GET    /api/admin/usage?days=30        Phase 10e: usage and cost per app, user, agent, model and
 //                                          app call, latency, recent requests (usage.js) - the Command Center
 //   GET    /api/admin/usage/{summary,users,daily,recent,app-calls}, /usage/openapi.json
@@ -26,6 +30,7 @@ import { appContext } from "./apps.js";
 import { withAccess } from "./appAccess.js";
 import { usageReport, freeTierToday } from "./usage.js";
 import { USAGE_OPENAPI } from "./usageOpenapi.js";
+import { createAskKey, listAskKeys, revokeAskKeys } from "./askKeys.js";
 
 const digest = (s) => createHash("sha256").update(String(s)).digest();
 
@@ -77,6 +82,9 @@ adminApi.post(
     return { calls: data.calls, dropped: data.dropped, excerpts: data.chunks.map((c) => c.content.slice(0, 1500)) };
   })
 );
+adminApi.get("/ask-keys", handle(() => listAskKeys()));
+adminApi.post("/ask-keys", handle((req) => createAskKey(req.body?.name, req.body?.key)));
+adminApi.delete("/ask-keys/:idOrName", handle((req) => revokeAskKeys(req.params.idOrName)));
 adminApi.get(
   "/usage",
   handle(async (req) => {

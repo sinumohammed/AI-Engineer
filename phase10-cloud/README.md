@@ -70,15 +70,17 @@ masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> mas
 | Neon | handbook vectors | `NEON_DATABASE_URL` | `DATABASE_URL` | - | Neon console |
 | Upstash | history, attachments, app registry | `UPSTASH_REDIS_URL` | `REDIS_URL` | - | Upstash console |
 | Web chat access code | everyone using the live chat | `HOSTED_ACCESS_CODE` | `ACCESS_CODE` | - | any string |
-| eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | `eval=...` in `APP_API_KEYS` | - | `npm run new-app-key -- eval` |
-| masjid app key | the masjid server asking the AI | - | `masjid=...` in `APP_API_KEYS` | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run new-app-key -- masjid` |
+| eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | `eval=...` in `APP_API_KEYS` (until moved to Redis) | - | `npm run app -- askkey new eval` |
+| masjid app key | the masjid server asking the AI | - | `masjid=...` in `APP_API_KEYS` (until moved to Redis) | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run app -- askkey new masjid` |
 | Admin key | `npm run app` (connected apps) | `ADMIN_KEY` | `ADMIN_KEY` | - | `npm run app -- keys` |
 | Dashboard key | the Command Center (`#/command`): usage only, read-only; also the token of the `usage` app | `DASHBOARD_KEY` | `DASHBOARD_KEY` (set in the dashboard - piping it to `vercel env add` stored something else) | - | `openssl rand -base64 24`, then `npm run app -- add ../apps/usage.json` |
 | App secrets key | encrypts app tokens in Redis | `APP_SECRETS_KEY` | `APP_SECRETS_KEY` | - | `npm run app -- keys` (then re-add every app) |
 | Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid.json` |
 
-`APP_API_KEYS` on Vercel holds every `/api/ask` app: `eval=...,masjid=...`.
-A changed Vercel value applies after the next `npx vercel deploy --prod`.
+`/api/ask` keys (10d.7): stored hashed in Redis with `npm run app -- askkey
+new|import|list|revoke` - they work at once, no deployment. The older
+`APP_API_KEYS` on Vercel (`eval=...,masjid=...`) is still read; a changed
+Vercel value applies only after the next `npx vercel deploy --prod`.
 
 ## Evals
 
@@ -901,6 +903,57 @@ isolation, daily limits. Live (guest): "When is Sinu TK on food duty this
 month?" -> October 26 and "MR1 in November" -> November 24, both matching the
 app's own yearly schedule.
 
+
+### 10d.7 App ask-keys in Redis, hashed (2026-10-17)
+
+Before: every `/api/ask` key was in the env var `APP_API_KEYS`. A new app
+meant a new key, retyping the whole Sensitive value on Vercel (it never shows
+the old one) and a deployment; taking one key back, the same. The other
+direction - the service reading an app - already worked from Redis with no
+deployment (10d.4), so adding an app was half instant, half a redeploy.
+
+Now (`api/askKeys.js`):
+
+```
+npm run app -- askkey new masjid
+  -> admin API POST /api/admin/ask-keys -> key ak_... made, shown ONCE
+  -> Redis hash ask:keys:  sha256(key) -> { name: "masjid", hint: "last 4", createdAt }
+
+masjid server --Bearer ak_...--> /api/ask
+  -> APP_API_KEYS first (all compared, timing-safe), then
+  -> Redis HGET ask:keys sha256(given)  -> "masjid" (caller, daily limit, conversations)
+  -> no match -> 401
+```
+
+| What | Where |
+|---|---|
+| Store, look up, list, revoke | `api/askKeys.js` (Redis hash `ASK_KEYS_KEY`, default `ask:keys`) |
+| Check on each request | `api/askApi.js` `appFor` |
+| Admin API | `GET/POST /api/admin/ask-keys`, `DELETE /api/admin/ask-keys/:idOrName` (`ADMIN_KEY`) |
+| Command line | `npm run app -- askkey list \| new <app> \| import <app> <ENV_VAR> \| revoke <id\|app>` |
+
+- **Hashed, not encrypted:** the service only has to recognise a key, never
+  send it, so it keeps SHA-256 hashes. Reading Redis gives no usable key. (An
+  app's token is the opposite - it must be sent to the app - so it is
+  encrypted, 10d.4.) A random 32-byte key needs no slow password hash.
+- **Found by its hash:** the hash is the Redis field name - one read per
+  request, no loop over keys, and a revoked key is refused on the very next
+  request (no cache).
+- **Several keys per app,** so a key can be replaced without a gap: `new`,
+  put it in the app, then `revoke <id>` the old one. `revoke <app>` takes all.
+- **`import`** stores a key an app already has (read from an env var in
+  `.env`, never typed on the command line), so moving `eval` and `masjid` out
+  of `APP_API_KEYS` needs no change in those apps.
+- **Reserved names:** `web`, `command`, `local` - callers that are not
+  `/api/ask` apps; a key with one of those names would get their connected apps.
+- No keys anywhere and no access code (the Mac): still open as `local`.
+
+Tests (local server, local Redis, separate hash): env key 200, stored key
+200, wrong/none 401, the access code is not an ask key (401); revoking one of
+an app's two keys refuses only that one; reserved and bad names, short keys,
+a key already stored for another app (409) refused; open on the Mac until the
+first stored key, then 401 without it, open again after revoking it;
+`eval:ask` 11/11 with a stored key (Ollama).
 
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 

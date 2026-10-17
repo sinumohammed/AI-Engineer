@@ -13,6 +13,7 @@ import { geminiSpeech } from "./gemini.js";
 import { readAttachment, attachmentSummary, AttachmentError, fileForQuestion, nameTheFile } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { askApi } from "./askApi.js";
+import { listAskKeys } from "./askKeys.js";
 import { adminApi } from "./adminApi.js";
 import { withAccess } from "./appAccess.js";
 import { listApps } from "./appRegistry.js";
@@ -299,8 +300,11 @@ function logServices(firstLine) {
   const voiceBy = [GEMINI_API_KEY && `Gemini ${GEMINI_TRANSCRIBE_MODEL}`, GROQ_API_KEY && `Groq ${TRANSCRIBE_MODEL}`].filter(Boolean);
   console.log(`  voice:      ${voiceBy.length ? voiceBy.join(", then ") : "off (no GEMINI_API_KEY or GROQ_API_KEY)"}`);
   console.log(`  access:     ${ACCESS_CODE ? "code required" : "open (no ACCESS_CODE)"}${ALLOWED_ORIGIN ? `, browser calls only from ${ALLOWED_ORIGIN}` : ""}`);
-  const askAccess = APP_API_KEYS.length ? `keys for ${APP_API_KEYS.map((a) => a.name).join(", ")}` : ACCESS_CODE ? "off (no APP_API_KEYS)" : "open (no APP_API_KEYS)";
-  console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app`);
+  listAskKeys().then(({ keys }) => {
+    const names = [...new Set([...APP_API_KEYS.map((a) => a.name), ...keys.map((k) => k.name)])];
+    const askAccess = names.length ? `keys for ${names.join(", ")}` : ACCESS_CODE ? "off (no keys)" : "open (no keys)";
+    console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app`);
+  }).catch((err) => console.log(`  /api/ask:   could not read the stored keys - ${err.message}`));
   listApps().then((apps) =>
     console.log(`  apps:       ${apps.length ? apps.map((a) => `${a.name} (${a.operations.length} operations, ${a.dataLevel}, for ${(a.callers ?? []).join("/") || "nobody"})`).join(", ") : "none connected"}; admin API ${ADMIN_KEY ? "on" : "off (no ADMIN_KEY)"}`)
   );

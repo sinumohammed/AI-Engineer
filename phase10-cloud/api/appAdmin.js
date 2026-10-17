@@ -8,6 +8,13 @@
 //                                        (user-token: as a logged-in user of an app with "user")
 //   npm run app -- keys                  new values for ADMIN_KEY and APP_SECRETS_KEY (nothing saved)
 //
+//   /api/ask keys, stored hashed in Redis (askKeys.js) - work at once, no deployment:
+//   npm run app -- askkey list
+//   npm run app -- askkey new <app>      a new key, shown once - give it to the app
+//   npm run app -- askkey import <app> <ENV_VAR>   store a key the app already has (from ../.env),
+//                                        e.g. one moved out of APP_API_KEYS, so the app changes nothing
+//   npm run app -- askkey revoke <id|app>   one key by its id, or all of an app's keys
+//
 // Talks to API_URL (default the Mac, http://localhost:3002) with ADMIN_KEY
 // from ../.env. For the live app: API_URL=https://ai-engineer-api-jet.vercel.app
 // and the ADMIN_KEY set on Vercel.
@@ -28,8 +35,10 @@ if (cmd === "keys") {
   process.exit(0);
 }
 
-const usage = 'Usage: npm run app -- list | add <app.json> | refresh <name> | remove <name> | try "<question>" | keys';
-if (!["list", "add", "refresh", "remove", "try"].includes(cmd) || (cmd !== "list" && !arg)) {
+const usage = 'Usage: npm run app -- list | add <app.json> | refresh <name> | remove <name> | try "<question>" | keys | askkey list|new|import|revoke';
+const askkeyArgs = { list: 0, new: 1, import: 2, revoke: 1 };
+const askkeyOk = cmd === "askkey" && arg in askkeyArgs && process.argv.slice(4).filter(Boolean).length >= askkeyArgs[arg];
+if (!(["list", "add", "refresh", "remove", "try"].includes(cmd) || askkeyOk) || (cmd !== "list" && !arg)) {
   console.error(usage);
   process.exit(1);
 }
@@ -99,4 +108,29 @@ if (cmd === "list") {
     console.log(`    ${excerpts[i].replace(/\n/g, "\n    ").slice(0, 800)}`);
   }
   if (dropped.length) console.log(`Dropped: ${dropped.join("; ")}`);
+}
+else if (cmd === "askkey") {
+  const [target, envVar] = process.argv.slice(4);
+  if (arg === "list") {
+    const { keys, fromEnv } = await call("GET", "/ask-keys");
+    if (!keys.length) console.log(`No stored /api/ask keys at ${API_URL}.`);
+    for (const k of keys) console.log(`${k.name.padEnd(16)} id ${k.id}  ...${k.hint}  made ${k.createdAt}`);
+    if (fromEnv.length) console.log(`Also in APP_API_KEYS (env, changed only on Vercel): ${fromEnv.join(", ")}`);
+  } else if (arg === "new" || arg === "import") {
+    let key;
+    if (arg === "import") {
+      key = process.env[envVar.replace(/^\$/, "")];
+      if (!key) {
+        console.error(`${envVar} is not set (../.env).`);
+        process.exit(1);
+      }
+    }
+    const k = await call("POST", "/ask-keys", { name: target, ...(key ? { key } : {}) });
+    console.log(`Stored at ${API_URL}: ${k.name}, id ${k.id}, ...${k.hint} - works now, no deployment.`);
+    if (arg === "new") console.log(`\nThe key (shown only this once - give it to "${k.name}" as "Authorization: Bearer <key>"):\n\n  ${k.key}\n`);
+  } else {
+    const { revoked, note } = await call("DELETE", `/ask-keys/${encodeURIComponent(target)}`);
+    console.log(`Revoked ${revoked.join(", ")} - refused from the next request.`);
+    if (note) console.log(note);
+  }
 }

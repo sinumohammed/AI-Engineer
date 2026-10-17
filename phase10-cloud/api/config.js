@@ -78,6 +78,9 @@ export const APP_API_KEYS = (process.env.APP_API_KEYS ?? "")
     return { name, key };
   });
 export const APP_DAILY_LIMIT = Number(process.env.APP_DAILY_LIMIT ?? 100);
+// Phase 10 #4: keys can also be stored in Redis, as hashes (askKeys.js,
+// `npm run app -- askkey new <app>`) - no env change or deployment per app.
+export const ASK_KEYS_KEY = process.env.ASK_KEYS_KEY ?? "ask:keys";
 // Phase 10 #4: connected apps (appRegistry.js, apps.js). ADMIN_KEY protects
 // /api/admin/apps, where apps are added, refreshed and removed - unset, the
 // admin API is off. APP_SECRETS_KEY (32 random bytes, base64) encrypts each

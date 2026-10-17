@@ -116,7 +116,7 @@ full https URL. Only GET operations are used; at most 15 per app.
 | `description` | what data the app has - the router and planner decide by it |
 | `openapi` | URL of the app's OpenAPI file (https; http only on this machine) |
 | `token` | `"$ENV_NAME"` reads it from `../.env`; stored encrypted |
-| `callers` | **required** - who may ask this app's data: `"web"` (this service's web chat) and/or `/api/ask` app names (`APP_API_KEYS`). The masjid entry is `["masjid"]`: only the masjid app's own chat, never the general web chat |
+| `callers` | **required** - who may ask this app's data: `"web"` (this service's web chat) and/or `/api/ask` app names (the name of the app's ask-key: `npm run app -- askkey new <name>`, or `APP_API_KEYS`). The masjid entry is `["masjid"]`: only the masjid app's own chat, never the general web chat |
 | `user` | `"none"` (default), `"optional"` or `"required"` - pass the caller's logged-in user on to the app (header `X-User-Token`), so it answers as that user may see it; `"required"`: never used without a user |
 | `whoami` | optional - the id of the app's "who am I" operation (e.g. `"me"`); a question with "I", "my", "me" that goes to this app also gets that call, so "Do I have pending dues?" is answered for the asking user |
 | `dataLevel` | `public`, `internal` (default) or `confidential` - see 10d.3; confidential apps only work with a local model |
