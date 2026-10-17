@@ -283,6 +283,48 @@ try {
   check("GET on the MCP endpoint: 405 (stateless, POST only)", r.status === 405);
 
   // =====================================================================
+  console.log("\n1c. Personal MCP tokens for Claude Code (no model)");
+  r = await call(`${M}/admin/mcp-tokens`, { method: "POST", token: fathima, body: { name: "member's laptop" } });
+  check("A member cannot make one", r.status === 403);
+  r = await call(`${M}/admin/mcp-tokens`, { method: "POST", token: adminLogin, body: { name: "Claude Code eval" } });
+  const personal = r.body.token;
+  check("The admin makes one: mcp_..., shown once", r.status === 201 && /^mcp_[A-Za-z0-9_-]{40,}$/.test(personal ?? ""), `${r.status} ...${r.body.hint}`);
+  r = await call(`${M}/admin/mcp-tokens`, { token: adminLogin });
+  check("Listed by name and last 4 characters, never the token", r.body.tokens?.length === 1 && r.body.tokens[0].hint === personal.slice(-4) && !JSON.stringify(r.body).includes(personal));
+  const asClaude = (id, args = {}) => callMcpTool(mcpApp, tool(id), args, { token: personal, maxChars: 100000 });
+  const listed = await listMcpTools(mcpUrl, { token: personal, timeoutMs: 10000 }).catch((e) => ({ tools: [], error: e.message }));
+  check("With the personal token alone: the tools are listed", listed.tools.length === opIds.length, listed.error ?? `${listed.tools.length} tools`);
+  r = await asClaude("pending_dues");
+  check("A tool call answers as the admin: everyone owing", r.ok && JSON.parse(r.text).items?.length === 6, r.error ?? "");
+  r = await asClaude("finance_summary");
+  check("The admin's accounts too", r.ok && JSON.parse(r.text).totalExpense > 0, r.error ?? "");
+  // The official MCP client (SDK), as Claude Code connects: only the Authorization header.
+  const { Client } = await import("../examples/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js");
+  const { StreamableHTTPClientTransport } = await import("../examples/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js");
+  const sdk = new Client({ name: "eval-as-claude-code", version: "1.0.0" });
+  try {
+    await sdk.connect(new StreamableHTTPClientTransport(new URL(mcpUrl), { requestInit: { headers: { Authorization: `Bearer ${personal}` } } }));
+    const sdkTools = (await sdk.listTools()).tools;
+    const res = await sdk.callTool({ name: "members", arguments: { search: "Sinu TK" } });
+    check("The official MCP client (as Claude Code): tools listed, a tool called", sdkTools.length === opIds.length && JSON.parse(res.content[0].text).items?.[0]?.id === sinu.unique_id, `${sdkTools.length} tools, server ${sdk.getServerVersion()?.name}`);
+  } catch (err) {
+    check("The official MCP client (as Claude Code): tools listed, a tool called", false, err.message);
+  } finally {
+    await sdk.close().catch(() => {});
+  }
+  r = await call(`${M}/ai/today-duty`, { token: personal });
+  check("The personal token opens /api/ai/mcp only, not the other /api/ai endpoints", r.status === 401, r.body.error);
+  r = await call(`${M}/admin/assistant-settings`, { token: personal });
+  check("It is not a login (admin route refused)", r.status === 401);
+  r = await call(`${M}/admin/mcp-tokens`, { token: adminLogin });
+  check("Last used is recorded", Boolean(r.body.tokens?.[0]?.lastUsedAt));
+  r = await callMcpTool(mcpApp, tool("today_duty"), {}, { token: `mcp_${randomBytes(32).toString("base64url")}`, maxChars: 1000 });
+  check("An unknown mcp_ token: refused", !r.ok && /unknown or revoked/.test(r.error), r.error);
+  r = await call(`${M}/admin/mcp-tokens/${encodeURIComponent((await call(`${M}/admin/mcp-tokens`, { token: adminLogin })).body.tokens[0].id)}`, { method: "DELETE", token: adminLogin });
+  const afterRevoke = await callMcpTool({ ...mcpApp, name: "masjid-revoked" }, tool("today_duty"), {}, { token: personal, maxChars: 1000 });
+  check("Revoked: refused from the next request", r.status === 200 && !afterRevoke.ok && /unknown or revoked/.test(afterRevoke.error), afterRevoke.error);
+
+  // =====================================================================
   console.log("\n2. The admin's limit settings (no model)");
   r = await call(`${M}/admin/assistant-settings`, { token: adminLogin });
   check("Defaults: members 4, guests 4, admin no limit", JSON.stringify(r.body.dailyLimits) === JSON.stringify({ admin: 0, member: 4, guest: 4 }), JSON.stringify(r.body.dailyLimits));
