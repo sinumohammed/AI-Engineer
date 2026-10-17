@@ -178,7 +178,9 @@
 
 .recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 12.5px; max-height: 330px; overflow: auto; }
 .recent li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--border); min-width: 0; }
-.recent-nums { margin-left: auto; display: inline-flex; gap: 8px; }
+.recent-nums { margin-left: auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; }
+.when-label { cursor: help; white-space: nowrap; border-bottom: 1px dotted transparent; }
+.when-label:hover, .when-label:focus-visible { border-bottom-color: currentColor; outline: none; }
 .recent li:last-child { border-bottom: 0; }
 .recent-agents { display: inline-flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
 .chip { font-size: 11px; padding: 0 7px; border-radius: 9px; line-height: 18px; white-space: nowrap; background: color-mix(in srgb, var(--node) 14%, transparent); border: 1px solid color-mix(in srgb, var(--node) 45%, transparent); }
@@ -211,7 +213,6 @@
   .orb-core { width: 94px; height: 94px; }
   .comms li { grid-template-columns: 40px 1fr; }
   .comms-text { grid-column: 2; }
-  .recent .when { display: none; }
   .recent-agents { order: 5; flex-basis: 100%; padding-left: 22px; }
   .cc-grid .ant-card-extra { display: none; }
   .cc-top .cc-title .small { display: none; }

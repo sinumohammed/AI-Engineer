@@ -21,6 +21,7 @@ import { useBargeIn } from "./useBargeIn.js";
 import { useClapWake } from "./useClapWake.js";
 import { useCommand } from "./useCommand.js";
 import { BarList, DailyChart, callerColors, callerLabel, fmtInt, fmtMs, fmtTokens, fmtUsd } from "./Charts.jsx";
+import { dayLabel, fullTime, shortTime } from "./time.js";
 import "./command.css";
 
 const { Text } = Typography;
@@ -900,7 +901,7 @@ function UsagePanels({ d }) {
         ),
       responsive: ["md"],
     },
-    { title: "Last used", dataIndex: "last_at", render: (v) => (v ? new Date(v).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : <span className="muted">never</span>), responsive: ["lg"] },
+    { title: "Last used", dataIndex: "last_at", render: (v) => (v ? <When at={v} /> : <span className="muted">never</span>), responsive: ["lg"] },
   ];
 
   const unpriced = d.byModel.filter((m) => !m.priced);
@@ -963,7 +964,7 @@ function UsagePanels({ d }) {
                 },
                 { title: "Questions", dataIndex: "questions", align: "right", render: fmtInt },
                 { title: "Est. cost", dataIndex: "cost_usd", align: "right", render: fmtUsd },
-                { title: "Last", dataIndex: "last_at", align: "right", render: (v) => new Date(v).toLocaleString([], { dateStyle: "short", timeStyle: "short" }), responsive: ["sm"] },
+                { title: "Last", dataIndex: "last_at", align: "right", render: (v) => <When at={v} />, responsive: ["sm"] },
               ]}
             />
           ) : (
@@ -1011,7 +1012,7 @@ function UsagePanels({ d }) {
                   <span className="muted num">{fmtTokens(r.tokens)} tok</span>
                   <span className="num">{fmtUsd(r.cost_usd)}</span>
                   <span className="muted num">{fmtMs(r.latency_ms)}</span>
-                  <span className="muted num when">{new Date(r.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  <When at={r.at} className="muted num when" />
                 </span>
               </li>
             ))}
@@ -1072,7 +1073,7 @@ function FailuresDrawer({ d, app, colors, onClose }) {
               </span>
               <span className="muted">{CHANNEL_LABELS[f.channel] ?? f.channel}</span>
               <span className="grow" />
-              <span className="muted num">{new Date(f.at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</span>
+              <When at={f.at} className="muted num" />
             </div>
             {f.error && <div className="failure-error">{f.error}</div>}
             {calls.map((c, k) => (
@@ -1089,5 +1090,20 @@ function FailuresDrawer({ d, app, colors, onClose }) {
         })}
       </ul>
     </Drawer>
+  );
+}
+
+// When something happened: the time alone for today, "Yesterday 6:38 PM",
+// or the date for older ones. Tap (phone) or hover (computer) for the full
+// date and time.
+function When({ at, className = "muted num" }) {
+  const t = new Date(at).getTime();
+  const day = dayLabel(t);
+  return (
+    <Tooltip title={fullTime(t)} trigger={["hover", "click"]}>
+      <span className={`${className} when-label`} tabIndex={0}>
+        {day === "Today" ? shortTime(t) : `${day} ${shortTime(t)}`}
+      </span>
+    </Tooltip>
   );
 }
