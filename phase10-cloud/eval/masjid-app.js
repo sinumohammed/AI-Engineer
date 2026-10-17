@@ -17,11 +17,13 @@
 //   ONLY=chips npm run eval:masjid   the Malayalam ready questions only (after the no-model checks)
 //   ONLY=tables npm run eval:masjid   the table and chart answers only (after the no-model checks)
 //   CONNECTOR=mcp npm run eval:masjid   the app registered through its MCP server (/api/ai/mcp) instead of openapi.json
+//   ONLY=telegram npm run eval:masjid   the Telegram bot only (after the no-model checks), against a fake Telegram
 import { spawn } from "node:child_process";
 import { listMcpTools, readMcpTools, callMcpTool } from "../api/mcpTools.js";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
+import { createServer } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 
 class OnlyDone extends Error {}
@@ -37,6 +39,7 @@ const pg = apiRequire("pg");
 const { createClient } = apiRequire("redis");
 const jwt = createRequire(`${MASJID_SERVER}/package.json`)("jsonwebtoken");
 const { createHmac } = await import("node:crypto");
+const createHmacSync = createHmac;
 
 const DB = `masjid_eval_${process.pid}`;
 const RUN_STARTED = new Date();
@@ -53,6 +56,27 @@ const MASJID_ASK_KEY = `ak_${randomBytes(18).toString("base64url")}`;
 const OTHER_ASK_KEY = `ak_${randomBytes(18).toString("base64url")}`;
 const ADMIN_KEY = randomBytes(24).toString("base64url");
 const APPS_KEY = `apps:registry:masjid-eval-${process.pid}`;
+
+// A fake Telegram (Bot API + file downloads) for the bot's checks: it keeps
+// what the bot sent, per chat. The masjid server is pointed at it.
+const TG_PORT = 5082;
+const TG_TOKEN = `123456:${randomBytes(16).toString("hex")}`;
+const TG_SECRET = createHmacSync("sha256", TG_TOKEN).update("masjid-telegram-webhook").digest("hex");
+const tgSent = [];
+const tgVoice = readFileSync(new URL("./samples/voice-malayalam-rollback.m4a", import.meta.url));
+const tgServer = createServer((req, res) => {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    if (req.url.startsWith(`/file/bot${TG_TOKEN}/`)) return res.end(tgVoice);
+    const method = req.url.split("/").pop();
+    const body = raw ? JSON.parse(raw) : {};
+    if (method === "sendMessage") tgSent.push(body);
+    const result = method === "getMe" ? { id: 1, is_bot: true, username: "masjid_eval_bot" } : method === "getFile" ? { file_id: body.file_id, file_path: "voice/file_1.m4a" } : true;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: true, result }));
+  });
+}).listen(TG_PORT);
 
 let passed = 0;
 let total = 0;
@@ -95,6 +119,7 @@ const redis = createClient({ url: process.env.REDIS_URL ?? "redis://localhost:63
 
 async function cleanup() {
   for (const c of children) c.kill();
+  tgServer.close();
   await sleep(500);
   try {
     await admin.query(`DROP DATABASE IF EXISTS ${DB}`);
@@ -105,6 +130,9 @@ async function cleanup() {
   try {
     await redis.del(APPS_KEY);
     for await (const keys of redis.scanIterator({ MATCH: "session:app:masjid:u-*", COUNT: 200 })) {
+      for (const k of Array.isArray(keys) ? keys : [keys]) await redis.del(k);
+    }
+    for await (const keys of redis.scanIterator({ MATCH: "session:app:masjid:tg-*", COUNT: 200 })) {
       for (const k of Array.isArray(keys) ? keys : [keys]) await redis.del(k);
     }
     for await (const keys of redis.scanIterator({ MATCH: "session:app:masjid:g-eval-*", COUNT: 200 })) {
@@ -126,6 +154,8 @@ const masjidEnv = {
   AI_DAILY_LIMIT_MEMBER: "4",
   AI_DAILY_LIMIT_GUEST: "4",
   AI_DAILY_LIMIT_ADMIN: "0",
+  TELEGRAM_BOT_TOKEN: TG_TOKEN,
+  TELEGRAM_API_URL: `http://localhost:${TG_PORT}`,
 };
 const aiEnv = {
   APPS_KEY,
@@ -242,6 +272,8 @@ try {
   const shortId = sinu.unique_id.replace(/^MR#0*/, "MR");
   r = await call(`${M}/ai/pending-dues?search=${encodeURIComponent("Sinu TK")}`, { headers: { ...svc, "X-User-Token": adminUser } });
   check('"Sinu TK" finds the Malayalam-named member (pending dues)', r.body.membersFound?.[0]?.id === sinu.unique_id && r.body.pending?.length === 1, JSON.stringify(r.body.membersFound));
+  r = await call(`${M}/ai/pending-dues?search=${encodeURIComponent("Sinu TK")}`, { headers: { ...svc, "X-User-Token": memberUser } });
+  check("pending-dues: a member searching another member - refused, not \"no pending dues\"", r.status === 403, `${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
   r = await call(`${M}/ai/members?search=${encodeURIComponent("sinu t k")}`, { headers: { ...svc, "X-User-Token": adminUser } });
   check('"sinu t k" (spaced initials) finds them too', r.body.items?.length === 1 && r.body.items[0].id === sinu.unique_id, r.body.items?.map((m) => m.nameInEnglishLetters).join(", "));
   r = await call(`${M}/ai/members?search=${encodeURIComponent(shortId)}`, { headers: { ...svc, "X-User-Token": adminUser } });
@@ -368,6 +400,92 @@ try {
   // AssistantChat.tsx - keep the same words): each must reach the right data.
   // Names may come back in Malayalam letters, so amounts and sources are checked.
   let a;
+
+  // =====================================================================
+  // The masjid assistant as a Telegram bot (masjid server/telegram.js), against
+  // the fake Telegram above: linking, roles, then answers.
+  if (!process.env.ONLY || process.env.ONLY === "telegram") {
+    console.log("\n3b. The Telegram bot");
+    let updateId = 1000;
+    // One update to the webhook; the bot's next `expect` messages to that chat.
+    const tg = async (fromId, message, { expect = 1, chatType = "private", id = ++updateId, secret = TG_SECRET } = {}) => {
+      const chatId = fromId;
+      const before = tgSent.filter((m) => m.chat_id === chatId).length;
+      const res = await fetch(`${M}/telegram/webhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(secret ? { "X-Telegram-Bot-Api-Secret-Token": secret } : {}) },
+        body: JSON.stringify({ update_id: id, message: { message_id: id, date: Math.floor(Date.now() / 1000), chat: { id: chatId, type: chatType }, from: { id: fromId, is_bot: false, first_name: "Eval" }, ...message } }),
+      });
+      const t = Date.now();
+      const deadline = t + (expect ? 180000 : 2500);
+      let got = [];
+      while (Date.now() < deadline) {
+        got = tgSent.filter((m) => m.chat_id === chatId).slice(before);
+        if (expect && got.length >= expect) break;
+        await sleep(150);
+      }
+      const text = got.map((m) => m.text).join("\n---\n");
+      return { status: res.status, got, text, plainText: text.replace(/<[^>]+>/g, "").replace(/,/g, ""), ms: Date.now() - t };
+    };
+    const MEMBER_TG = 7001;
+    const ADMIN_TG = 7002;
+    const GUEST_TG = 7003;
+    let t = await tg(MEMBER_TG, { text: "/start" }, { secret: "wrong", expect: 0 });
+    check("Webhook: a wrong secret is refused", t.status === 401 && t.got.length === 0, t.status);
+    t = await tg(MEMBER_TG, { text: "/start" });
+    check("/start (not linked): welcome with a share-phone button", /Assalamu alaikum/.test(t.text) && t.got[0]?.reply_markup?.keyboard?.[0]?.[0]?.request_contact === true, t.text);
+    t = await tg(MEMBER_TG, { contact: { phone_number: "+919000000002", user_id: 9999 } });
+    check("Someone else's contact card: refused", /your own number/.test(t.text), t.text);
+    t = await tg(GUEST_TG, { contact: { phone_number: "+918888888888", user_id: GUEST_TG } });
+    check("A number not on the member list: not linked", /not on the masjid's member list/.test(t.text), t.text);
+    t = await tg(MEMBER_TG, { contact: { phone_number: "+91 90000 00002", user_id: MEMBER_TG } });
+    check("Own phone number: linked as that member", /Linked/.test(t.text) && t.text.includes(byName("Fathima Beevi").unique_id), t.text);
+    const dupId = ++updateId;
+    t = await tg(MEMBER_TG, { text: "/whoami" }, { id: dupId });
+    check("/whoami: the member", t.text.includes(`member ${byName("Fathima Beevi").unique_id}`), t.text);
+    t = await tg(MEMBER_TG, { text: "/whoami" }, { id: dupId, expect: 0 });
+    check("The same update again (Telegram retry): not answered twice", t.status === 200 && t.got.length === 0, `${t.got.length} messages`);
+    t = await tg(MEMBER_TG, { text: "/whoami" }, { chatType: "group", expect: 0 });
+    check("A group chat: no answer (everyone would see it)", t.got.length === 0, `${t.got.length} messages`);
+    r = await call(`${M}/telegram/link-code`, { method: "POST" });
+    check("A link code needs a login", r.status === 401, r.status);
+    r = await call(`${M}/telegram/link-code`, { method: "POST", token: adminLogin });
+    const code = new URL(r.body.url ?? "https://x").searchParams.get("start");
+    check("The admin makes a link: t.me/<bot>?start=<code>", r.status === 201 && r.body.url?.startsWith("https://t.me/masjid_eval_bot?start=l_"), r.body.url ?? r.body.error);
+    t = await tg(ADMIN_TG, { text: `/start ${code}` });
+    check("Opening it links the Telegram account as the admin", /Linked/.test(t.text) && /the admin/.test(t.text), t.text);
+    t = await tg(GUEST_TG, { text: `/start ${code}` });
+    check("The same link a second time: refused", /expired or was already used/.test(t.text), t.text);
+    r = await call(`${M}/telegram/link`, { token: adminLogin });
+    check("The admin's Settings shows the link", r.body.available === true && r.body.links?.length === 1 && r.body.botUsername === "masjid_eval_bot", JSON.stringify(r.body));
+    r = await call(`${M}/telegram/admin`, { token: fathima });
+    check("The bot's admin status: not for a member", r.status === 403, r.status);
+    t = await tg(GUEST_TG, { text: "/voice english" });
+    check("/voice english: saved", /read as English/.test(t.text), t.text);
+
+    // With a model
+    t = await tg(MEMBER_TG, { text: "How much do I still have to pay?" });
+    check("Member over Telegram: own pending amount, with the source", t.plainText.includes(String(fathimaDue)) && /Source: masjid API/.test(t.text), `${(t.ms / 1000).toFixed(1)}s ${t.plainText.slice(0, 140)}`);
+    t = await tg(MEMBER_TG, { text: "Show me Abdul Rasheed's dues" });
+    const abdulDue = (await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": adminUser } })).body.items?.find((x) => x.name === "Abdul Rasheed")?.due;
+    check("Member over Telegram: another member's dues refused, not \"owes nothing\"", !t.plainText.includes(String(abdulDue)) && !/no pending|does not have any|doesn't have any|owes nothing|fully paid/i.test(t.plainText) && /admin/i.test(t.plainText), `${(t.ms / 1000).toFixed(1)}s ${t.plainText.slice(0, 140)}`);
+    t = await tg(ADMIN_TG, { text: "Which members have pending dues?" });
+    check("Admin over Telegram: everyone's dues", ["Abdul", "Fathima"].every((x) => t.text.includes(x)), `${(t.ms / 1000).toFixed(1)}s ${t.plainText.slice(0, 140)}`);
+    t = await tg(GUEST_TG, { text: "Which members have pending dues?" });
+    check("Guest over Telegram: dues refused", !t.text.includes("Fathima") && !t.plainText.includes(String(fathimaDue)), `${(t.ms / 1000).toFixed(1)}s ${t.plainText.slice(0, 140)}`);
+    t = await tg(GUEST_TG, { text: "Who supplies food today?" });
+    check("Guest over Telegram: today's food duty answered", /Source: masjid API/.test(t.text) && !/log in/i.test(t.text), `${(t.ms / 1000).toFixed(1)}s ${t.plainText.slice(0, 140)}`);
+    if (process.env.VOICE === "1") {
+      await tg(MEMBER_TG, { text: "/voice malayalam" });
+      t = await tg(MEMBER_TG, { voice: { file_id: "v1", duration: 4, mime_type: "audio/mp4" } }, { expect: 2 });
+      check("A voice note: Malayalam text shown back, then answered", /🎙/.test(t.got[0]?.text ?? "") && /[ഀ-ൿ]/.test(t.got[0]?.text ?? "") && t.got.length >= 2, t.text.slice(0, 200));
+    }
+    t = await tg(MEMBER_TG, { text: "/unlink" });
+    t = await tg(MEMBER_TG, { text: "/whoami" });
+    check("/unlink: a guest again", /a guest/.test(t.text), t.text);
+    if (process.env.ONLY === "telegram") throw new OnlyDone();
+  }
+
   // 10d.11: tables and charts. The masjid server asks with display { tables, charts };
   // every figure in the table or chart must be the API's own.
   if (!process.env.ONLY || process.env.ONLY === "tables") {
