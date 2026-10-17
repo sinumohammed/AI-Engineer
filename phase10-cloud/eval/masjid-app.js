@@ -15,6 +15,7 @@
 // (local Ollama by default; LLM_PROVIDER=groq ... to check the live setup).
 //   npm run eval:masjid        (MASJID_REPO=/path/to/MasjidRahma to override)
 //   ONLY=chips npm run eval:masjid   the Malayalam ready questions only (after the no-model checks)
+//   ONLY=tables npm run eval:masjid   the table and chart answers only (after the no-model checks)
 //   CONNECTOR=mcp npm run eval:masjid   the app registered through its MCP server (/api/ai/mcp) instead of openapi.json
 import { spawn } from "node:child_process";
 import { listMcpTools, readMcpTools, callMcpTool } from "../api/mcpTools.js";
@@ -341,9 +342,9 @@ try {
 
   // =====================================================================
   console.log("\n3. Answers through the masjid app's assistant");
-  const ask = async (token, question) => {
+  const ask = async (token, question, chatId) => {
     const t = Date.now();
-    const res = await call(`${M}/assistant/ask`, { method: "POST", token, body: { question, chatId: token ? `eval${t}` : `eval-guest-${t}-${randomBytes(4).toString("hex")}` } });
+    const res = await call(`${M}/assistant/ask`, { method: "POST", token, body: { question, chatId: chatId ?? (token ? `eval${t}` : `eval-guest-${t}-${randomBytes(4).toString("hex")}`) } });
     return { ...res, answer: res.body.answer ?? res.body.error ?? "", sources: (res.body.sources ?? []).map((s) => s.source), ms: Date.now() - t };
   };
   const plain = (s) => s.replace(/,/g, "");
@@ -366,8 +367,43 @@ try {
   // The assistant's ready questions in Malayalam (the chips in the masjid app's
   // AssistantChat.tsx - keep the same words): each must reach the right data.
   // Names may come back in Malayalam letters, so amounts and sources are checked.
+  let a;
+  // 10d.11: tables and charts. The masjid server asks with display { tables, charts };
+  // every figure in the table or chart must be the API's own.
+  if (!process.env.ONLY || process.env.ONLY === "tables") {
+    const owing = (await call(`${M}/ai/pending-dues`, { headers: { ...svc, "X-User-Token": adminUser } })).body.items;
+    const mdTable = (text) => {
+      const lines = text.split("\n");
+      const i = lines.findIndex((l, k) => /^\s*\|.*\|\s*$/.test(l) && /^\s*\|?\s*:?-{2,}/.test(lines[k + 1] ?? ""));
+      if (i < 0) return null;
+      const rows = [];
+      for (let k = i + 2; k < lines.length && /^\s*\|.*\|\s*$/.test(lines[k]); k++) rows.push(lines[k].trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+      return rows;
+    };
+    const num = (x) => Number(String(x).replace(/[^\d.-]/g, ""));
+    const chatT = `evaltables${Date.now()}`;
+    a = await ask(adminLogin, "Which members have pending dues? Show them as a table.", chatT);
+    const rows = mdTable(a.answer) ?? [];
+    const figuresMatch = owing.every((o) => rows.some((r) => r.some((c) => num(c) === o.due)));
+    check("Table: the admin's pending dues as a Markdown table, every member and amount from the API", rows.length >= owing.length && figuresMatch, `${rows.length} rows for ${owing.length} owing | ${show(a)}`);
+    a = await ask(adminLogin, "show that as a bar chart", chatT);
+    const block = a.answer.match(/```\s*chart\s*\n([\s\S]*?)```/)?.[1];
+    let chart = null;
+    try {
+      chart = JSON.parse(block ?? "");
+    } catch {
+      // checked below
+    }
+    const values = (chart?.data ?? []).map((d) => Number(d.value)).sort((x, y) => x - y).join();
+    const expected = owing.map((o) => o.due).sort((x, y) => x - y).join();
+    check('Chart: "show that as a bar chart" - a valid chart block with the same figures', ["bar", "pie", "line"].includes(chart?.type) && values === expected, `${chart?.type ?? "no chart"} [${values}] vs [${expected}]`);
+    a = await ask(adminLogin, "Who supplies food today?");
+    check("One fact: a sentence, no table or chart", !mdTable(a.answer) && !/```\s*chart/.test(a.answer), show(a));
+    if (process.env.ONLY === "tables") throw new OnlyDone();
+  }
+
   // ONLY=chips stops after these - to check them on Groq without using up its quota.
-  let a = await ask(adminLogin, "ഈ മാസം ഇതുവരെ എത്ര ചെലവായി, ഏതൊക്കെ ഇനങ്ങളിൽ?");
+  a = await ask(adminLogin, "ഈ മാസം ഇതുവരെ എത്ര ചെലവായി, ഏതൊക്കെ ഇനങ്ങളിൽ?");
   check("Chip (admin, Malayalam): this month's spending", plain(a.answer).includes("16830") && a.sources.includes("masjid API"), show(a));
   a = await ask(adminLogin, "വരിസംഖ്യ അടയ്ക്കാൻ ബാക്കിയുള്ള അംഗങ്ങൾ ആരൊക്കെ, എത്ര വീതം?");
   check("Chip (admin, Malayalam): members with pending dues", plain(a.answer).includes(String(fathimaDue)) && a.sources.includes("masjid API"), show(a));

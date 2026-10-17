@@ -9,6 +9,7 @@ import { retrieve, standaloneQuestion, isSmallTalk } from "./retrieve.js";
 import { isRework, answerRework } from "./rework.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources, fixFileCitations } from "./citations.js";
 import { replyLanguageRule } from "./replyLanguage.js";
+import { displayRule } from "./display.js";
 import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
 import { appContext, appNote } from "./apps.js";
 
@@ -236,7 +237,7 @@ export async function runAgent(question, history = [], { onToolCall, onToolResul
   }
 
   const messages = [
-    { role: "system", content: systemContent + replyLanguageRule(question) },
+    { role: "system", content: systemContent + displayRule() + replyLanguageRule(question) },
     // Turns older than the sliding window (see sessionStore.js) are folded
     // into this short running summary instead of being fully forgotten -
     // the model at least keeps the gist of anything beyond the last 10 turns.

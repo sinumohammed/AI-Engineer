@@ -13,6 +13,7 @@
 // is not matched, and goes through search as usual.
 import { chat } from "./llmClient.js";
 import { CHAT_MODEL } from "./config.js";
+import { displayRule } from "./display.js";
 
 const LANGUAGES =
   "english|malayalam|hindi|arabic|tamil|telugu|kannada|urdu|bengali|marathi|gujarati|punjabi|nepali|sinhala|" +
@@ -30,6 +31,10 @@ const REWORK = new RegExp(
       `make ${IT} (shorter|simpler|clearer|easier|more detailed|longer)`,
       `explain ${IT} (again|more simply|simply|in simple (words|terms)|like i'?m (5|five))`,
       `(in )?(bullet points|a table|one sentence|simple (words|terms))`,
+      // 10d.11: "show that as a table", "as a bar chart", "table view", "can you make a graph of it"
+      `((show|display|put|give|present|make|draw|format)( me)?( ${IT})? )?(as|in|into)( a)? (table|tabular form|(bar |pie |line )?(chart|graph))( view| format)?`,
+      `(show|display|give|make|draw)( me)?( a)? ((bar |pie |line )?(chart|graph)|table)( view)?( (of|for) ${IT})?`,
+      `(table|chart|graph) view`,
     ].join("|") +
     ")( please| pls)?[\\s.!?]*$",
   "i"
@@ -55,7 +60,7 @@ export async function answerRework({ question, history, summary, model = CHAT_MO
     model,
     label: "rework",
     messages: [
-      { role: "system", content: REWORK_PROMPT },
+      { role: "system", content: REWORK_PROMPT + displayRule() },
       ...(summary ? [{ role: "system", content: `Summary of earlier conversation: ${summary}` }] : []),
       ...history.map(({ role, content }) => ({ role, content })),
       { role: "user", content: question },

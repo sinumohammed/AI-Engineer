@@ -6,7 +6,7 @@
 // from it without touching the others.
 //
 //   POST /api/ask  { "question": "...", "conversationId"?: "...", "mode"?: "single" | "multi", "agent"?: "...",
-//                    "user"?: { "token"?: "...", "ref"?: "..." } }
+//                    "user"?: { "token"?: "...", "ref"?: "..." }, "display"?: { "tables"?: true, "charts"?: true } }
 //   -> { answer, sources, fromCompanyDocs, notices, usage, conversationId, mode }
 //   DELETE /api/ask/conversations/:conversationId  - forget a conversation
 //   POST /api/ask/transcribe?lang=Malayalam  (raw audio body) -> { text, language } - voice input
@@ -34,6 +34,7 @@ import { withAccess } from "./appAccess.js";
 import { transcribe, TranscribeError } from "./transcribe.js";
 import { metered, meteredJob, recordUsage } from "./usage.js";
 import { appForKey, hasAskKeys } from "./askKeys.js";
+import { parseDisplay } from "./display.js";
 
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
@@ -74,6 +75,9 @@ askApi.use(async (req, res, next) => {
 
 askApi.post("/", async (req, res) => {
   const { question, conversationId, mode = "single", agent, user } = req.body ?? {};
+  // 10d.11: what the app's screen can show - Markdown tables, charts (display.js).
+  const display = parseDisplay(req.body?.display);
+  if (!display) return res.status(400).json({ error: '"display" must be { "tables"?: true|false, "charts"?: true|false }' });
   if (typeof question !== "string" || !question.trim()) return res.status(400).json({ error: 'Missing "question" (a string).' });
   if (question.length > MAX_QUESTION_CHARS) return res.status(400).json({ error: `"question" is too long - up to ${MAX_QUESTION_CHARS} characters.` });
   if (conversationId !== undefined && (typeof conversationId !== "string" || !CONVERSATION_ID.test(conversationId))) {
@@ -103,7 +107,7 @@ askApi.post("/", async (req, res) => {
       const [history, summary] = sessionId ? await Promise.all([getHistory(sessionId), getSummary(sessionId)]) : [[], null];
       const q = question.trim();
       // Notices (e.g. "answered by the fallback model") are returned with the answer.
-      const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token }, () =>
+      const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token, display }, () =>
         collectNotices(() => (mode === "multi" ? runMultiAgent(q, history, { summary, forceAgent: agent }) : runAgent(q, history, { summary })))
       );
       const { answer, usage, fromCompanyDocs, sources = [] } = result;

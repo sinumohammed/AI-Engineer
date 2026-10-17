@@ -6,6 +6,7 @@
 // comparison between them varies the orchestration and nothing else.
 import { specialists, searchDocs } from "./specialists.js";
 import { replyLanguageRule } from "./replyLanguage.js";
+import { displayRule } from "./display.js";
 import { sharesWords, MENTIONS_FILE } from "./attachments.js";
 import { POINTS_BACK } from "./retrieve.js";
 import { appContext, availableApps } from "./apps.js";
@@ -303,6 +304,7 @@ export function synthesizerMessages(question, steps) {
         "the same question, keep the answer that fits what the user asked - an application's live records, or the " +
         "company's documented process - and drop the other when it is about something else; if both fit, give both " +
         "and say which is from the application and which from the company documents." +
+        displayRule() +
         replyLanguageRule(question),
     },
     {

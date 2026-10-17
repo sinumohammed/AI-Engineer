@@ -12,6 +12,7 @@ import { retrieve, POINTS_BACK } from "./retrieve.js";
 import { CITE_INSTRUCTION, numberedExcerpts, citedSources, fixFileCitations } from "./citations.js";
 import { chat, SPECIALIST_MODEL } from "./llm.js";
 import { replyLanguageRule } from "./replyLanguage.js";
+import { displayRule } from "./display.js";
 import { attachmentChunk, attachmentNote, hideOtherFileAnswers } from "./attachments.js";
 import { appContext, appNote } from "./apps.js";
 
@@ -245,7 +246,7 @@ export function historyFor(name, history) {
 // it, even when `question` is the router's rewording of one part of it.
 export function specialistMessages(systemContent, question, history, summary, userMessage = question) {
   return [
-    { role: "system", content: systemContent + replyLanguageRule(userMessage) },
+    { role: "system", content: systemContent + displayRule() + replyLanguageRule(userMessage) },
     ...(summary
       ? [{ role: "system", content: `Summary of earlier conversation (before the recent messages below): ${summary}` }]
       : []),
