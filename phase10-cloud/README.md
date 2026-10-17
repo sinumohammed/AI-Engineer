@@ -73,7 +73,7 @@ masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> mas
 | eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | `eval=...` in `APP_API_KEYS` | - | `npm run new-app-key -- eval` |
 | masjid app key | the masjid server asking the AI | - | `masjid=...` in `APP_API_KEYS` | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run new-app-key -- masjid` |
 | Admin key | `npm run app` (connected apps) | `ADMIN_KEY` | `ADMIN_KEY` | - | `npm run app -- keys` |
-| Dashboard key | the Command Center (`#/command`): usage only, read-only | - | `DASHBOARD_KEY` | - | `openssl rand -base64 24` |
+| Dashboard key | the Command Center (`#/command`): usage only, read-only; also the token of the `usage` app | `DASHBOARD_KEY` | `DASHBOARD_KEY` (set in the dashboard - piping it to `vercel env add` stored something else) | - | `openssl rand -base64 24`, then `npm run app -- add ../apps/usage.json` |
 | App secrets key | encrypts app tokens in Redis | `APP_SECRETS_KEY` | `APP_SECRETS_KEY` | - | `npm run app -- keys` (then re-add every app) |
 | Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid.json` |
 

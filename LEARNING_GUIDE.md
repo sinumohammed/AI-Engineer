@@ -591,6 +591,11 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   Answer) with a log of the hand-offs; the answer can be read aloud. On free tiers the real bill
   is $0; the dashboard shows what the same use would cost on paid tiers. The masjid app sends who
   asks as a code ("member:MR001", "admin", an anonymous code for visitors), never a name.
+  Later in 10e: answers read aloud in Malayalam and Arabic (Gemini's voice; English keeps the
+  device's), **conversation mode** (after two claps it listens again by itself after each answer,
+  talk or tap to interrupt, ~8 s of silence ends it), the agents answer questions about usage
+  ("how many questions today?") through the service's own usage registered as a connected app, and
+  the Errors tile lists what failed. Rows 92-96 were built and tested locally and wait for a deploy.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -695,6 +700,11 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 89 | 10e | On a phone the Command Center's mic heard nothing and never stopped; no way to stop it; clap to wake kept the mic on (found by the user) | Recording starts inside the tap (started a moment later, the phone kept audio paused); 8 s with no speech ends it; Stop buttons; clap to wake off on every visit, lets go of the mic while busy, "Mic on · Turn off" shown | Emulated iPhone: stops 1.4 s after speech, gives up at 8 s, short pauses not cut; "Turn off" leaves 0 live mic tracks |
 | 90 | 10e | Answers were read aloud on a computer but not on a phone (found by the user) | Phones allow speech only from a tap: a silent phrase inside the tap unlocks it; long answers read sentence by sentence | Emulated: unlock inside the tap, the answer in 3 pieces of up to 220 characters |
 | 91 | 10e | Malayalam answers were read as "dot dot", Arabic not at all: devices have no voice for them (found by the user) | English keeps the device voice; other scripts go to Gemini's voice (`/api/speak`, detects the language), never for answers citing internal documents | Live: Malayalam and Arabic audio in ~5-6 s; the Malayalam audio back through speech to text gives the same sentence; internal source refused with the reason |
+| 92 | 10e | "My pending of last year" got no answer in the masjid app (found by the user): the assistant could only ask what is owed now | Masjid API: `dues_by_year`, the same calculation as the profile page's year selector; a member gets only their own year | `eval:masjid` 44/44: 2025 -> ₹1,200, 12 months missed; another member's year refused. A reworded description ("current calendar year") told a paid-up member "no members have pending dues" - reverted |
+| 93 | 10e | The console could not answer "how many questions today?" or "what did masjid cost?" (asked by the user) | The service's own usage registered as an ordinary connected app, `usage` (read-only views, dashboard key); its only caller is `command`, which the Command Center becomes by sending its key | Local, Groq: routed to the usage app, answered from the numbers; the web chat without the key: no usage data |
+| 94 | 10e | The Errors count did not say what failed (asked by the user) | The Errors tile and each app's count open a list: failed requests with their error, and answered questions where an app call failed; a 403 (the app refusing by role) shown as expected | Local: 1 real failure and 10 expected refusals, told apart; the agents can list them too |
+| 95 | 10e | Every turn needed a clap or a tap, and a long answer could not be interrupted (asked by the user) | Conversation mode: listens again by itself after each answer; talking over the answer or tapping the orb interrupts; ends after ~8 s of silence, "stop" / "bye" / "മതി", or End | Simulated on a phone-sized page: two turns, then ended at 8 s; a 20 s answer stopped 1.1 s after the user spoke; "Stop" ends |
+| 96 | 10e | Request times showed the clock only, and were hidden on phones | Today: the time; "Yesterday 6:32 PM"; older: the date; tap or hover for the full date | Phone: visible, a tap shows "Saturday, October 17, 2026 at 6:09 AM" |
 
 Where things stand (Phase 10 code):
 
@@ -715,8 +725,8 @@ Where things stand (Phase 10 code):
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
-| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes | 41/41 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
-| Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 4/4; phone voice 3/3, read-aloud unlock | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
+| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues | 44/44 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
+| Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
 
@@ -788,6 +798,10 @@ what changed.
     callers (10e). The same request-scoped trick already carried notices; now it carries the meter.
     **And give each key only what it needs:** the dashboard reads usage with its own key, so the
     key that can change apps never sits in a browser.
+20. **A description is part of the program.** The planner chooses by the API's descriptions and
+    the model words its answer from them: adding "in the current calendar year" to the pending-dues
+    description made a fully paid member hear "no members have pending dues" again (10e). Change one
+    the way you change code - and re-run the evals.
 
 ### What changed when the data got real (Phase 9)
 
@@ -889,6 +903,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `63f3258`, `cd00e5f` | Phase 10d.5: routing fixes; callers, users and roles (masjid repo: `c2d7cdb`, `fbb0286`) |
 | `6a1f23d`, `e3d4d57`, `4129b76` | Phase 10d.6: voice for apps, `eval:masjid`, today's date in app results (masjid repo: `744c56c` limits, `2e75da3` phone UI, `33bfecc` voice and ₹, `061b97d` Malayalam names) |
 | `47907ce`, `6d489d2` | Phase 10e: usage metering, the Command Center, top users (masjid repo: `f2317ef` who asks) |
+| `92a920a`, `c7e83ac`, `d7a0c49`, `8e66b4c`, `ba7a2cb`, `93ca40f`, `d15aa47` | Phase 10e, later: phone voice, read-aloud on phones and in every language, usage questions, what failed, conversation mode, dates (masjid repo: `01d374e` dues by year) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
