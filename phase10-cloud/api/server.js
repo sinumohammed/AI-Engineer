@@ -213,7 +213,7 @@ app.post("/api/speak", express.json({ limit: "16kb" }), async (req, res) => {
   const text = String(req.body?.text ?? "").trim();
   const sources = Array.isArray(req.body?.sources) ? req.body.sources.map(String) : [];
   if (!text) return res.status(400).json({ error: 'Missing "text".' });
-  if (text.length > 800) return res.status(400).json({ error: '"text" is too long - up to 800 characters per piece.' });
+  if (text.length > 1600) return res.status(400).json({ error: '"text" is too long - up to 1600 characters per piece.' });
   if (!SPEECH_TO_GEMINI) return res.status(501).json({ error: "Reading aloud in this language is off on this server." });
   if (sources.some((s) => levelOf(s) !== "public")) {
     return res.status(403).json({ error: "This answer uses internal documents, which are never sent to Gemini - it cannot be read aloud in this language." });
@@ -223,6 +223,14 @@ app.post("/api/speak", express.json({ limit: "16kb" }), async (req, res) => {
     res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
   } catch (err) {
     console.error(`[speak] ${err.message}`);
+    // Gemini's free tier allows 10 speech requests a day (found live through
+    // the Command Center's "what failed" list): say so, and when it resets,
+    // instead of "try again" - trying again cannot help until then.
+    if (err.status === 429) {
+      const wait = err.message.match(/retry in (?:(\d+)h)?(?:(\d+)m)?/i);
+      const when = wait ? ` - it resets in about ${wait[1] ? `${wait[1]} h ` : ""}${wait[2] ?? 0} min` : "";
+      return res.status(429).json({ error: `Today's free limit for reading answers aloud in this language is used up${when}. Answers in English are still read aloud.` });
+    }
     res.status(502).json({ error: "Could not read this answer aloud - please try again." });
   }
 });

@@ -990,9 +990,15 @@ Reading answers aloud in every language: English (Latin letters) uses the
 device's own voice - free, nothing leaves the device. Malayalam, Arabic,
 Hindi and other scripts, which most phones and browsers have no voice for
 (they read "dot dot"), use Gemini's voice: `POST /api/speak` { text, sources }
--> a WAV, `gemini-3.8-flash-lite-tts` (detects the language; ~4.7 s per piece,
-the next fetched while one plays; about $0.001 per two sentences, metered as
-channel `speak`). Same switch as files (`GEMINI_FILES`, on on Vercel), and an
+-> a WAV, `gemini-3.8-flash-lite-tts` (detects the language; about $0.001 per
+two sentences, metered as channel `speak`). Its free tier allows only 10
+requests a day (resets at midnight UTC) - found live through the "what failed"
+list - so: a device voice for the answer's language is used first when the
+device has one (Arabic on most phones; no limit), and Gemini only otherwise
+(Malayalam on most devices), with at most 2 requests per answer (~300
+characters first so reading starts soon, the rest together) instead of one per
+2-3 sentences; a used-up limit says so and when it resets, instead of "try
+again". Same switch as files (`GEMINI_FILES`, on on Vercel), and an
 answer citing internal or confidential documents is refused with the reason
 (dataPolicy.js). Checked by feeding the Malayalam audio back through speech to
 text: the same sentence came back. The console also takes the chat's "I speak"

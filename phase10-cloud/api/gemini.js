@@ -40,7 +40,7 @@ export async function geminiText(model, parts, { thinking, timeoutMs } = {}) {
 // Phase 10e: text to speech - a WAV (24 kHz, mono, 16-bit) of the text, in
 // whatever language it is written (the model detects it). Through the
 // Interactions API, where the TTS models live.
-export async function geminiSpeech(text, { timeoutMs = 30000 } = {}) {
+export async function geminiSpeech(text, { timeoutMs = 60000 } = {}) {
   if (!GEMINI_API_KEY) throw new GeminiError("GEMINI_API_KEY is not set", 501);
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
     method: "POST",

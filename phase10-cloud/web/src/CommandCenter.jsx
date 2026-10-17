@@ -118,14 +118,57 @@ function pieces(text, max) {
   return out.map((p) => p.trim()).filter(Boolean);
 }
 
-// Which voice reads it: the device's own voice for text in Latin letters
-// (English and most European languages - free, nothing leaves the device);
-// the server's Gemini voice for Malayalam, Arabic, Hindi and other scripts,
-// which most phones and browsers have no voice for (they read "dot dot").
+// Which voice reads it, cheapest first:
+//   1. text in Latin letters (English and most European languages): the
+//      device's own voice - free, nothing leaves the device;
+//   2. another script with a device voice for that language (Arabic on most
+//      phones, Hindi on many): that device voice - no daily limit;
+//   3. otherwise (Malayalam on most devices - they read "dot dot"): Gemini's
+//      voice on the server. Its free tier allows 10 requests a day (found
+//      live 2026-10-17 through the "what failed" list), so an answer is at
+//      most 2 requests: a short first part, to start reading soon, and the
+//      rest in one.
 function needsServerVoice(text) {
   const letters = text.match(/\p{L}/gu) ?? [];
   const latin = text.match(/\p{Script=Latin}/gu) ?? [];
   return letters.length > 0 && latin.length / letters.length < 0.6;
+}
+
+// The script an answer is written in -> the language codes a device voice
+// for it would have.
+const SCRIPT_LANGS = [
+  ["Malayalam", ["ml"]],
+  ["Arabic", ["ar", "ur"]],
+  ["Devanagari", ["hi", "mr"]],
+  ["Tamil", ["ta"]],
+  ["Kannada", ["kn"]],
+  ["Telugu", ["te"]],
+  ["Bengali", ["bn"]],
+  ["Gujarati", ["gu"]],
+  ["Gurmukhi", ["pa"]],
+];
+function languagesOf(text) {
+  let best = [[], 0];
+  for (const [script, langs] of SCRIPT_LANGS) {
+    const n = (text.match(new RegExp(`\\p{Script=${script}}`, "gu")) ?? []).length;
+    if (n > best[1]) best = [langs, n];
+  }
+  return best[0];
+}
+// A device voice for one of these languages, if the device has one. The list
+// can be empty until the browser has loaded it ("voiceschanged").
+async function deviceVoiceFor(langs) {
+  const synth = window.speechSynthesis;
+  if (!synth || !langs.length) return null;
+  let voices = synth.getVoices();
+  if (!voices.length) {
+    await new Promise((resolve) => {
+      synth.addEventListener?.("voiceschanged", resolve, { once: true });
+      setTimeout(resolve, 500);
+    });
+    voices = synth.getVoices();
+  }
+  return voices.find((v) => langs.some((l) => (v.lang ?? "").toLowerCase().replace("_", "-").startsWith(l))) ?? null;
 }
 
 let speechRun = 0; // a newer read-out (or Stop) ends an older one
@@ -141,28 +184,48 @@ function stopAllSpeech() {
   }
 }
 
+function deviceSpeak(text, voice) {
+  if (!("speechSynthesis" in window)) return Promise.resolve();
+  const parts = pieces(text, 220);
+  return new Promise((resolve) => {
+    finishPiece = resolve;
+    parts.forEach((p, i) => {
+      const u = new SpeechSynthesisUtterance(p);
+      u.rate = 1.03;
+      if (voice) {
+        u.lang = voice.lang;
+        try {
+          u.voice = voice;
+        } catch {
+          // not a voice this browser accepts: the language alone picks one
+        }
+      }
+      if (i === parts.length - 1) u.onend = u.onerror = resolve;
+      window.speechSynthesis.speak(u);
+    });
+    if (!parts.length) resolve();
+  });
+}
+
+// At most two server requests: up to ~300 characters first, the rest together.
+function serverParts(text) {
+  const all = pieces(text, 300);
+  if (all.length <= 1) return all;
+  const rest = all.slice(1).join(" ");
+  return [all[0], rest.length > 1500 ? rest.slice(0, rest.lastIndexOf(" ", 1500)) : rest];
+}
+
 // Reads `text` aloud; resolves when done. Throws with a reason the user can
-// read when the server voice is refused or fails.
+// read when the server voice is refused or its daily limit is used up.
 async function speak(text, { sources = [] } = {}) {
   stopAllSpeech();
   const run = speechRun;
-  if (!needsServerVoice(text)) {
-    if (!("speechSynthesis" in window)) return;
-    const parts = pieces(text, 220);
-    await new Promise((resolve) => {
-      finishPiece = resolve;
-      parts.forEach((p, i) => {
-        const u = new SpeechSynthesisUtterance(p);
-        u.rate = 1.03;
-        if (i === parts.length - 1) u.onend = u.onerror = resolve;
-        window.speechSynthesis.speak(u);
-      });
-      if (!parts.length) resolve();
-    });
-    return;
-  }
-  // Server voice: fetch the next piece while this one plays.
-  const parts = pieces(text, 350);
+  if (!needsServerVoice(text)) return deviceSpeak(text, null);
+  const voice = await deviceVoiceFor(languagesOf(text));
+  if (run !== speechRun) return;
+  if (voice) return deviceSpeak(text, voice);
+  // Server voice: fetch the second part while the first plays.
+  const parts = serverParts(text);
   const fetchPiece = (p) =>
     fetch(`${API}/api/speak`, { method: "POST", headers: { "Content-Type": "application/json", ...codeHeaders() }, body: JSON.stringify({ text: p, sources: sources.map((s) => s.source) }) }).then(async (r) => {
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Could not read it aloud (${r.status}).`);
