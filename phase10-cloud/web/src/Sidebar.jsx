@@ -20,7 +20,7 @@ export const VOICE_LANGUAGES = [
   ...["English", "Malayalam", "Hindi", "Tamil", "Kannada", "Telugu", "Arabic", "Urdu", "Spanish", "French"].map((l) => ({ value: l, label: `I speak: ${l}` })),
 ];
 
-export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", attachment: "Attached file", connected_apps: "Connected apps", synthesizer: "Combined" };
+export const AGENT_LABELS = { company_docs: "Company docs", coding: "Coding", general: "General", attachment: "Attached file", connected_apps: "Connected apps", synthesizer: "Combined", single_agent: "Single agent" };
 
 const LEVEL_COLORS = { warning: "#d97706", critical: "#dc2626" };
 

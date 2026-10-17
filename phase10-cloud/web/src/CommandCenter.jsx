@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App as AntApp, Button, Card, Grid, Input, Segmented, Select, Switch, Table, Tag, Tooltip, Typography, theme } from "antd";
+import { Alert, App as AntApp, Button, Card, Drawer, Grid, Input, Segmented, Select, Switch, Table, Tag, Tooltip, Typography, theme } from "antd";
 import XMarkdown from "@ant-design/x-markdown";
 import {
   ArrowLeftOutlined,
@@ -754,6 +754,8 @@ function CommsLog({ run }) {
 // --- usage panels ---
 
 function UsagePanels({ d }) {
+  // undefined: closed; null: every app; a name: that app's failures.
+  const [errorsFor, setErrorsFor] = useState(undefined);
   const callers = [...new Set([...d.byApp.map((a) => a.caller), ...d.connectedApps.flatMap((a) => (a.callers ?? []).filter((c) => c !== "web")), "web"])];
   const colors = callerColors(callers);
   const totalCost = d.totals.costUsd;
@@ -799,7 +801,14 @@ function UsagePanels({ d }) {
       title: "Errors",
       dataIndex: "errors",
       align: "right",
-      render: (v) => (v ? <Tag color="error">{v}</Tag> : <span className="muted">0</span>),
+      render: (v, r) =>
+        v ? (
+          <Tag color="error" className="clickable" onClick={() => setErrorsFor(r.caller)}>
+            {v}
+          </Tag>
+        ) : (
+          <span className="muted">0</span>
+        ),
       responsive: ["md"],
     },
     { title: "Last used", dataIndex: "last_at", render: (v) => (v ? new Date(v).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : <span className="muted">never</span>), responsive: ["lg"] },
@@ -808,6 +817,7 @@ function UsagePanels({ d }) {
   const unpriced = d.byModel.filter((m) => !m.priced);
   return (
     <>
+      <FailuresDrawer d={d} app={errorsFor} colors={colors} onClose={() => setErrorsFor(undefined)} />
       <div className="kpis">
         <Kpi label="Questions today" value={fmtInt(d.totals.questionsToday)} />
         <Kpi label={`Questions, ${d.days} days`} value={fmtInt(d.totals.questions)} />
@@ -815,13 +825,14 @@ function UsagePanels({ d }) {
         <Kpi label="Tokens" value={fmtTokens(d.totals.tokens)} />
         <Kpi label="Typical answer" value={fmtMs(d.totals.p50Ms)} hint={`Half of the answers took less than this. 95% took less than ${fmtMs(d.totals.p95Ms)}.`} />
         <Kpi
+          onClick={() => setErrorsFor(null)}
           label="Errors"
           value={
             <span className={errorRate > 0.05 ? "bad" : undefined}>
               {errorRate > 0.05 ? <CloseCircleFilled /> : <CheckCircleFilled className="good" />} {(errorRate * 100).toFixed(errorRate && errorRate < 0.1 ? 1 : 0)}%
             </span>
           }
-          hint={`${fmtInt(d.totals.errors)} failed requests`}
+          hint={`${fmtInt(d.totals.errors)} failed requests - tap to see what failed`}
         />
       </div>
 
@@ -923,12 +934,71 @@ function UsagePanels({ d }) {
   );
 }
 
-function Kpi({ label, value, hint }) {
+function Kpi({ label, value, hint, onClick }) {
   const body = (
-    <div className="kpi">
+    <div
+      className={`kpi${onClick ? " clickable" : ""}`}
+      {...(onClick ? { role: "button", tabIndex: 0, onClick, onKeyDown: (e) => (e.key === "Enter" || e.key === " ") && onClick() } : {})}
+    >
       <span className="kpi-label">{label}</span>
       <span className="kpi-value">{value}</span>
     </div>
   );
   return hint ? <Tooltip title={hint}>{body}</Tooltip> : body;
+}
+
+// What failed: every failed request in the period (with its error), and
+// answered questions where a call to a connected app failed. Opened from the
+// Errors tile (all apps) or an app's error count in the billing table.
+const CHANNEL_LABELS = { chat: "Chat", ask: "App question", transcribe: "Voice to text", attachment: "File", speak: "Read aloud" };
+function FailuresDrawer({ d, app, colors, onClose }) {
+  const open = app !== undefined;
+  const rows = (d.failures ?? []).filter((f) => !app || f.caller === app);
+  const narrow = !Grid.useBreakpoint().sm;
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      placement={narrow ? "bottom" : "right"}
+      // Inside the Command Center, so it has its colours and styles.
+      getContainer={() => document.querySelector(".cc") ?? document.body}
+      size={narrow ? "large" : "default"}
+      title={`What failed${app ? ` - ${callerLabel(app)}` : ""}, last ${d.days} days`}
+      extra={<span className="muted small">{rows.filter((f) => !f.ok).length} failed</span>}
+    >
+      {!rows.length && <p className="muted">Nothing failed in this period.</p>}
+      <ul className="failures">
+        {rows.map((f, i) => {
+          // A 403 is the app refusing what this user may not see (a member
+          // asking for the accounts) - the role rules working, not a fault.
+          const calls = f.failed_app_calls ?? [];
+          const onlyRefusals = f.ok && calls.length > 0 && calls.every((c) => c.status === 403);
+          return (
+          <li key={i} className={onlyRefusals ? "refusal" : undefined}>
+            <div className="failure-head">
+              {!f.ok ? <Tag color="error">failed</Tag> : onlyRefusals ? <Tag>refused for this user (expected)</Tag> : <Tag color="warning">answered, an app call failed</Tag>}
+              <span className="app-cell">
+                <i style={{ background: colors[f.caller] ?? "var(--other)" }} />
+                {callerLabel(f.caller)}
+              </span>
+              <span className="muted">{CHANNEL_LABELS[f.channel] ?? f.channel}</span>
+              <span className="grow" />
+              <span className="muted num">{new Date(f.at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</span>
+            </div>
+            {f.error && <div className="failure-error">{f.error}</div>}
+            {calls.map((c, k) => (
+              <div key={k} className={c.status === 403 ? "failure-note" : "failure-error"}>
+                {c.app} · {c.operation}: {c.status === 403 ? "not allowed for this user" : c.status ? `HTTP ${c.status}` : "no answer"}
+                {c.latencyMs != null ? ` after ${fmtMs(c.latencyMs)}` : ""}
+              </div>
+            ))}
+            <div className="muted small">
+              {[f.user_ref && `user ${f.user_ref}`, (f.agents ?? []).length && `agents: ${f.agents.map((a) => AGENT_LABELS[a] ?? a).join(", ")}`, f.latency_ms != null && `took ${fmtMs(f.latency_ms)}`].filter(Boolean).join(" · ")}
+            </div>
+          </li>
+          );
+        })}
+      </ul>
+    </Drawer>
+  );
 }

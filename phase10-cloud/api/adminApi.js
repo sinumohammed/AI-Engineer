@@ -134,6 +134,19 @@ adminApi.get(
   })
 );
 adminApi.get(
+  "/usage/errors",
+  handle(async (req) => {
+    const d = await usageReport(daysOf(req));
+    const app = appOf(req);
+    return {
+      periodDays: d.days,
+      failures: d.failures
+        .filter((f) => !app || f.caller === app)
+        .map((f) => ({ at: f.at, app: f.caller, kind: f.channel, user: f.user_ref ?? undefined, answered: f.ok, error: f.error ?? undefined, ms: f.latency_ms, failedAppCalls: (f.failed_app_calls ?? []).map((c) => `${c.app}.${c.operation}${c.status ? ` (${c.status})` : ""}`) })),
+    };
+  })
+);
+adminApi.get(
   "/usage/app-calls",
   handle(async (req) => {
     const d = await usageReport(daysOf(req));

@@ -185,7 +185,7 @@ export async function usageReport(days = 30) {
   const since = `now() - make_interval(days => $1)`;
   const q = (sql) => db.query(sql, [days]).then((r) => r.rows);
   const QUESTION = `channel IN ('chat', 'ask')`;
-  const [byApp, byDay, byAgent, byModel, appCalls, byUser, latency, recent] = await Promise.all([
+  const [byApp, byDay, byAgent, byModel, appCalls, byUser, latency, recent, failures] = await Promise.all([
     q(`SELECT caller,
               count(*) FILTER (WHERE ${QUESTION})::int AS questions,
               count(*) FILTER (WHERE NOT ok)::int AS errors,
@@ -236,6 +236,14 @@ export async function usageReport(days = 30) {
            FROM usage_events ORDER BY at DESC LIMIT 30`
       )
       .then((r) => r.rows),
+    // What failed, newest first - the Errors tile's list. A failed call to a
+    // connected app inside an answered question is listed too (the question
+    // was answered, but without that app's data).
+    q(`SELECT at, caller, channel, mode, user_ref, ok, error, latency_ms, agents,
+              (SELECT coalesce(jsonb_agg(c), '[]') FROM jsonb_array_elements(app_calls) AS c WHERE NOT (c->>'ok')::boolean) AS failed_app_calls
+         FROM usage_events
+        WHERE at >= ${since} AND (NOT ok OR app_calls @> '[{"ok": false}]')
+        ORDER BY at DESC LIMIT 50`),
   ]);
   const ms = latency.map((r) => r.latency_ms);
   const num = (v) => Number(v ?? 0);
@@ -258,6 +266,7 @@ export async function usageReport(days = 30) {
     byModel: byModel.map((r) => ({ ...r, prompt_tokens: num(r.prompt_tokens), completion_tokens: num(r.completion_tokens), cost_usd: num(r.cost_usd) })),
     appCalls,
     byUser: byUser.map((r) => ({ ...r, cost_usd: num(r.cost_usd) })),
+    failures,
     recent,
     prices: PRICES,
   };

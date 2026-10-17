@@ -49,6 +49,13 @@ export const USAGE_OPENAPI = {
         parameters: [{ name: "limit", in: "query", required: false, description: "How many, 1-30. Default 10", schema: { type: "integer", minimum: 1, maximum: 30 } }],
       },
     },
+    "/usage/errors": {
+      get: {
+        operationId: "usage_errors",
+        summary: "What failed, newest first: requests that ended in an error (with the error message) and answered questions where a call to a connected app failed - for \"what failed\", \"any errors today\", \"why did masjid fail\"",
+        parameters: [days, app],
+      },
+    },
     "/usage/app-calls": {
       get: {
         operationId: "usage_app_calls",
