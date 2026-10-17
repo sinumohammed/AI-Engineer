@@ -848,6 +848,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.5</td><td>First real app (masjid): who may ask, and as which user</td><td class="res">Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23</td></tr>
                 <tr><td class="n">10d.6</td><td>The masjid assistant in daily use: limits in Settings, a phone-first chat, hands-free voice, rupees, Malayalam names, a repeatable test</td><td class="res">Live: "Sinu TK" finds സിനു ടി കെ, "this month" gives October; <code>eval:masjid</code> 40/40</td></tr>
                 <tr><td class="n">10e</td><td>Command Center: usage and cost per app and per user, the agents at work live, ask by voice or by clapping twice</td><td class="res">Live: web and masjid questions counted with their cost (9 questions, $0.0086 at paid prices); <code>eval:masjid</code> 41/41</td></tr>
+                <tr><td class="n">10d.7</td><td>App keys stored in Redis as hashes: a new app is one command, no redeploy</td><td class="res">Live: both apps on stored keys, <code>APP_API_KEYS</code> deleted from Vercel; <code>eval:ask</code> 11/11</td></tr>
+                <tr><td class="n">10d.8</td><td>Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam</td><td class="res">Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; <code>eval:masjid</code> 53 checks</td></tr>
               </tbody>
             </table>
           </div>
@@ -1072,6 +1074,67 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10e. Usage is recorded in the one place every model call passes through, so every agent, app and fallback is counted without touching the ~10 callers. Each app's key is its billing identity; the masjid app also says which user asks, as a code ("member:MR001", an anonymous code for visitors), never a name. On free tiers the real bill is $0; the dashboard shows what the same use would cost on paid tiers.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 250" role="img" aria-label="A new app's key is made with one command and shown once; Redis keeps only its SHA-256 hash with the app's name. On each question the service hashes the key it was sent and looks the hash up: found gives the app's name, not found gives 401.">
+                <defs><marker id="a15" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">A NEW APP · ONE COMMAND, NO DEPLOY</text>
+                <rect class="b" x="20" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="120" y="57" text-anchor="middle">askkey new masjid</text>
+                <text class="s" x="120" y="75" text-anchor="middle">npm run app (admin key)</text>
+                <line class="ln" x1="220" y1="62" x2="259" y2="62" marker-end="url(#a15)"/>
+                <rect class="b" x="260" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="360" y="57" text-anchor="middle">Key ak_... made</text>
+                <text class="s" x="360" y="75" text-anchor="middle">shown once, given to the app</text>
+                <line class="ln" x1="460" y1="62" x2="499" y2="62" marker-end="url(#a15)"/>
+                <rect class="b" x="500" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="600" y="57" text-anchor="middle">Redis ask:keys</text>
+                <text class="s" x="600" y="75" text-anchor="middle">sha256(key) -> "masjid"</text>
+                <text class="k" x="20" y="136">EACH QUESTION</text>
+                <rect class="b" x="20" y="148" width="200" height="56" rx="6"/>
+                <text class="t" x="120" y="171" text-anchor="middle">Masjid server</text>
+                <text class="s" x="120" y="189" text-anchor="middle">Bearer ak_... (its own copy)</text>
+                <line class="ln" x1="220" y1="176" x2="259" y2="176" marker-end="url(#a15)"/>
+                <rect class="b" x="260" y="148" width="200" height="56" rx="6"/>
+                <text class="t" x="360" y="171" text-anchor="middle">AI service</text>
+                <text class="s" x="360" y="189" text-anchor="middle">hashes the key it was sent</text>
+                <line class="ln" x1="460" y1="176" x2="499" y2="176" marker-end="url(#a15)"/>
+                <rect class="b" x="500" y="148" width="200" height="56" rx="6"/>
+                <text class="t" x="600" y="171" text-anchor="middle">Hash in ask:keys?</text>
+                <text class="s" x="600" y="189" text-anchor="middle">yes: "masjid" · no: 401</text>
+                <path class="ln" style="stroke-dasharray: 4 4" d="M600,90 V147" marker-end="url(#a15)"/>
+                <text class="s" x="610" y="124">looked up</text>
+                <text class="s" x="20" y="236">The key itself is never stored: Redis holds fingerprints, which cannot be turned back into keys.</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.7. Each app keeps its own key; only the service's list of accepted keys moved, from an env var on Vercel (retype every key, redeploy) to Redis. Hashed, not encrypted: the service only has to recognise a key, never send it. An app's token goes the other way and must be sent, so that one is encrypted. <code>revoke</code> stops a key on the next request.</figcaption>
+          </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 220" role="img" aria-label="The admin asks for last year's pending dues with no member named. The planner calls the masjid API's dues_by_year for 2025. Before the fix it answered 400, say which member; now it returns every member still owing that year with the total. A member asking for everyone is refused.">
+                <defs><marker id="a16" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">LAST YEAR'S DUES · ADMIN, NO MEMBER NAMED</text>
+                <rect class="b" x="20" y="67" width="200" height="56" rx="6"/>
+                <text class="t" x="120" y="90" text-anchor="middle">Planner</text>
+                <text class="s" x="120" y="108" text-anchor="middle">"previous year pending"</text>
+                <line class="ln" x1="220" y1="95" x2="259" y2="95" marker-end="url(#a16)"/>
+                <rect class="b" x="260" y="67" width="200" height="56" rx="6"/>
+                <text class="t" x="360" y="90" text-anchor="middle">Masjid API</text>
+                <text class="s" x="360" y="108" text-anchor="middle">dues_by_year, year 2025</text>
+                <path class="ln" style="stroke-dasharray: 4 4" d="M460,85 H480 V62 H499" marker-end="url(#a16)"/>
+                <path class="ln" d="M460,105 H480 V128 H499" marker-end="url(#a16)"/>
+                <rect class="b" x="500" y="34" width="200" height="56" rx="6"/>
+                <text class="t" x="600" y="57" text-anchor="middle">Before: 400</text>
+                <text class="s" x="600" y="75" text-anchor="middle">"say which member"</text>
+                <rect class="b" x="500" y="100" width="200" height="56" rx="6"/>
+                <text class="t" x="600" y="123" text-anchor="middle">Now: everyone</text>
+                <text class="s" x="600" y="141" text-anchor="middle">who still owes, and the total</text>
+                <text class="s" x="20" y="186">A member asking for everyone: 403. In order: deploy the masjid app, then npm run app -- refresh masjid -</text>
+                <text class="s" x="20" y="206">the first refresh ran before the deploy had finished and read the old description.</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.8. The fix lives in the masjid API, where the data and the roles are. The same day the assistant got its own look: a masjid dome as a bot's head, a green launcher, answer cards, and ready questions in Malayalam for each role (admin: accounts, dues, last year, bank balances; member: my dues, my next duty, my payments; guest: the duty days). Each is a check in <code>eval:masjid</code>; <code>ONLY=chips</code> runs just those on Groq.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1084,6 +1147,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Where data is stored and where it is sent are different rules: private documents were never stored on a hosted database, yet a hosted model read their excerpts whenever it answered on the Mac.</li>
               <li>Make the variable part data, not code: each app differs only in its address, endpoints and token, so a new app is a configuration entry and a command, not new code and a deployment.</li>
               <li>Who may see data is the data owner's decision, enforced where the data is: the AI only says who is asking, the masjid app decides what an admin, a member or a guest sees.</li>
+              <li>Hash what you only check, encrypt what you must send: an app's ask-key is only recognised, so a one-way hash is kept; an app's token is sent to the app, so it is encrypted.</li>
+              <li>Test in the user's language, on the model the user gets: the local model planned the Malayalam questions right and misread the answers (4/6); Groq, which the live app uses, got 6/6.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
@@ -1199,6 +1264,10 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">97</td><td class="n">10e</td><td>Live, found by the new "what failed" list: 3 read-aloud failures - Gemini's voice allows 10 requests a day on the free tier, one per 2-3 sentences</td><td>A device voice for the language first when there is one; Gemini at most 2 requests per answer; a used-up limit says when it resets</td><td class="res">Long Malayalam answer: 2 requests (was ~6); the real 429 shown as "resets in about 21 h"</td></tr>
             <tr><td class="n">98</td><td class="n">10e</td><td>No way to see how much of the free tiers was left (asked by the user)</td><td>"Free tier today" per model: Groq's own requests-left figure, our token count, "used up until" from a refusal; Gemini reports none</td><td class="res">Groq 999 of 1,000 requests left; "≈ 58 more questions": tokens run out first, gpt-oss-20b before 120b</td></tr>
             <tr><td class="n">96</td><td class="n">10e</td><td>Request times showed the clock only, hidden on phones</td><td>Time for today, "Yesterday 6:32 PM", the date for older; tap for the full date</td><td class="res">Visible on phones; a tap shows the full date</td></tr>
+            <tr><td class="n">99</td><td class="n">10d.7</td><td>Each new app's key meant retyping every key in <code>APP_API_KEYS</code> on Vercel and a redeploy</td><td>Keys in Redis as SHA-256 hashes: <code>askkey new / import / list / revoke</code></td><td class="res">Live: eval imported, masjid given a new key, <code>APP_API_KEYS</code> deleted; <code>eval:ask</code> 11/11</td></tr>
+            <tr><td class="n">100</td><td class="n">10d.8</td><td>The admin's "previous year pending" got no answer (found by the user): a 400 - <code>dues_by_year</code> handled one member</td><td>With no member named, the admin gets everyone still owing that year (<code>everyone</code>; members refused)</td><td class="res"><code>eval:masjid</code> 47/47; live call succeeded. Refresh only after the deploy has finished</td></tr>
+            <tr><td class="n">101</td><td class="n">10d.8</td><td>The assistant looked generic; suggestions English only (asked by the user)</td><td>A masjid-bot mark and launcher, answer cards, ready questions in Malayalam per role</td><td class="res">Admin, member, guest; phone and computer; light and dark; nothing wider than the screen</td></tr>
+            <tr><td class="n">102</td><td class="n">10d.8</td><td>Do the Malayalam questions reach the right data?</td><td>6 checks in <code>eval:masjid</code>; <code>ONLY=chips</code> runs only those on Groq</td><td class="res">Groq 6/6; local qwen 4/6 (right calls, misread in Malayalam)</td></tr>
           </tbody>
         </table>
       </div>
@@ -1222,7 +1291,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Data policy: what search, ingest and attachments may send where (no model calls)</td><td class="n">15/15</td><td class="n">-</td></tr>
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
-            <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues</td><td class="n">44/44</td><td class="n">live: 2/2 match the app's schedule</td></tr>
+            <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions</td><td class="n">51/53 (2 misses: Malayalam answers on the local model)</td><td class="n">Malayalam ready questions 6/6; live: 2/2 match the app's schedule</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
           </tbody>
         </table>
@@ -1253,6 +1322,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Test data must look like the real data.</strong> The test members had English names; every real member's name is in Malayalam, so "Sinu TK" failing was invisible until a user asked (10d.6). The masjid eval now has a Malayalam-named member searched in English letters.</li>
         <li><strong>Measure in the one place everything passes through.</strong> Every model call goes through <code>chat()</code>, so usage is recorded there once, for every agent, app and fallback - not in each of the ~10 callers (10e). <strong>And give each key only what it needs:</strong> the dashboard reads usage with its own key, so the key that can change apps never sits in a browser.</li>
         <li><strong>A description is part of the program.</strong> The planner chooses by the API's descriptions and the model words its answer from them: adding "in the current calendar year" to the pending-dues description made a fully paid member hear "no members have pending dues" again (10e). Change one the way you change code - and re-run the evals.</li>
+        <li><strong>Hash what you only check; encrypt what you must send.</strong> An app's ask-key only has to be recognised, so the service keeps a one-way hash; an app's token has to be sent to the app, so it is encrypted and can be read back (10d.7). Pick by what the secret is for.</li>
+        <li><strong>Test in the user's language, on the model the user gets.</strong> The local model planned the Malayalam questions right and still misread the answers; Groq, which the live app uses, got all six (10d.8). A test that passes on one model says little about another.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1303,8 +1374,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Test <code>/api/ask</code> for other apps</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:ask</code> (needs <code>ASK_API_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>Check which documents may go where</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:policy</code> (no model calls)</td></tr>
             <tr><td>Connected apps</td><td><code>cd phase10-cloud/api &amp;&amp; npm run app -- list</code> (also <code>add &lt;file&gt;</code>, <code>try "question"</code>, <code>remove &lt;name&gt;</code>); test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:apps</code></td></tr>
-            <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice)</td></tr>
-            <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; npm run new-app-key -- &lt;name&gt;</code>, add <code>&lt;name&gt;=&lt;key&gt;</code> to <code>APP_API_KEYS</code> on Vercel, deploy</td></tr>
+            <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice; <code>ONLY=chips</code> only the Malayalam ready questions - run those with the Groq settings)</td></tr>
+            <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new &lt;name&gt;</code> - works at once (also <code>askkey list</code>, <code>askkey revoke &lt;id or name&gt;</code>)</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Command Center (usage, cost, agents live)</td><td>live: <code>https://ai-engineer-web-seven.vercel.app/#/command</code>; local: <code>http://localhost:5174/#/command</code> (key: <code>DASHBOARD_KEY</code> or <code>ADMIN_KEY</code> in <code>.env</code>)</td></tr>
             <tr><td>Deploy</td><td><code>npx vercel deploy --prod</code> in <code>phase10-cloud/api</code> or <code>phase10-cloud/web</code></td></tr>

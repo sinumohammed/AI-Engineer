@@ -70,17 +70,17 @@ masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> mas
 | Neon | handbook vectors | `NEON_DATABASE_URL` | `DATABASE_URL` | - | Neon console |
 | Upstash | history, attachments, app registry | `UPSTASH_REDIS_URL` | `REDIS_URL` | - | Upstash console |
 | Web chat access code | everyone using the live chat | `HOSTED_ACCESS_CODE` | `ACCESS_CODE` | - | any string |
-| eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | `eval=...` in `APP_API_KEYS` (until moved to Redis) | - | `npm run app -- askkey new eval` |
-| masjid app key | the masjid server asking the AI | - | `masjid=...` in `APP_API_KEYS` (until moved to Redis) | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run app -- askkey new masjid` |
+| eval app key | `/api/ask` tests and example client | `ASK_API_KEY` | - (stored hashed in Redis `ask:keys`) | - | `npm run app -- askkey new eval` |
+| masjid app key | the masjid server asking the AI | - | - (stored hashed in Redis `ask:keys`) | `AI_ASK_KEY` (+ `AI_ASK_URL`) | `npm run app -- askkey new masjid` |
 | Admin key | `npm run app` (connected apps) | `ADMIN_KEY` | `ADMIN_KEY` | - | `npm run app -- keys` |
 | Dashboard key | the Command Center (`#/command`): usage only, read-only; also the token of the `usage` app | `DASHBOARD_KEY` | `DASHBOARD_KEY` (set in the dashboard - piping it to `vercel env add` stored something else) | - | `openssl rand -base64 24`, then `npm run app -- add ../apps/usage.json` |
 | App secrets key | encrypts app tokens in Redis | `APP_SECRETS_KEY` | `APP_SECRETS_KEY` | - | `npm run app -- keys` (then re-add every app) |
 | Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid.json` |
 
 `/api/ask` keys (10d.7): stored hashed in Redis with `npm run app -- askkey
-new|import|list|revoke` - they work at once, no deployment. The older
-`APP_API_KEYS` on Vercel (`eval=...,masjid=...`) is still read; a changed
-Vercel value applies only after the next `npx vercel deploy --prod`.
+new|import|list|revoke` - they work at once, no deployment. Both apps moved
+on 2026-10-17 and `APP_API_KEYS` was deleted from Vercel; the code still reads
+it if set (applies only after `npx vercel deploy --prod`).
 
 ## Evals
 

@@ -447,6 +447,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.5 | First real app (masjid): who may ask, and as which user | Live: the masjid app's chat answers guests the duty schedule from real data; the web chat sees no masjid data; end to end 23/23 |
 | 10d.6 | The masjid assistant in daily use: limits in Settings, a phone-first chat, hands-free voice, rupees, Malayalam names, a repeatable test | Live: "Sinu TK" finds സിനു ടി കെ, "this month" gives October; `eval:masjid` 40/40 |
 | 10e | Command Center: usage and cost per app and per user, the agents at work live, ask by voice or by clapping twice | Live: web and masjid questions counted with their cost (9 questions, $0.0086 at paid prices); `eval:masjid` 41/41 |
+| 10d.7 | App keys stored in Redis as hashes: a new app is one command, no redeploy | Live: both apps on stored keys, `APP_API_KEYS` deleted from Vercel; `eval:ask` 11/11 |
+| 10d.8 | Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam | Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; `eval:masjid` 53 checks |
 
 - **Challenges, in plain terms:**
 
@@ -596,6 +598,32 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   talk or tap to interrupt, ~8 s of silence ends it), the agents answer questions about usage
   ("how many questions today?") through the service's own usage registered as a connected app, and
   the Errors tile lists what failed. Live: "how many questions today, did anything fail?" answered from the numbers (5 questions, $0.072), the web chat sees none.
+- **App keys in Redis (10d.7):** an app's ask-key works like a house key. Each app keeps its own
+  key (masjid's `AI_ASK_KEY`, the eval's `ASK_API_KEY`); only the service's list of accepted keys
+  moved - from the env var `APP_API_KEYS` (retype every key on Vercel, redeploy) to Redis:
+  ```
+  npm run app -- askkey new masjid
+    -> key ak_... made, shown ONCE (give it to the app)
+    -> Redis ask:keys:  sha256(key) -> { name: "masjid" }      the key itself is never stored
+
+  masjid --Bearer ak_...--> /api/ask -> sha256(given) in ask:keys? -> "masjid"  else 401
+  ```
+  **Hashed, not encrypted:** the service only has to recognise the key, never send it, so a
+  one-way fingerprint is enough - whoever reads Redis gets no usable key. An app's token (the
+  other direction, service -> app) must be sent, so that one is encrypted. `revoke` stops a key on
+  the next request; an app can hold two keys while one replaces the other.
+- **The masjid assistant, polished (10d.8):** the admin's "previous year pending" got a 400 -
+  `dues_by_year` handled one member, and the admin is not one. Now, with no member named, the
+  admin gets everyone who still owes for that year (`everyone`, refused to members). The chat got
+  its own mark (a masjid dome as a bot's head, crescent on top), a green launcher, a header that
+  says whom it answers as, answer cards, and **ready questions in Malayalam** for each role: admin
+  (last month's accounts, this month's spending, members with dues, last year's dues, bank
+  balances), member (my dues, my next duty, last year, my payments, announcements), guest (duty
+  today, tomorrow, this week, Friday). Each is a check in `eval:masjid`; `ONLY=chips` runs just
+  those on Groq. Found: the local model made the right calls but misread the data when answering
+  in Malayalam (4/6); Groq, which the live app uses, 6/6. And an app change takes two steps in
+  order: deploy the app, *then* `npm run app -- refresh masjid` - the first refresh ran before the
+  deploy finished and read the old description.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -707,6 +735,10 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 97 | 10e | Live, found by the new "what failed" list: 3 read-aloud failures - Gemini's voice allows 10 requests a day on the free tier, and each 2-3 sentence piece was one request | A device voice for the language first when there is one (no limit); Gemini at most 2 requests per answer instead of ~6; a used-up limit says so and when it resets | Phone-sized page: a long Malayalam answer 2 requests (was ~6), Arabic with a device voice 0; live, the real 429: "used up - it resets in about 21 h 24 min" |
 | 98 | 10e | No way to see how much of the free tiers was left (asked by the user) | "Free tier today" per model: Groq's own requests-left figure (sent on every response), our token count against 200K a day, "used up until" from a provider's refusal; Gemini reports none - its TTS limit came from its own error | Local, real figures: Groq 999 / 998 of 1,000 requests left, ~194K of 200K tokens; Gemini voice "used up, back 4:00 AM". Then "≈ N more questions today" (whichever limit first, 7-day averages): tokens, not requests, are the real limit, and gpt-oss-20b (~2.7 calls a question) runs out before 120b |
 | 96 | 10e | Request times showed the clock only, and were hidden on phones | Today: the time; "Yesterday 6:32 PM"; older: the date; tap or hover for the full date | Phone: visible, a tap shows "Saturday, October 17, 2026 at 6:09 AM" |
+| 99 | 10d.7 | Each new app's key meant retyping every key in `APP_API_KEYS` on Vercel (it never shows a saved value) and a redeploy | Keys in Redis as SHA-256 hashes: `npm run app -- askkey new / import / list / revoke`; the env var still read during the move | Local: env and stored keys 200, wrong 401, a revoked key refused at once; live: eval key imported, masjid given a new one (its old key could not be read back), `APP_API_KEYS` deleted, `eval:ask` 11/11 |
+| 100 | 10d.8 | The admin's "previous year pending" got no answer (found by the user): `dues_by_year` returned 400 - it handled one member | Masjid API: with no member named, the admin gets every member still owing that year, with the total (`everyone`; members refused) | `eval:masjid` 47/47; live: the same call succeeded. The first refresh ran before the masjid deploy finished - refresh after the deploy |
+| 101 | 10d.8 | The assistant looked generic and its suggestions were English only (asked by the user) | A masjid-bot mark and launcher, a polished chat (header, answer cards, bullets), ready questions in Malayalam per role, as cards and chips | Screenshots: admin, member, guest; phone and computer; light and dark - nothing wider than the screen |
+| 102 | 10d.8 | Do the Malayalam questions reach the right data? | 6 checks in `eval:masjid`; `ONLY=chips` runs only those, to use little Groq quota | Groq 6/6. Local qwen 4/6: the right calls, the data misread in Malayalam - Malayalam answers are checked on Groq |
 
 Where things stand (Phase 10 code):
 
@@ -723,11 +755,12 @@ Where things stand (Phase 10 code):
 | Citations: document answers that cite a source | 37/37 (single and multi-agent) | 32/33 single, 32/33 multi-agent (public only) |
 | Through the public URL, both modes | - | 12/12 |
 | `POST /api/ask` for other apps (keys, bad requests, a question, a conversation) | 9/9 | 9/9 |
+| `/api/ask` keys stored in Redis (10d.7): stored and env keys, wrong, revoked, reserved names | 11/11 `eval:ask` with a stored key; key checks by hand | 11/11 live, Redis keys only |
 | Long attachment, 59 pages: fact reaches the model / answers single, multi / which questions get it | 8/8 / 8/8, 8/8 / 9/9 | 4/4 live questions right |
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
-| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues | 44/44 | live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
+| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model) | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -804,6 +837,12 @@ what changed.
     the model words its answer from them: adding "in the current calendar year" to the pending-dues
     description made a fully paid member hear "no members have pending dues" again (10e). Change one
     the way you change code - and re-run the evals.
+21. **Hash what you only check; encrypt what you must send.** An app's ask-key only has to be
+    recognised, so the service keeps a one-way hash; an app's token has to be sent to the app, so
+    it is encrypted and can be read back (10d.7). Pick by what the secret is for.
+22. **Test in the user's language, on the model the user gets.** The local model planned the
+    Malayalam questions right and still misread the answers; Groq, which the live app uses, got
+    all six (10d.8). A test that passes on one model says little about another.
 
 ### What changed when the data got real (Phase 9)
 
@@ -852,8 +891,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
 | Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
 | Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps` |
-| The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; needs the masjid repo at `MASJID_REPO`) |
-| A key for a new app | `cd phase10-cloud/api && npm run new-app-key -- <name>`, add `<name>=<key>` to `APP_API_KEYS` on Vercel, deploy |
+| The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; `ONLY=chips` only the Malayalam ready questions - run those with the Groq settings; needs the masjid repo at `MASJID_REPO`) |
+| A key for a new app | `cd phase10-cloud/api && API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new <name>` - works at once (also `askkey list`, `askkey revoke <id or name>`) |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
 | Command Center (usage, cost, agents live) | live: https://ai-engineer-web-seven.vercel.app/#/command; local: http://localhost:5174/#/command (key: `DASHBOARD_KEY` or `ADMIN_KEY` in `.env`) |
 | Deploy | `npx vercel deploy --prod` in `phase10-cloud/api` or `phase10-cloud/web` |
@@ -906,6 +945,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `6a1f23d`, `e3d4d57`, `4129b76` | Phase 10d.6: voice for apps, `eval:masjid`, today's date in app results (masjid repo: `744c56c` limits, `2e75da3` phone UI, `33bfecc` voice and ₹, `061b97d` Malayalam names) |
 | `47907ce`, `6d489d2` | Phase 10e: usage metering, the Command Center, top users (masjid repo: `f2317ef` who asks) |
 | `92a920a`, `c7e83ac`, `d7a0c49`, `8e66b4c`, `ba7a2cb`, `93ca40f`, `d15aa47` | Phase 10e, later: phone voice, read-aloud on phones and in every language, usage questions, what failed, conversation mode, dates (masjid repo: `01d374e` dues by year) |
+| `48ad8b9` | Phase 10d.7: app ask-keys in Redis, hashed |
+| `2132350`, `edf5ae5` | Phase 10d.8: `eval:masjid` checks for last year's dues and the Malayalam ready questions (masjid repo: `a1ef56c` everyone's dues for a year, `0cec43b` the new look and Malayalam questions) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
