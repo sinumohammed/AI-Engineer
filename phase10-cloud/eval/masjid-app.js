@@ -277,6 +277,12 @@ try {
   check(`dues-by-year: a member's own ${lastYear} - 12 months missed, ₹1200 due`, od?.due === 1200 && od?.missedMonths?.length === 12, JSON.stringify(od ?? r.body).slice(0, 160));
   r = await call(`${M}/ai/dues-by-year?year=${lastYear}&search=${encodeURIComponent("Old Dues Member")}`, { headers: { ...svc, "X-User-Token": memberUser } });
   check("dues-by-year: another member's year refused to a member", r.status === 403, `${r.status} ${r.body.error ?? ""}`);
+  // Found live: the admin's "pending of last year" was a 400 (the admin is not one member).
+  r = await call(`${M}/ai/dues-by-year?year=${lastYear}`, { headers: { ...svc, "X-User-Token": adminUser } });
+  const oy = r.body.members?.find((x) => x.name === "Old Dues Member");
+  check(`dues-by-year: the admin, no member named - everyone still owing for ${lastYear}`, r.status === 200 && oy?.due === 1200 && r.body.totalDue >= 1200, `${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+  r = await call(`${M}/ai/dues-by-year?year=${lastYear}&everyone=true`, { headers: { ...svc, "X-User-Token": memberUser } });
+  check("dues-by-year: everyone=true refused to a member", r.status === 403, `${r.status} ${r.body.error ?? ""}`);
   const show = (a) => `${(a.ms / 1000).toFixed(1)}s ${a.answer.slice(0, 120)}`;
   let a = await ask(adminLogin, "Which members have pending dues and how much?");
   check("Admin: everyone's dues", ["Abdul", "Fathima", "Ashraf", "Shameer"].every((x) => a.answer.includes(x)) && a.sources.includes("masjid API"), show(a));
@@ -298,6 +304,8 @@ try {
   const oldLogin = await login(byName("Old Dues Member").unique_id, "9000000007");
   a = await ask(oldLogin, "What were my pending dues for last year?");
   check("Member: 'my pending for last year' - that year's dues, not just this year's", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
+  a = await ask(adminLogin, "What were the pending dues of last year?");
+  check("Admin: 'pending dues of last year' - the members who still owe for that year", a.answer.includes("Old Dues Member") && plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
   a = await ask(fathima, "When is my next food duty?");
   check("Member: 'my next duty' - a date", /\d{4}-\d{2}-\d{2}|January|February|March|April|May|June|July|August|September|October|November|December/.test(a.answer), show(a));
   a = await ask(fathima, "How much did the masjid spend this month?");
