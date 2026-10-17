@@ -188,6 +188,14 @@
 .cc .slim { padding: 6px 10px; }
 .clickable { cursor: pointer; }
 .kpi.clickable:hover, .kpi.clickable:focus-visible { border-color: var(--primary); }
+.freetier { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ft-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ft-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ft-head .ant-tag { margin: 0; }
+.ft-name { font-weight: 600; font-size: 13.5px; }
+.ft-meter { display: flex; flex-direction: column; gap: 3px; }
+.ft-track { height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; display: block; }
+.ft-track span { display: block; height: 100%; background: var(--s1); border-radius: 3px; }
 .failures { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .failures li { border: 1px solid var(--ant-color-border-secondary, rgba(128,128,128,.25)); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .failure-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

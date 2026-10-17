@@ -56,6 +56,12 @@ export const USAGE_OPENAPI = {
         parameters: [days, app],
       },
     },
+    "/usage/free-tier": {
+      get: {
+        operationId: "usage_free_tier",
+        summary: "How much of each free tier is left today, per model (Groq answer and judge models, Whisper, Gemini voice and speech-to-text): requests and tokens used and left, the daily limit, used up until when - for \"how much free quota is left\", \"will we run out today\"",
+      },
+    },
     "/usage/app-calls": {
       get: {
         operationId: "usage_app_calls",

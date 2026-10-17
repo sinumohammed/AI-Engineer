@@ -24,7 +24,7 @@ import { ADMIN_KEY, DASHBOARD_KEY } from "./config.js";
 import { listApps, saveApp, refreshApp, removeApp, publicView, AppConfigError } from "./appRegistry.js";
 import { appContext } from "./apps.js";
 import { withAccess } from "./appAccess.js";
-import { usageReport } from "./usage.js";
+import { usageReport, freeTierToday } from "./usage.js";
 import { USAGE_OPENAPI } from "./usageOpenapi.js";
 
 const digest = (s) => createHash("sha256").update(String(s)).digest();
@@ -81,9 +81,9 @@ adminApi.get(
   "/usage",
   handle(async (req) => {
     const days = Math.min(365, Math.max(1, Math.round(Number(req.query.days) || 30)));
-    const [report, apps] = await Promise.all([usageReport(days), listApps()]);
+    const [report, apps, freeTier] = await Promise.all([usageReport(days), listApps(), freeTierToday()]);
     // The registry too, so an app with no use yet still shows (with zeros).
-    return { ...report, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
+    return { ...report, freeTier, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
   })
 );
 
@@ -145,6 +145,10 @@ adminApi.get(
         .map((f) => ({ at: f.at, app: f.caller, kind: f.channel, user: f.user_ref ?? undefined, answered: f.ok, error: f.error ?? undefined, ms: f.latency_ms, failedAppCalls: (f.failed_app_calls ?? []).map((c) => `${c.app}.${c.operation}${c.status ? ` (${c.status})` : ""}`) })),
     };
   })
+);
+adminApi.get(
+  "/usage/free-tier",
+  handle(async () => ({ note: "Today, from midnight UTC. requestsLeft is the provider's own figure where it gives one (Groq), else this service's count against the free-tier limit; usedUpUntil means the provider refused until then.", models: await freeTierToday() }))
 );
 adminApi.get(
   "/usage/app-calls",

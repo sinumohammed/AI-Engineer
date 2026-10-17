@@ -17,6 +17,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import pg from "pg";
 import { DATABASE_URL } from "./config.js";
+import { FREE_TIER, providerStates } from "./limits.js";
 
 // List prices in USD per million tokens, [input, output], checked 2026-10-16:
 // Groq gpt-oss (groq.com/pricing), Gemini flash-lite (ai.google.dev/pricing -
@@ -176,6 +177,49 @@ export async function meteredJob({ caller, channel, userRef = null }, fn) {
 }
 
 // --- reading, for the dashboard ---
+
+// Phase 10e: how much of each free tier is left today (limits.js). Counted
+// from midnight UTC (when Gemini's daily limits reset; Groq's is rolling).
+export async function freeTierToday() {
+  await ensureTable();
+  const [{ rows }, reported] = await Promise.all([
+    db.query(
+      `SELECT m->>'model' AS model, m->>'provider' AS provider,
+              sum((m->>'calls')::int)::int AS requests,
+              sum((m->>'promptTokens')::bigint + (m->>'completionTokens')::bigint)::bigint AS tokens
+         FROM usage_events, jsonb_array_elements(models) AS m
+        WHERE at >= (date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+        GROUP BY 1, 2`
+    ),
+    providerStates(),
+  ]);
+  const used = Object.fromEntries(rows.map((r) => [r.model, { requests: r.requests, tokens: Number(r.tokens), provider: r.provider }]));
+  const midnight = new Date();
+  midnight.setUTCHours(24, 0, 0, 0);
+  const models = [...new Set([...Object.keys(FREE_TIER), ...rows.filter((r) => r.provider !== "ollama" && r.provider !== "local").map((r) => r.model)])];
+  return models.map((model) => {
+    const limit = FREE_TIER[model] ?? { provider: used[model]?.provider ?? null, requestsPerDay: null, tokensPerDay: null };
+    const u = used[model] ?? { requests: 0, tokens: 0 };
+    const r = reported[model] ?? {};
+    const exhausted = r.exhausted && new Date(r.exhausted.until) > new Date() ? r.exhausted.until : null;
+    // Groq's own figure when it has given one today; else our count.
+    const fromProvider = r.reported && Date.now() - Date.parse(r.reported.at) < 86400000;
+    const requestsLeft = exhausted ? 0 : fromProvider ? r.reported.remainingRequests : limit.requestsPerDay != null ? Math.max(0, limit.requestsPerDay - u.requests) : null;
+    return {
+      model,
+      provider: limit.provider,
+      requestsPerDay: fromProvider ? r.reported.limitRequests : limit.requestsPerDay,
+      tokensPerDay: limit.tokensPerDay,
+      usedToday: u,
+      requestsLeft,
+      requestsLeftSource: exhausted ? "provider (limit reached)" : fromProvider ? "provider" : requestsLeft != null ? "this service's count" : null,
+      reportedAt: fromProvider ? r.reported.at : null,
+      tokensLeft: exhausted ? 0 : limit.tokensPerDay != null ? Math.max(0, limit.tokensPerDay - u.tokens) : null,
+      usedUpUntil: exhausted,
+      resetsAt: exhausted ?? midnight.toISOString(),
+    };
+  });
+}
 
 const percentile = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : null);
 

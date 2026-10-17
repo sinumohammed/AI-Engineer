@@ -22,6 +22,7 @@
 import { TRANSCRIBE_MODEL, GROQ_API_KEY, GEMINI_API_KEY, GEMINI_TRANSCRIBE_MODEL } from "./config.js";
 import { geminiText } from "./gemini.js";
 import { recordModel, WHISPER_PRICE_PER_HOUR } from "./usage.js";
+import { noteRateHeaders, noteExhausted } from "./limits.js";
 
 const WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 // Whisper wants a file name whose extension matches the audio format.
@@ -64,7 +65,10 @@ async function withWhisper(audio, type, ext) {
   form.append("temperature", "0");
   form.append("file", new Blob([audio], { type }), `question.${ext}`);
   const res = await fetch(WHISPER_URL, { method: "POST", headers: { Authorization: `Bearer ${GROQ_API_KEY}` }, body: form });
+  await noteRateHeaders(TRANSCRIBE_MODEL, res.headers); // limits.js
   if (res.status === 429) {
+    const detail = await res.clone().text().catch(() => "");
+    if (/per day/i.test(detail)) await noteExhausted(TRANSCRIBE_MODEL, detail);
     const wait = Number(res.headers.get("retry-after"));
     const when = wait ? ` - try again in about ${Math.max(1, Math.ceil(wait / 60))} minute(s)` : "";
     throw new TranscribeError(`Voice input's free limit is used up for now${when}. You can still type.`, 429);

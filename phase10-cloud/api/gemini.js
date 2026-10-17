@@ -3,6 +3,7 @@
 // models cannot do: hearing Malayalam, and reading photos and scanned pages.
 import { GEMINI_API_KEY, GEMINI_TTS_MODEL, GEMINI_TTS_VOICE } from "./config.js";
 import { recordModel } from "./usage.js";
+import { noteExhausted } from "./limits.js";
 
 const URL = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -28,6 +29,7 @@ export async function geminiText(model, parts, { thinking, timeoutMs } = {}) {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    if (res.status === 429 && /per ?day/i.test(detail)) await noteExhausted(model, detail); // limits.js
     throw new GeminiError(`Gemini ${res.status}: ${detail.slice(0, 200)}`, res.status);
   }
   const data = await res.json();
@@ -55,6 +57,7 @@ export async function geminiSpeech(text, { timeoutMs = 60000 } = {}) {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    if (res.status === 429 && /per ?day/i.test(detail)) await noteExhausted(GEMINI_TTS_MODEL, detail); // limits.js
     throw new GeminiError(`Gemini speech ${res.status}: ${detail.slice(0, 200)}`, res.status);
   }
   const data = await res.json();

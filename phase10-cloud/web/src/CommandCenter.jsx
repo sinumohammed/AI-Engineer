@@ -990,6 +990,12 @@ function UsagePanels({ d }) {
       </div>
 
       <div className="cc-grid">
+        {d.freeTier?.length > 0 && (
+          <Card className="span2" title="Free tier today" size="small" extra={<span className="muted small">What is left before the free limits stop the service</span>}>
+            <FreeTier rows={d.freeTier} />
+          </Card>
+        )}
+
         <Card className="span2" title="Questions per day" size="small">
           <DailyChart rows={d.byDay} days={d.days} colors={colors} />
         </Card>
@@ -1168,5 +1174,88 @@ function When({ at, className = "muted num" }) {
         {day === "Today" ? shortTime(t) : `${day} ${shortTime(t)}`}
       </span>
     </Tooltip>
+  );
+}
+
+// How much of each free tier is left today (api/limits.js). Requests left
+// are Groq's own figure when it has given one, else this service's count -
+// the Mac's evals use the same keys but are not counted here. Gemini does
+// not report its limits; the TTS limit (10 a day) is the one its own error
+// gave, the others are only shown in AI Studio.
+const MODEL_ROLES = {
+  "openai/gpt-oss-120b": "answers",
+  "openai/gpt-oss-20b": "judging, routing, planning",
+  "whisper-large-v3-turbo": "voice to text (backup)",
+  "gemini-3.5-flash-lite": "voice to text, photos, overviews",
+  "gemini-3.8-flash-lite-tts": "reading aloud (Malayalam ...)",
+};
+function FreeTier({ rows }) {
+  return (
+    <div className="freetier">
+      {rows.map((m) => {
+        const limit = m.requestsPerDay;
+        const left = m.requestsLeft;
+        const share = limit && left != null ? left / limit : null;
+        const tokenShare = m.tokensPerDay ? m.tokensLeft / m.tokensPerDay : null;
+        const low = [share, tokenShare].some((x) => x != null && x < 0.2);
+        const status = m.usedUpUntil ? (
+          <Tag color="error" icon={<CloseCircleFilled />}>
+            Used up
+          </Tag>
+        ) : limit == null ? (
+          <Tag>Limit in AI Studio</Tag>
+        ) : low ? (
+          <Tag color="warning">Low</Tag>
+        ) : (
+          <Tag color="success" icon={<CheckCircleFilled />}>
+            OK
+          </Tag>
+        );
+        return (
+          <div className="ft-row" key={m.model}>
+            <div className="ft-head">
+              <span className="ft-name">{m.model.replace(/^openai\//, "")}</span>
+              <span className="muted small">
+                {m.provider === "groq" ? "Groq" : m.provider === "gemini" ? "Gemini" : m.provider} · {MODEL_ROLES[m.model] ?? "model"}
+              </span>
+              <span className="grow" />
+              {status}
+            </div>
+            {limit != null ? (
+              <Meter
+                share={share}
+                text={`${fmtInt(left)} of ${fmtInt(limit)} requests left`}
+                note={m.usedUpUntil ? "the provider refused" : m.requestsLeftSource === "provider" ? `Groq's figure` : "our count"}
+                at={m.reportedAt}
+              />
+            ) : (
+              <div className="muted small">
+                {fmtInt(m.usedToday.requests)} requests today · Gemini shows this limit only in{" "}
+                <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noreferrer">
+                  AI Studio
+                </a>
+              </div>
+            )}
+            {m.tokensPerDay != null && <Meter share={tokenShare} text={`${fmtTokens(m.tokensLeft)} of ${fmtTokens(m.tokensPerDay)} tokens left`} note="our count" />}
+            <div className="muted small">
+              {m.usedUpUntil ? "Back " : "Resets "}
+              <When at={m.usedUpUntil ?? m.resetsAt} className="muted" />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function Meter({ share, text, note, at }) {
+  return (
+    <div className="ft-meter">
+      <span className="ft-track">
+        <span style={{ width: `${Math.max(0, Math.min(1, share ?? 0)) * 100}%` }} />
+      </span>
+      <span className="small">
+        {text} <span className="muted">({note}{at ? ", " : ""}{at && <When at={at} className="muted" />})</span>
+      </span>
+    </div>
   );
 }

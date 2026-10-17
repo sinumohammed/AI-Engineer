@@ -14,6 +14,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { withRetry } from "./retry.js";
 import { recordModel } from "./usage.js";
+import { noteRateHeaders, noteExhausted } from "./limits.js";
 import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, FALLBACK_MODELS, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
 
 export async function chat({ model = CHAT_MODEL, messages, format, tools, label = "chat", reasoningEffort = REASONING_EFFORT }) {
@@ -36,6 +37,7 @@ export async function chat({ model = CHAT_MODEL, messages, format, tools, label 
       return { content: "", toolCalls: [], promptTokens: 0, completionTokens: 0, schemaFailed: true };
     }
     if (!err.dailyLimit) throw err;
+    await noteExhausted(model, err.message); // shown as "used up until ..." (limits.js)
     // Phase 10: a free tier's daily quota is used up for this model. Use the
     // next fallback model (its own quota) and tell the user; with none left,
     // say plainly when to try again instead of a raw 429.
@@ -49,6 +51,7 @@ export async function chat({ model = CHAT_MODEL, messages, format, tools, label 
         break;
       } catch (err2) {
         if (!err2.dailyLimit) throw err2;
+        await noteExhausted(fallback, err2.message);
         lastErr = err2;
         lastModel = fallback;
       }
@@ -107,6 +110,8 @@ async function post(url, body) {
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
+  // Phase 10e: Groq says how many requests are left today (limits.js).
+  await noteRateHeaders(body.model, res.headers);
   if (!res.ok) {
     const err = new Error(`${LLM_PROVIDER} request failed: ${res.status} ${await res.text()}`);
     err.status = res.status;

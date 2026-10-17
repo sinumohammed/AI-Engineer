@@ -973,6 +973,16 @@ with a fake microphone: two turns then silence ends it at 8 s; talking over a
 20 s answer stopped it after 1.1 s and the next question was heard; "Stop"
 ends it.
 
+Free tier today (`api/limits.js`): per model, how much of the free limits is
+left. Requests left are Groq's own figure (it sends
+`x-ratelimit-remaining-requests` - per day - on every response); tokens left
+are this service's count against Groq's 200K a day; a "daily limit reached"
+error from Groq or Gemini marks the model used up until the time it gave.
+Gemini reports no limits (only AI Studio shows them) - the TTS limit of 10 a
+day is the figure its own error gave. Counted from midnight UTC; the Mac's
+evals use the same keys but are not counted. `FREE_TIER_LIMITS` overrides the
+limits. The agents can answer "how much free quota is left?" (`usage_free_tier`).
+
 Asking about usage: the console can answer "how many questions today?",
 "what did masjid cost this month?", "who are the top users?" from live data.
 The service's own usage is registered as an ordinary connected app, `usage`
