@@ -451,6 +451,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.8 | Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam | Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; `eval:masjid` 53 checks |
 | 10d.9 | MCP: apps can connect as MCP servers, and masjid became one | Live: the masjid assistant answers over MCP (`today_duty (MCP tool)`), refusals unchanged; `eval:mcp` 47/47, `eval:masjid` over MCP 62/63 |
 | 10d.10 | Claude Code reads the masjid data: personal MCP tokens made in masjid Settings | Live: Claude Code connected to masjid and answered from its data; token checks 12/12 |
+| 10d.11 | Tables and charts in answers, for apps whose screen can show them | Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged (not deployed yet) |
+| 10d.12 | The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions | Screenshots on phone and computer, light and dark; colours checked for colour blindness (not deployed yet) |
 
 - **Challenges, in plain terms:**
 
@@ -658,6 +660,23 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   again; and `-s local` (the default) ties the server to the folder the command ran in - `-s user`
   makes it work everywhere. These questions go straight from Claude Code to masjid (no Groq, no
   AI service); what Claude reads goes to Anthropic, so tokens are admin-only for now.
+- **Tables and charts in answers (10d.11):** an app now says what its screen can show, and only
+  then does the answer prompt ask for it:
+  ```
+  masjid server --POST /api/ask {..., display: {tables: true, charts: true}}--> AI service
+     + a rule in the answer prompt: 4+ records -> a Markdown table, figures copied exactly;
+       "as a chart" -> a ```chart block {type: bar|pie|line, data: [{label, value}]}
+  masjid chat: draws the table and the chart (recharts); a broken chart block is dropped
+  ```
+  Other apps, the web chat and the evals get exactly the prompts they had. "Show that as a bar
+  chart" reworks the previous answer without a new search. The eval checks every figure in the
+  table and the chart against what the API returned - a model copying numbers can copy one wrong.
+- **The masjid app redone (10d.12):** one palette (emerald and gold, light and dark) on every
+  screen, a guest page about the masjid and its people instead of a login box, member photos
+  uploaded in the app instead of copied into the code, and dashboard charts that each answer one
+  question in a sentence. Red against green failed a colour-blindness check (a script measured
+  it - ΔE 3.7); emerald and gold pass. Built while the user watched two local previews: the new
+  frontend against the live API, and a local backend on a throwaway database.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -778,6 +797,9 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 105 | 10d.9 | Over MCP a paid-up member heard "no members have pending dues" (0/5); over OpenAPI 5/5 - on the same data, byte for byte | The excerpt label `pending_dues` became `pending_dues (MCP tool)` (OpenAPI's is `GET /ai/pending-dues`) | 5/5. Live (Groq): masjid switched to MCP; a guest's duty question answered from `today_duty (MCP tool)`, a dues question refused with "log in" |
 | 106 | 10d.10 | Claude Code could list masjid's tools but not call them: a call needs the 5-minute user token only the masjid server makes | Personal MCP tokens: made by the admin in Settings, shown once with the `claude mcp add` command, stored as a hash, role read at each use, `/api/ai/mcp` only | 12/12 in `eval:masjid`, incl. the official MCP SDK client with the token alone; live: Claude Code connected and answered |
 | 107 | 10d.10 | "MCP server masjid already exists in local config"; then no masjid tools in another folder (found by the user) | Remove the entry and add again; `-s local` belongs to the folder it ran in, `-s user` to every folder | Working from any folder |
+| 108 | 10d.11 | Pending dues came as a plain list; tables and graphs on request (asked by the user) | `display` on `/api/ask`; a table rule (and a chart block when asked) in the answer prompt, only for apps that ask; the masjid chat draws them | Tables and charts 3/3 on qwen and Groq, every figure from the API; other evals unchanged |
+| 109 | 10d.11 | Charts empty in a screenshot, a table's amount column off a phone screen | Charts without grow-in animation (the chat resizes often); text columns wrap, amounts never do | All columns on a 390 px screen; charts drawn at once |
+| 110 | 10d.12 | Dashboard charts: one dot per day (~280), no values; red/green for in/out | Month-by-month bars with the answer above, categories with amount and share; emerald/gold - red/green failed the colour-blindness check (ΔE 3.7) | Every check passes, light and dark; opening balances (a third of "income") left out and named |
 
 Where things stand (Phase 10 code):
 
@@ -800,6 +822,7 @@ Where things stand (Phase 10 code):
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
 | Connected apps over MCP (10d.9), demo MCP server: registration (read-only tools only), typed arguments, users, refusals, sessions, time limit; planner and answers | 27/27; with answers 47/47 | masjid over MCP: 2/2 guest questions (answered, refused) |
 | Personal MCP tokens (10d.10): member refused, shown once, tools as the admin, official SDK client, other endpoints refused, revoke | 12/12 (`eval:masjid` 1c) | live: Claude Code connected, questions answered |
+| Tables and charts in answers (10d.11): a table with every member and amount, "as a bar chart" with the same figures, one fact stays a sentence | 3/3 (`eval:masjid ONLY=tables`) | 3/3 on Groq (not deployed yet) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 | `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model); with the 10 MCP checks (10d.9) 61/63, and over MCP (`CONNECTOR=mcp`) 62/63 | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
@@ -892,6 +915,9 @@ what changed.
     service token and gets a fresh 5-minute token per user per question; a person's tool (Claude
     Code) has neither, so it got its own: made by that person, revocable, with their role read at
     every use and opening only one door (10d.10). Decide who holds a key before deciding its shape.
+25. **What can be measured, measure - even colour.** Green against red looked fine and failed a
+    colour-blindness check by a wide margin (10d.12); a script found it in a second. The same goes
+    for a model's numbers in a table: check each one against the data, do not eyeball it (10d.11).
 
 ### What changed when the data got real (Phase 9)
 
@@ -999,6 +1025,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `2132350`, `edf5ae5` | Phase 10d.8: `eval:masjid` checks for last year's dues and the Malayalam ready questions (masjid repo: `a1ef56c` everyone's dues for a year, `0cec43b` the new look and Malayalam questions) |
 | `4f95df4`, `d474218` | Phase 10d.9: the MCP connector type, `eval:mcp`, `eval:masjid` over MCP (masjid repo: `4d0c969` the MCP server at `/api/ai/mcp`) |
 | `37dca3b` | Phase 10d.10: `eval:masjid` checks for personal MCP tokens (masjid repo: `37cbae3` personal MCP tokens in Settings) |
+| `ba9e0c0` | Phase 10d.11: tables and charts in answers (masjid repo: `a16c824` the chat draws them) |
+| - | Phase 10d.12, masjid repo branch `redesign-1`: `29b24d7` look step 1, `0395be0` About the masjid, `58b2c8e` photos in the app, `4d8d296` / `c4d32aa` / `16678ae` the other pages, `ed2f68a` the assistant page on phones, `75182bb` the dashboard's charts |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

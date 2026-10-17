@@ -101,7 +101,7 @@ From `eval/`:
 | `npm run eval:long-file` | a 59-page PDF attachment: does the right page reach the prompt, which later questions get the file; `ANSWERS=1` also asks the agent (`AGENT=multi` for the supervisor) |
 | `npm run eval:apps` | connected apps (10d.4) against the demo app: registration, safety; `ANSWERS=1` planner and answers (`MODES=`, `ONLY=`) |
 | `npm run eval:mcp` | connected apps over MCP (10d.9) against `examples/demo-mcp` (official SDK) wrapping the demo app: registration (only read-only tools), typed arguments, users, refusals, sessions, time limit; `ANSWERS=1` planner and answers |
-| `npm run eval:masjid` | the masjid app end to end on this Mac with made-up data: starts its backend from `MASJID_REPO` (default `~/Code/Developer/work/MasjidRahma`) on a throwaway database and this API beside it; tokens and roles, limit settings, answers as admin / member / guest, isolation, daily limits (34 checks; `VOICE=1` adds voice). Never touches the live database |
+| `npm run eval:masjid` | the masjid app end to end on this Mac with made-up data: starts its backend from `MASJID_REPO` (default `~/Code/Developer/work/MasjidRahma`) on a throwaway database and this API beside it; tokens and roles, limit settings, answers as admin / member / guest, isolation, daily limits, the MCP server and personal tokens, tables and charts (`VOICE=1` adds voice; `ONLY=chips` / `ONLY=tables` a narrow run; `CONNECTOR=mcp` over MCP). Never touches the live database |
 | `npm run eval:policy` | the data policy (10d.3): confidential chunks only reach a local model, what ingest takes, Gemini for files - no model calls |
 | `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
 
@@ -1086,6 +1086,69 @@ listed; tools listed and called as the admin; the official SDK client; other
 `/api/ai` endpoints and admin routes refused; last used recorded; unknown and
 revoked tokens refused). Live (the user): token made in Settings, Claude Code
 connected (`claude mcp list`, `/mcp`), questions answered from masjid data.
+
+### 10d.11 Tables and charts in answers (2026-10-17)
+
+Asked by the user: the masjid assistant listed pending dues as plain lines;
+could it show a table, or a graph when asked? The model can write a table -
+but only an app that can draw one should get it, and the app had no way to
+say so.
+
+```
+masjid server --POST /api/ask { ..., display: { tables: true, charts: true } }--> AI service
+  display.js adds one rule to every prompt that writes the reply:
+    4+ records with 2+ values, or asked: a Markdown table, figures copied exactly
+    asked for a chart/graph:  a ```chart block  {"type": "bar|pie|line", "title", "unit", "data": [{label, value}]}
+masjid chat (AssistantAnswer.tsx): the table as a real table, the block drawn with recharts
+```
+
+| What | Where |
+|---|---|
+| `display` on `/api/ask`, kept with the request like the caller (appAccess.js); the rule only for such requests - other apps, the web chat and every eval get the prompts they had | `api/display.js`, `askApi.js`, `agent.js`, `specialists.js`, `routing.js` (synthesizer), `rework.js` |
+| "show that as a table", "as a bar chart", "table view": reworks the last answer, no new search | `rework.js` |
+| The masjid server asks with `display`; its chat renders tables (amounts right-aligned, never wrapped; text wraps so columns fit a phone; a Total row) and draws bar / pie / line charts; a chart block that is not valid is dropped - its figures are in the table | masjid `server/app.js`, `src/components/AssistantAnswer.tsx`, `answerFormat.ts` |
+| 3 checks: the admin's pending dues as a table, every member and amount from the API; "show that as a bar chart", the same figures; one fact stays a sentence | `eval/masjid-app.js`, `ONLY=tables` |
+
+- Charts: no grow-in animation - the chat resizes (a new message, the
+  keyboard) and recharts replayed it from empty each time.
+- A CSS rule for the invitation's text also hit the text inside its button
+  (antd wraps it in a span) - scope a rule to the element it is meant for.
+
+Tests: `ONLY=tables` 3/3 on local qwen and on Groq (every figure in the
+table and chart equal to the API's); `eval:apps` 31/31, `eval:mcp` 27/27,
+`eval:policy` 15/15 unchanged. Not deployed yet: the AI API first, then the
+masjid branch.
+
+### 10d.12 The masjid app: redesign, About the masjid, photos in the app (2026-10-17)
+
+Asked by the user: a more professional look, a guest page about the masjid
+instead of a bare login box, and member photos without copying files into
+the code. All in the masjid repo (branch `redesign-1`, not deployed yet);
+the details are in its `MASJID_APP_DOCUMENTATION.md`.
+
+- **One palette for every screen**: emerald and gold, tokens in
+  `src/index.css` (light and dark), antd from `src/theme.ts`. Vite's starter
+  styles were still in `index.css` (a framed 1126 px column, centred text,
+  purple). A deep-green sidebar with the masjid's mark, a bottom tab bar on
+  phones, every page redone (dashboard, members, schedule, profile,
+  transactions, banks, activity, settings, announcements).
+- **About the masjid**: the story and the people (founders, president, imam,
+  muaddin) with photos, on a guest's home page and in the menu; edited by the
+  admin in Settings (`masjid_people`, `/api/about`).
+- **Member photos uploaded in the app** (the member's edit form), resized in
+  the browser, stored apart from the member lists (`member_photos`), the old
+  asset files still used as a fallback. Found: `MR006.JPG` - Vercel's names
+  are case-sensitive, so that photo never showed.
+- **The dashboard's charts answer questions**: month by month (paired bars,
+  the answer written above), where the money goes and comes from (amount,
+  share, a row opens its transactions). Green against red failed the
+  colour-blindness check (ΔE 3.7, run with the dataviz validator); emerald and
+  gold pass, light and dark. Opening balances (recorded as income) are left
+  out and named - they were a third of "income".
+- Checked the way a user sees it: two local previews (`npm run dev:live` -
+  this frontend against the live API; and a local backend on a throwaway
+  database), screenshots on a phone and a computer, light and dark, nothing
+  wider than the screen.
 
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 

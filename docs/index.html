@@ -852,6 +852,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.8</td><td>Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam</td><td class="res">Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; <code>eval:masjid</code> 53 checks</td></tr>
                 <tr><td class="n">10d.9</td><td>MCP: apps can connect as MCP servers, and masjid became one</td><td class="res">Live: the masjid assistant answers over MCP (<code>today_duty (MCP tool)</code>), refusals unchanged; <code>eval:mcp</code> 47/47, <code>eval:masjid</code> over MCP 62/63</td></tr>
                 <tr><td class="n">10d.10</td><td>Claude Code reads the masjid data: personal MCP tokens made in masjid Settings</td><td class="res">Live: Claude Code connected to masjid and answered from its data; token checks 12/12</td></tr>
+                <tr><td class="n">10d.11</td><td>Tables and charts in answers, for apps whose screen can show them</td><td class="res">Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged (not deployed yet)</td></tr>
+                <tr><td class="n">10d.12</td><td>The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions</td><td class="res">Screenshots on phone and computer, light and dark; colours checked for colour blindness (not deployed yet)</td></tr>
               </tbody>
             </table>
           </div>
@@ -1197,6 +1199,29 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.10. Claude Code could list masjid's tools but not call them: a call needs the 5-minute user token that only the masjid server makes for the AI service. A person's tool needs a person's key. Run <code>claude mcp add</code> with <code>-s user</code>: the default, <code>-s local</code>, ties the server to the folder the command ran in. What Claude reads goes to Anthropic, so tokens are admin-only for now.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 220" role="img" aria-label="The masjid server asks the AI service with display tables and charts. The AI service adds a rule to the answer prompt: a Markdown table for four or more records, a chart block when asked. The masjid chat draws the table and the chart; the eval checks every figure against the API.">
+                <defs><marker id="a19" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">TABLES AND CHARTS · ONLY FOR APPS THAT ASK</text>
+                <rect class="b" x="20" y="40" width="200" height="60" rx="6"/>
+                <text class="t" x="120" y="64" text-anchor="middle">Masjid server</text>
+                <text class="s" x="120" y="82" text-anchor="middle">display: tables, charts</text>
+                <line class="ln" x1="220" y1="70" x2="259" y2="70" marker-end="url(#a19)"/>
+                <rect class="ba" x="260" y="40" width="200" height="60" rx="6"/>
+                <text class="t" x="360" y="64" text-anchor="middle">Answer prompt + rule</text>
+                <text class="s" x="360" y="82" text-anchor="middle">4+ records: a table</text>
+                <line class="ln" x1="460" y1="70" x2="499" y2="70" marker-end="url(#a19)"/>
+                <rect class="b" x="500" y="40" width="200" height="60" rx="6"/>
+                <text class="t" x="600" y="64" text-anchor="middle">Masjid chat</text>
+                <text class="s" x="600" y="82" text-anchor="middle">draws table and chart</text>
+                <text class="s" x="20" y="140">"As a chart" adds a ```chart block: {type: bar | pie | line, data: [{label, value}]} - a broken block is dropped,</text>
+                <text class="s" x="20" y="160">its figures stay in the table. Other apps, the web chat and the evals get the prompts they had.</text>
+                <text class="s" x="20" y="190">The eval compares every figure in the table and the chart with what the masjid API returned.</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.11. Asked by the user: pending dues as a table, a graph on request. Then 10d.12, the masjid app redone - one emerald-and-gold look on every screen, a guest page about the masjid and its people, member photos uploaded in the app, and dashboard charts that each answer one question. Red against green failed a colour-blindness check (a script measured it); emerald and gold pass.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1213,6 +1238,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Test in the user's language, on the model the user gets: the local model planned the Malayalam questions right and misread the answers (4/6); Groq, which the live app uses, got 6/6.</li>
               <li>Everything the model reads is prompt, even a label: the same JSON under <code>pending_dues</code> instead of <code>GET /ai/pending-dues</code> turned a right answer into a wrong one, every time.</li>
               <li>A service's key and a person's key are different keys: the AI service gets a 5-minute user token per question; Claude Code, used by a person, got its own revocable token with that person's role read at every use.</li>
+              <li>What can be measured, measure - even colour: red against green looked fine and failed a colour-blindness check; a model's numbers in a table are checked against the data, not eyeballed.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
@@ -1337,6 +1363,9 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">105</td><td class="n">10d.9</td><td>Over MCP a paid-up member heard "no members have pending dues" (0/5); over OpenAPI 5/5, same data byte for byte</td><td>The label <code>pending_dues</code> became <code>pending_dues (MCP tool)</code></td><td class="res">5/5. Live (Groq): masjid switched to MCP; a guest's duty question answered, a dues question refused with "log in"</td></tr>
             <tr><td class="n">106</td><td class="n">10d.10</td><td>Claude Code could list masjid's tools but not call them: a call needs the 5-minute user token only the masjid server makes</td><td>Personal MCP tokens: made by the admin in Settings, shown once with the <code>claude mcp add</code> command, hashed, role read at each use, <code>/api/ai/mcp</code> only</td><td class="res">12/12 in <code>eval:masjid</code>, incl. the official SDK client; live: Claude Code connected and answered</td></tr>
             <tr><td class="n">107</td><td class="n">10d.10</td><td>"MCP server masjid already exists in local config"; then no masjid tools in another folder (found by the user)</td><td>Remove and add again; <code>-s local</code> belongs to one folder, <code>-s user</code> to every folder</td><td class="res">Working from any folder</td></tr>
+            <tr><td class="n">108</td><td class="n">10d.11</td><td>Pending dues came as a plain list; tables and graphs on request (asked by the user)</td><td><code>display</code> on <code>/api/ask</code>; a table rule (and a chart block when asked) only for apps that ask; the masjid chat draws them</td><td class="res">3/3 on qwen and Groq, every figure from the API; other evals unchanged</td></tr>
+            <tr><td class="n">109</td><td class="n">10d.11</td><td>Charts empty in a screenshot; a table's amounts off a phone screen</td><td>No grow-in animation (the chat resizes often); text columns wrap, amounts never do</td><td class="res">All columns on a 390 px screen</td></tr>
+            <tr><td class="n">110</td><td class="n">10d.12</td><td>Dashboard charts: one dot per day, no values; red/green for in/out</td><td>Month-by-month bars with the answer above, categories with amount and share; emerald/gold</td><td class="res">Colour checks pass, light and dark; opening balances left out and named</td></tr>
           </tbody>
         </table>
       </div>
@@ -1361,6 +1390,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Connected apps, demo app: registration, safety, planner, answers single and multi</td><td class="n">36/36</td><td class="n">-</td></tr>
             <tr><td>Connected apps over MCP, demo MCP server: read-only tools only, typed arguments, users, refusals, sessions, time limit; planner and answers</td><td class="n">27/27; with answers 47/47</td><td class="n">masjid over MCP: 2/2 guest questions</td></tr>
             <tr><td>Personal MCP tokens: member refused, shown once, tools as the admin, official SDK client, other endpoints refused, revoke</td><td class="n">12/12</td><td class="n">live: Claude Code connected, questions answered</td></tr>
+            <tr><td>Tables and charts in answers: a table with every member and amount, "as a bar chart" with the same figures, one fact stays a sentence</td><td class="n">3/3</td><td class="n">3/3 on Groq (not deployed yet)</td></tr>
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
             <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions</td><td class="n">51/53 (2 misses: Malayalam answers on the local model); with 10 MCP checks 61/63, over MCP 62/63</td><td class="n">Malayalam ready questions 6/6; live: 2/2 match the app's schedule</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
@@ -1397,6 +1427,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Test in the user's language, on the model the user gets.</strong> The local model planned the Malayalam questions right and still misread the answers; Groq, which the live app uses, got all six (10d.8). A test that passes on one model says little about another.</li>
         <li><strong>Everything the model reads is prompt - even a label.</strong> The same JSON with the label <code>pending_dues</code> instead of <code>GET /ai/pending-dues</code> turned a right answer into a wrong one, every time (10d.9). When two paths give different answers, compare what the model actually read, byte for byte, before blaming the model.</li>
         <li><strong>A service's key and a person's key are different keys.</strong> The AI service holds one long-lived service token and gets a fresh 5-minute token per user per question; a person's tool (Claude Code) has neither, so it got its own: made by that person, revocable, with their role read at every use and opening only one door (10d.10). Decide who holds a key before deciding its shape.</li>
+        <li><strong>What can be measured, measure - even colour.</strong> Green against red looked fine and failed a colour-blindness check by a wide margin (10d.12); a script found it in a second. The same goes for a model's numbers in a table: check each one against the data, do not eyeball it (10d.11).</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
