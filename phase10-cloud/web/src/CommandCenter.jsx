@@ -16,7 +16,8 @@ import {
 import { API_BASE } from "./useChatSession.js";
 import { AGENT_LABELS, VOICE_LANGUAGES } from "./Sidebar.jsx";
 import { API_BASE as API, codeHeaders } from "./useChatSession.js";
-import { useVoiceInput, voiceSupported } from "./useVoiceInput.js";
+import { useVoiceInput, voiceSupported, unlockAudio } from "./useVoiceInput.js";
+import { useBargeIn } from "./useBargeIn.js";
 import { useClapWake } from "./useClapWake.js";
 import { useCommand } from "./useCommand.js";
 import { BarList, DailyChart, callerColors, callerLabel, fmtInt, fmtMs, fmtTokens, fmtUsd } from "./Charts.jsx";
@@ -90,6 +91,7 @@ const player = typeof Audio !== "undefined" ? new Audio() : null;
 const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 let speechUnlocked = false;
 function unlockSpeech() {
+  unlockAudio(); // also for listening that starts by itself (conversation mode)
   if (speechUnlocked) return;
   speechUnlocked = true;
   if ("speechSynthesis" in window) {
@@ -126,8 +128,11 @@ function needsServerVoice(text) {
 }
 
 let speechRun = 0; // a newer read-out (or Stop) ends an older one
+let finishPiece = null; // ends the piece being read when it is stopped
 function stopAllSpeech() {
   speechRun++;
+  finishPiece?.();
+  finishPiece = null;
   window.speechSynthesis?.cancel();
   if (player) {
     player.pause();
@@ -144,6 +149,7 @@ async function speak(text, { sources = [] } = {}) {
     if (!("speechSynthesis" in window)) return;
     const parts = pieces(text, 220);
     await new Promise((resolve) => {
+      finishPiece = resolve;
       parts.forEach((p, i) => {
         const u = new SpeechSynthesisUtterance(p);
         u.rate = 1.03;
@@ -168,6 +174,7 @@ async function speak(text, { sources = [] } = {}) {
     next?.catch(() => {}); // a failure is reported when its turn comes
     if (run !== speechRun || !player) return URL.revokeObjectURL(url);
     await new Promise((resolve) => {
+      finishPiece = resolve;
       player.onended = player.onerror = resolve;
       player.src = url;
       player.play().catch(resolve);
@@ -402,12 +409,30 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
   // The language the user speaks: a hint for speech to text, shared with the chat.
   const [voiceLanguage, setVoiceLanguage] = useState(() => stored("voiceLanguage") || "auto");
 
+  // Conversation mode: started by two claps or the mic, it listens again by
+  // itself after each answer (no clap or tap), can be interrupted by talking
+  // over the answer, and ends after ~8 s of silence, on "stop" / "bye" /
+  // "മതി", or with the End button. A ref too: the callbacks run later.
+  const [conversation, setConversation] = useState(false);
+  const convRef = useRef(false);
+  function startConversation() {
+    convRef.current = true;
+    setConversation(true);
+  }
+  function endConversation(note) {
+    if (!convRef.current) return;
+    convRef.current = false;
+    setConversation(false);
+    if (note) message.info(note);
+  }
+
   const { run, ask, cancel, forget } = useCommand({
     accessCode,
     dashKey,
     onDone: (r) => {
       onAnswered();
       if (speakRef.current && r.answer) readOut(r);
+      else if (convRef.current) nextTurn();
     },
   });
   const busy = ["routing", "working", "answering"].includes(run.phase);
@@ -417,17 +442,39 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
     silenceMs: 1400,
     onText: (text) => {
       setInput("");
+      // "stop", "bye", "that's all", "മതി" (enough): the user is done.
+      if (convRef.current && /^\s*(stop|bye|goodbye|that'?s all|that is all|no thanks|nothing|end( (the )?conversation)?|മതി|നിർത്തൂ|നിർത്ത്)\s*[.!]?\s*$/i.test(text)) {
+        return endConversation("Conversation ended");
+      }
       ask(text);
     },
-    onError: (msg) => message.warning(msg),
+    onError: (msg) => {
+      // In a conversation, silence after an answer is the user being done.
+      if (convRef.current) return endConversation(/didn.t (hear|catch)/i.test(msg) ? "Conversation ended - nothing more said" : msg);
+      message.warning(msg);
+    },
     language: voiceLanguage,
   });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
 
   function readOut(r) {
     setSpeaking(true);
     speak(r.answer, { sources: r.sources })
       .catch((err) => message.warning(err.message))
-      .finally(() => setSpeaking(false));
+      .finally(() => {
+        setSpeaking(false);
+        // Finished, stopped by a tap, or interrupted by talking: your turn.
+        if (convRef.current) nextTurn();
+      });
+  }
+  // The next turn of a conversation: a chime, then listen.
+  function nextTurn() {
+    setTimeout(() => {
+      if (!convRef.current || voiceRef.current.active()) return;
+      chime();
+      setTimeout(() => convRef.current && voiceRef.current.start(), 300);
+    }, 150);
   }
   function stopSpeaking() {
     stopAllSpeech();
@@ -439,20 +486,31 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
   function listen() {
     if (voice.status !== "idle" || busy) return;
     stopSpeaking();
-    if (speakOn) unlockSpeech();
+    unlockSpeech();
+    startConversation();
     voice.start();
   }
   // From two claps: a chime first, then record.
   const wake = useCallback(() => {
     if (voice.status !== "idle" || busy) return;
     stopSpeaking();
+    startConversation();
     chime();
     setTimeout(() => voice.start(), 300);
   }, [voice, busy]);
   // The clap listener holds the mic only while nothing else is going on: it
   // lets go while a question is recorded, answered or read out.
   const idleNow = voice.status === "idle" && !busy && !speaking;
-  const clap = useClapWake({ enabled: clapOn && canSpeak && idleNow, paused: false, onWake: wake });
+  const clap = useClapWake({ enabled: clapOn && canSpeak && idleNow && !conversation, paused: false, onWake: wake });
+  // Talking over the answer stops it; readOut's finally then listens.
+  const [bargeIn, setBargeIn] = useState(() => stored("bargeIn") !== "0");
+  useBargeIn({ enabled: conversation && speaking && bargeIn && canSpeak, onSpeech: () => stopAllSpeech() });
+  // Leaving the page ends a conversation, as it ends clap to wake.
+  useEffect(() => {
+    const onHide = () => document.visibilityState === "hidden" && endConversation(null);
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
   const [flash, setFlash] = useState(false);
   useEffect(() => {
     if (!clap.lastClap) return undefined;
@@ -473,10 +531,10 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
   const orbState =
     voice.status === "recording" ? "listening" : voice.status === "transcribing" ? "hearing" : busy ? "thinking" : speaking ? "speaking" : clap.status === "listening" ? "standby" : clap.status === "needs-tap" ? "blocked" : "idle";
   const orbText = {
-    listening: "Listening… pause when you are done",
+    listening: conversation && run.phase !== "idle" ? "Your turn - speak, or stay quiet to end" : "Listening… pause when you are done",
     hearing: "Turning speech into text…",
     thinking: run.phase === "routing" ? "Routing the question…" : "Agents at work…",
-    speaking: "Speaking…",
+    speaking: conversation && bargeIn ? "Speaking… talk or tap to interrupt" : "Speaking… tap to stop",
     standby: "Clap twice to wake me",
     blocked: "Tap anywhere to start listening for claps",
     idle: canSpeak ? "Type, tap the mic, or turn on clap to wake" : "Type a command",
@@ -491,7 +549,7 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
           style={{ "--level": level }}
           role={orbState === "listening" || orbState === "speaking" ? "button" : undefined}
           aria-label={orbState === "listening" ? "Stop and send" : orbState === "speaking" ? "Stop reading out" : undefined}
-          onClick={() => (orbState === "listening" ? voice.stop() : orbState === "speaking" ? stopSpeaking() : null)}
+          onClick={() => (orbState === "listening" ? voice.stop() : orbState === "speaking" ? stopAllSpeech() : null)}
         >
           <div className="orb-ring" />
           <div className="orb-ring r2" />
@@ -508,9 +566,25 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
           </Button>
         )}
         {speaking && (
-          <Button shape="round" icon={<StopOutlined />} onClick={stopSpeaking}>
-            Stop reading
+          <Button shape="round" icon={<StopOutlined />} onClick={() => stopAllSpeech()}>
+            {conversation ? "Interrupt" : "Stop reading"}
           </Button>
+        )}
+        {conversation && (
+          <div className="conv-on" role="status">
+            <span className="dot-live" /> Conversation on
+            <Button
+              size="small"
+              type="link"
+              onClick={() => {
+                endConversation(null);
+                stopSpeaking();
+                if (voice.status === "recording") voice.cancel();
+              }}
+            >
+              End
+            </Button>
+          </div>
         )}
         {clapOn && canSpeak && (
           <div className="mic-on" role="status">
@@ -549,6 +623,21 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
             />
             Speak answers
           </label>
+          {canSpeak && (
+            <Tooltip title="In a conversation, start talking while it speaks to interrupt it. Best with headphones; off: tap the orb to interrupt.">
+              <label className="ctl">
+                <Switch
+                  size="small"
+                  checked={bargeIn}
+                  onChange={(v) => {
+                    setBargeIn(v);
+                    store("bargeIn", v ? "1" : "0");
+                  }}
+                />
+                Talk to interrupt
+              </label>
+            </Tooltip>
+          )}
         </div>
         {canSpeak && (
           <Select

@@ -34,12 +34,31 @@ const SPEAKING = 0.07;
 const QUIET = 0.035;
 const NO_SPEECH_MS = 8000;
 
+// Phase 10e, conversation mode: one audio context, started inside the user's
+// first tap and then reused, so listening that starts by itself later (the
+// next turn of a conversation) still gets a working level meter on a phone -
+// a new context there would stay paused without a tap.
+let sharedCtx = null;
+export function unlockAudio() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    sharedCtx ??= new Ctx();
+    sharedCtx.resume().catch(() => {});
+  } catch {
+    // no Web Audio
+  }
+}
+export const sharedAudioContext = () => (sharedCtx?.state === "running" ? sharedCtx : null);
+
 // status: "idle" | "recording" | "transcribing"
 export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
   const [status, setStatus] = useState("idle");
   const [seconds, setSeconds] = useState(0);
   const [levels, setLevels] = useState(() => Array(BARS).fill(0));
   const rec = useRef(null); // { recorder, stream, chunks, audioCtx, raf, timer, cancelled }
+  // Set from the moment start() is called: the status only changes once the
+  // mic is open, and two starts in that gap would open two recordings.
+  const starting = useRef(false);
   // The latest callbacks: a recording ends several renders after it started.
   const callbacks = useRef({ onText, onError, language });
   callbacks.current = { onText, onError, language };
@@ -50,17 +69,20 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
     cancelAnimationFrame(r.raf);
     clearInterval(r.timer);
     r.stream.getTracks().forEach((t) => t.stop()); // the mic indicator goes off
-    r.audioCtx?.close().catch(() => {});
+    r.source?.disconnect();
+    if (r.audioCtx && r.audioCtx !== sharedCtx) r.audioCtx.close().catch(() => {});
   }
 
   useEffect(() => () => release(), []);
 
   async function start() {
-    if (status !== "idle") return;
+    if (status !== "idle" || starting.current || rec.current) return;
+    starting.current = true;
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     } catch (err) {
+      starting.current = false;
       callbacks.current.onError(friendlyError(err));
       return;
     }
@@ -74,7 +96,7 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
     // A live level meter, so it is obvious the mic is hearing you.
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      r.audioCtx = new Ctx();
+      r.audioCtx = sharedAudioContext() ?? new Ctx();
       // Started without a tap (clap to wake), a phone keeps audio paused: the
       // meter would read silence, so the recording would never stop by itself
       // and would be thrown away as silent. Then: no meter - it is sent as it
@@ -83,7 +105,8 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
       if (r.audioCtx.state !== "running") throw new Error("audio paused");
       const analyser = r.audioCtx.createAnalyser();
       analyser.fftSize = 512;
-      r.audioCtx.createMediaStreamSource(stream).connect(analyser);
+      r.source = r.audioCtx.createMediaStreamSource(stream);
+      r.source.connect(analyser);
       const data = new Uint8Array(analyser.fftSize);
       let last = 0;
       const begun = performance.now();
@@ -110,7 +133,7 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
       r.raf = requestAnimationFrame(tick);
     } catch {
       // no meter - recording still works, sent without the silence check
-      r.audioCtx?.close().catch(() => {});
+      if (r.audioCtx && r.audioCtx !== sharedCtx) r.audioCtx.close().catch(() => {});
       r.audioCtx = null;
       r.peak = null;
     }
@@ -124,6 +147,7 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
       if (s >= MAX_SECONDS) stop();
     }, 250);
     recorder.start();
+    starting.current = false;
     setStatus("recording");
   }
 
@@ -177,5 +201,7 @@ export function useVoiceInput({ onText, onError, language, silenceMs = 0 }) {
     }
   }
 
-  return { status, seconds, levels, start, stop, cancel, maxSeconds: MAX_SECONDS };
+  // Recording, transcribing, or about to start.
+  const active = () => starting.current || Boolean(rec.current) || status !== "idle";
+  return { status, seconds, levels, start, stop, cancel, active, maxSeconds: MAX_SECONDS };
 }

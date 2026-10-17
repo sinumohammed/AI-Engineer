@@ -959,6 +959,20 @@ sidebar, loaded only when opened):
   last used - apps with no use show too); agents; models; connected-app calls
   with failures; recent requests. Refreshes every 30 s.
 
+Conversation mode: two claps (or the mic) start a conversation - after each
+answer it chimes and listens again by itself, no clap or tap. Talking over
+the answer interrupts it (`useBargeIn.js`: echo cancellation on, a higher
+bar than recording, 0.3 s of clear speech; "Talk to interrupt" switch - best
+with headphones), as does tapping the orb. It ends after ~8 s of silence
+following an answer, on "stop" / "bye" / "that's all" / "മതി", with the End
+button, or when the page is hidden. Turn by turn through the agents - not
+Gemini Live's continuous two-way audio. One audio context, unlocked in the
+first tap, is reused for every turn: a phone keeps a new one paused without a
+tap, which broke the silence check before. Simulated on a phone-sized page
+with a fake microphone: two turns then silence ends it at 8 s; talking over a
+20 s answer stopped it after 1.1 s and the next question was heard; "Stop"
+ends it.
+
 Asking about usage: the console can answer "how many questions today?",
 "what did masjid cost this month?", "who are the top users?" from live data.
 The service's own usage is registered as an ordinary connected app, `usage`
