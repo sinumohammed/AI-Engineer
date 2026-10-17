@@ -17,3 +17,4 @@ phase10-cloud/docs-internal/
 .vercel/
 # Phase 10 #4: an app entry may hold a pasted token - only the examples are committed.
 phase10-cloud/apps/masjid.json
+phase10-cloud/apps/masjid-mcp.json

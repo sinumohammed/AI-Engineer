@@ -449,6 +449,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10e | Command Center: usage and cost per app and per user, the agents at work live, ask by voice or by clapping twice | Live: web and masjid questions counted with their cost (9 questions, $0.0086 at paid prices); `eval:masjid` 41/41 |
 | 10d.7 | App keys stored in Redis as hashes: a new app is one command, no redeploy | Live: both apps on stored keys, `APP_API_KEYS` deleted from Vercel; `eval:ask` 11/11 |
 | 10d.8 | Masjid assistant: last year's dues for everyone, a new look, ready questions in Malayalam | Live: the admin's "previous year pending" answered (was a 400); Malayalam questions 6/6 on Groq; `eval:masjid` 53 checks |
+| 10d.9 | MCP: apps can connect as MCP servers, and masjid became one | Live: the masjid assistant answers over MCP (`today_duty (MCP tool)`), refusals unchanged; `eval:mcp` 47/47, `eval:masjid` over MCP 62/63 |
 
 - **Challenges, in plain terms:**
 
@@ -624,6 +625,24 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   in Malayalam (4/6); Groq, which the live app uses, 6/6. And an app change takes two steps in
   order: deploy the app, *then* `npm run app -- refresh masjid` - the first refresh ran before the
   deploy finished and read the old description.
+- **MCP, the second way to connect an app (10d.9):** Phase 4 put tools behind MCP on one machine
+  (a server started as a child process). Now it runs over HTTP between two deployed services. An
+  app's entry gives either its OpenAPI file or its MCP server; everything after that is the same:
+  ```
+  OpenAPI app:  GET openapi.json  -> GET operations  --+
+                                                       +-> stored as "operations" -> planner -> call -> excerpt
+  MCP app:      initialize, tools/list -> read-only  --+
+                tools (readOnlyHint)
+  a call:       OpenAPI: GET /ai/today-duty        MCP: tools/call "today_duty"
+  ```
+  The masjid backend now has both doors to the same rooms: `/api/ai/mcp` lists 11 tools made
+  from its OpenAPI description, and a tool call runs the same handler as the GET endpoint - same
+  admin/member/guest rules, same refusal reasons. MCP has no GET, so the connector uses only
+  tools the server marks read-only. The client is hand-written over `fetch` (like the rest of the
+  connector); the demo server and masjid's server use the official SDK, so the two sides check
+  each other. Found: the label under the excerpt matters - with a bare `pending_dues` the local
+  model told a paid-up member "nobody owes" every time; `pending_dues (MCP tool)` fixed it, on
+  identical data.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -739,6 +758,9 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 100 | 10d.8 | The admin's "previous year pending" got no answer (found by the user): `dues_by_year` returned 400 - it handled one member | Masjid API: with no member named, the admin gets every member still owing that year, with the total (`everyone`; members refused) | `eval:masjid` 47/47; live: the same call succeeded. The first refresh ran before the masjid deploy finished - refresh after the deploy |
 | 101 | 10d.8 | The assistant looked generic and its suggestions were English only (asked by the user) | A masjid-bot mark and launcher, a polished chat (header, answer cards, bullets), ready questions in Malayalam per role, as cards and chips | Screenshots: admin, member, guest; phone and computer; light and dark - nothing wider than the screen |
 | 102 | 10d.8 | Do the Malayalam questions reach the right data? | 6 checks in `eval:masjid`; `ONLY=chips` runs only those, to use little Groq quota | Groq 6/6. Local qwen 4/6: the right calls, the data misread in Malayalam - Malayalam answers are checked on Groq |
+| 103 | 10d.9 | Apps could connect only through an OpenAPI file; many products offer MCP servers instead | A second connector type: `"mcp": "<url>"`, the server's read-only tools stored as operations, `tools/call` per question (hand-written client); a demo MCP server with the official SDK | `eval:mcp` 27/27, with answers 47/47 (single and supervisor); `eval:apps` 31/31 unchanged. The test's slow server on port 4045 got "fetch failed": fetch refuses that port, like 5060 |
+| 104 | 10d.9 | Masjid's data only reachable through its OpenAPI endpoints | `/api/ai/mcp` on the masjid backend: tools made from its OpenAPI description, each running the endpoint's own handler; listing needs the service token, a call also the user's | 10 new MCP checks in `eval:masjid`; `CONNECTOR=mcp` runs every check over MCP: 62/63 (the miss: a Malayalam answer on local qwen) |
+| 105 | 10d.9 | Over MCP a paid-up member heard "no members have pending dues" (0/5); over OpenAPI 5/5 - on the same data, byte for byte | The excerpt label `pending_dues` became `pending_dues (MCP tool)` (OpenAPI's is `GET /ai/pending-dues`) | 5/5. Live (Groq): masjid switched to MCP; a guest's duty question answered from `today_duty (MCP tool)`, a dues question refused with "log in" |
 
 Where things stand (Phase 10 code):
 
@@ -759,8 +781,9 @@ Where things stand (Phase 10 code):
 | Long attachment, 59 pages: fact reaches the model / answers single, multi / which questions get it | 8/8 / 8/8, 8/8 / 9/9 | 4/4 live questions right |
 | Data policy: what search, ingest and attachments may send where (no model calls) | 15/15 | - (the live API names Groq and Google Gemini for files) |
 | Connected apps, demo app: registration, safety, planner, answers single and multi | 36/36 | - (no app on the internet registered yet) |
+| Connected apps over MCP (10d.9), demo MCP server: registration (read-only tools only), typed arguments, users, refusals, sessions, time limit; planner and answers | 27/27; with answers 47/47 | masjid over MCP: 2/2 guest questions (answered, refused) |
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
-| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model) | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
+| `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model); with the 10 MCP checks (10d.9) 61/63, and over MCP (`CONNECTOR=mcp`) 62/63 | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -843,6 +866,10 @@ what changed.
 22. **Test in the user's language, on the model the user gets.** The local model planned the
     Malayalam questions right and still misread the answers; Groq, which the live app uses, got
     all six (10d.8). A test that passes on one model says little about another.
+23. **Everything the model reads is prompt - even a label.** The same JSON with the label
+    `pending_dues` instead of `GET /ai/pending-dues` turned a right answer into a wrong one, every
+    time (10d.9). When two paths give different answers, compare what the model actually read,
+    byte for byte, before blaming the model.
 
 ### What changed when the data got real (Phase 9)
 
@@ -890,7 +917,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Test a long attachment | `cd phase10-cloud/eval && npm run eval:long-file` (`ANSWERS=1` asks the agent too, `AGENT=multi` the supervisor) |
 | Test `/api/ask` for other apps | `cd phase10-cloud/eval && npm run eval:ask` (needs `ASK_API_KEY` in `.env`) |
 | Check which documents may go where | `cd phase10-cloud/eval && npm run eval:policy` (no model calls) |
-| Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps` |
+| Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps`; an MCP app: `"mcp": "<url>"` instead of `"openapi"` in its file (`apps/demo-hall-mcp.json`), test `npm run eval:mcp`; masjid over MCP: `CONNECTOR=mcp npm run eval:masjid` |
 | The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; `ONLY=chips` only the Malayalam ready questions - run those with the Groq settings; needs the masjid repo at `MASJID_REPO`) |
 | A key for a new app | `cd phase10-cloud/api && API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new <name>` - works at once (also `askkey list`, `askkey revoke <id or name>`) |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
@@ -947,6 +974,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `92a920a`, `c7e83ac`, `d7a0c49`, `8e66b4c`, `ba7a2cb`, `93ca40f`, `d15aa47` | Phase 10e, later: phone voice, read-aloud on phones and in every language, usage questions, what failed, conversation mode, dates (masjid repo: `01d374e` dues by year) |
 | `48ad8b9` | Phase 10d.7: app ask-keys in Redis, hashed |
 | `2132350`, `edf5ae5` | Phase 10d.8: `eval:masjid` checks for last year's dues and the Malayalam ready questions (masjid repo: `a1ef56c` everyone's dues for a year, `0cec43b` the new look and Malayalam questions) |
+| `4f95df4`, `d474218` | Phase 10d.9: the MCP connector type, `eval:mcp`, `eval:masjid` over MCP (masjid repo: `4d0c969` the MCP server at `/api/ai/mcp`) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

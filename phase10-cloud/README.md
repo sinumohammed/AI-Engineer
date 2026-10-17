@@ -75,7 +75,7 @@ masjid server --(AI_ASK_KEY = "masjid")--> AI service --(MASJID_AI_TOKEN)--> mas
 | Admin key | `npm run app` (connected apps) | `ADMIN_KEY` | `ADMIN_KEY` | - | `npm run app -- keys` |
 | Dashboard key | the Command Center (`#/command`): usage only, read-only; also the token of the `usage` app | `DASHBOARD_KEY` | `DASHBOARD_KEY` (set in the dashboard - piping it to `vercel env add` stored something else) | - | `openssl rand -base64 24`, then `npm run app -- add ../apps/usage.json` |
 | App secrets key | encrypts app tokens in Redis | `APP_SECRETS_KEY` | `APP_SECRETS_KEY` | - | `npm run app -- keys` (then re-add every app) |
-| Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid.json` |
+| Masjid AI token | the AI service reading masjid `/api/ai/*` | `MASJID_AI_TOKEN` | - (stored encrypted in the registry) | `MASJID_AI_TOKEN` | random 32 bytes, then `npm run app -- add ../apps/masjid-mcp.json` (live since 10d.9; `masjid.json` = the OpenAPI entry) |
 
 `/api/ask` keys (10d.7): stored hashed in Redis with `npm run app -- askkey
 new|import|list|revoke` - they work at once, no deployment. Both apps moved
@@ -100,6 +100,7 @@ From `eval/`:
 | `npm run eval:public` | the deployed app, through its public URL (needs `HOSTED_ACCESS_CODE`) |
 | `npm run eval:long-file` | a 59-page PDF attachment: does the right page reach the prompt, which later questions get the file; `ANSWERS=1` also asks the agent (`AGENT=multi` for the supervisor) |
 | `npm run eval:apps` | connected apps (10d.4) against the demo app: registration, safety; `ANSWERS=1` planner and answers (`MODES=`, `ONLY=`) |
+| `npm run eval:mcp` | connected apps over MCP (10d.9) against `examples/demo-mcp` (official SDK) wrapping the demo app: registration (only read-only tools), typed arguments, users, refusals, sessions, time limit; `ANSWERS=1` planner and answers |
 | `npm run eval:masjid` | the masjid app end to end on this Mac with made-up data: starts its backend from `MASJID_REPO` (default `~/Code/Developer/work/MasjidRahma`) on a throwaway database and this API beside it; tokens and roles, limit settings, answers as admin / member / guest, isolation, daily limits (34 checks; `VOICE=1` adds voice). Never touches the live database |
 | `npm run eval:policy` | the data policy (10d.3): confidential chunks only reach a local model, what ingest takes, Gemini for files - no model calls |
 | `npm run eval:ask` | `POST /api/ask` for other apps: keys, bad requests, a question, a conversation (needs `ASK_API_KEY`; `API_URL=http://localhost:3002` for the Mac) |
@@ -991,6 +992,51 @@ phone and computer, light and dark - nothing wider than the screen, no page
 errors. Live: the admin's last-year question called `dues_by_year` with
 success (it was a 400), the new launcher and Malayalam questions in the
 deployed frontend.
+
+### 10d.9 MCP: a second connector type, and masjid as an MCP server (2026-10-17)
+
+Until now an app was connected through its OpenAPI file. Many products now
+offer their data as an **MCP server** instead, and the masjid data would be
+usable from Claude Desktop or Claude Code too if masjid offered one. Two
+sides:
+
+```
+AI service (MCP client)                      masjid backend (MCP server)
+api/mcpTools.js                              server/aiMcp.js, POST /api/ai/mcp
+  registration: initialize, tools/list  -->    11 tools, made from AI_OPENAPI
+                stores the read-only ones        (same names, descriptions, parameters)
+  a question:   tools/call              -->    the same handler as GET /api/ai/<path>,
+                + MASJID_AI_TOKEN                same roles, same refusal reasons
+                + X-User-Token
+```
+
+| What | Where |
+|---|---|
+| An app entry gives `"mcp": "<server URL>"` instead of `"openapi"`; its tools are stored as operations (`kind: "mcp"`), so the planner, `callers`, `user`, `whoami` and citations are unchanged | `api/appRegistry.js`, `api/apps.js` |
+| The MCP client, written over `fetch` (not the SDK): JSON or event-stream answers, sessions kept 10 min per user and restarted when the server forgets one, no redirects, time and size limits, numbers and true/false sent as such | `api/mcpTools.js` |
+| Only tools the server marks `readOnlyHint: true` are used, whatever the entry says (MCP has no GET) | `readMcpTools` |
+| A demo MCP server with the official SDK, wrapping the demo app's API without changing it; one tool that changes data, to prove it is left out | `examples/demo-mcp/server.js`, `apps/demo-hall-mcp.json` |
+| Masjid: the `/api/ai/*` endpoints as MCP tools, stateless (POST only - nothing held open in a Vercel function); listing needs `MASJID_AI_TOKEN`, a call also the user token | masjid `server/aiMcp.js`, `app.js` `aiGet`, `aiUserFrom` (masjid `4d0c969`) |
+| `eval:masjid` checks the masjid MCP server; `CONNECTOR=mcp` registers masjid over MCP and runs every check | `eval/masjid-app.js` |
+
+- The tools are generated from masjid's `AI_OPENAPI`, so the two descriptions
+  cannot drift apart; a new endpoint appears in both.
+- Found: with the label `pending_dues` under the answer (OpenAPI shows
+  `GET /ai/pending-dues`), local qwen told a paid-up member "no members have
+  pending dues" 5 times out of 5 - on byte-for-byte the same data that carries
+  the note "only the asking member's own dues". With `pending_dues (MCP tool)`
+  5/5 passed, like OpenAPI. The label is part of the prompt.
+- Fetch refuses port 4045 ("bad port") as well as 5060/5061.
+- Rollback: `npm run app -- add ../apps/masjid.json` puts masjid back on
+  OpenAPI (both live endpoints stay).
+
+Tests: `eval:mcp` 27/27, with `ANSWERS=1` 47/47 (Ollama, single and
+supervisor); `eval:apps` 31/31 unchanged; `eval:masjid` 10 new MCP checks,
+default 61/63 and `CONNECTOR=mcp` 62/63 on Ollama (the misses: Malayalam
+answers on qwen). Live (Groq): masjid switched to MCP (`apps/masjid-mcp.json`,
+11 read-only tools); through the masjid assistant as a guest, "Who supplies
+food today?" answered from `masjid API: today_duty (MCP tool)`, and
+"Which members have pending dues?" refused with masjid's "log in" reason.
 
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
