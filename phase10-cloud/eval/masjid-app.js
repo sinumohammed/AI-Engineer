@@ -14,11 +14,14 @@
 // Everything is removed at the end. The model is whatever ../.env says
 // (local Ollama by default; LLM_PROVIDER=groq ... to check the live setup).
 //   npm run eval:masjid        (MASJID_REPO=/path/to/MasjidRahma to override)
+//   ONLY=chips npm run eval:masjid   the Malayalam ready questions only (after the no-model checks)
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
+
+class OnlyDone extends Error {}
 
 const MASJID_REPO = process.env.MASJID_REPO ?? "/Users/sinosartk/Code/Developer/work/MasjidRahma";
 const MASJID_SERVER = `${MASJID_REPO}/masjid-management/server`;
@@ -284,7 +287,25 @@ try {
   r = await call(`${M}/ai/dues-by-year?year=${lastYear}&everyone=true`, { headers: { ...svc, "X-User-Token": memberUser } });
   check("dues-by-year: everyone=true refused to a member", r.status === 403, `${r.status} ${r.body.error ?? ""}`);
   const show = (a) => `${(a.ms / 1000).toFixed(1)}s ${a.answer.slice(0, 120)}`;
-  let a = await ask(adminLogin, "Which members have pending dues and how much?");
+  const oldLogin = await login(byName("Old Dues Member").unique_id, "9000000007");
+  // The assistant's ready questions in Malayalam (the chips in the masjid app's
+  // AssistantChat.tsx - keep the same words): each must reach the right data.
+  // Names may come back in Malayalam letters, so amounts and sources are checked.
+  // ONLY=chips stops after these - to check them on Groq without using up its quota.
+  let a = await ask(adminLogin, "ഈ മാസം ഇതുവരെ എത്ര ചെലവായി, ഏതൊക്കെ ഇനങ്ങളിൽ?");
+  check("Chip (admin, Malayalam): this month's spending", plain(a.answer).includes("16830") && a.sources.includes("masjid API"), show(a));
+  a = await ask(adminLogin, "വരിസംഖ്യ അടയ്ക്കാൻ ബാക്കിയുള്ള അംഗങ്ങൾ ആരൊക്കെ, എത്ര വീതം?");
+  check("Chip (admin, Malayalam): members with pending dues", plain(a.answer).includes(String(fathimaDue)) && a.sources.includes("masjid API"), show(a));
+  a = await ask(adminLogin, "കഴിഞ്ഞ വർഷത്തെ വരിസംഖ്യ ബാക്കിയുള്ളവർ ആരൊക്കെ?");
+  check("Chip (admin, Malayalam): last year's pending - everyone", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
+  a = await ask(fathima, "എനിക്ക് അടയ്ക്കാൻ ബാക്കിയുള്ള തുക എത്ര?");
+  check("Chip (member, Malayalam): my pending amount", plain(a.answer).includes(String(fathimaDue)) && a.sources.includes("masjid API"), show(a));
+  a = await ask(oldLogin, "കഴിഞ്ഞ വർഷം എനിക്ക് അടയ്ക്കാൻ ബാക്കിയുണ്ടായിരുന്നോ?");
+  check("Chip (member, Malayalam): my pending last year", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
+  a = await ask(null, "ഇന്ന് ഭക്ഷണം നൽകുന്നത് ആരാണ്?");
+  check("Chip (guest, Malayalam): today's food duty", a.sources.includes("masjid API") && !/log in|ലോഗിൻ/i.test(a.answer), show(a));
+  if (process.env.ONLY === "chips") throw new OnlyDone();
+  a = await ask(adminLogin, "Which members have pending dues and how much?");
   check("Admin: everyone's dues", ["Abdul", "Fathima", "Ashraf", "Shameer"].every((x) => a.answer.includes(x)) && a.sources.includes("masjid API"), show(a));
   check("Admin: amounts in rupees, not dollars", /₹|INR|rupee/i.test(a.answer) && !a.answer.includes("$"), show(a));
   a = await ask(adminLogin, "How much did the masjid spend this month?");
@@ -301,7 +322,6 @@ try {
   );
   a = await ask(fathima, "Do I have any pending dues?");
   check("Member: 'Do I have dues?' answered for them", /\byes\b|you(, [^,]{1,40},)? have|you owe/i.test(a.answer) && plain(a.answer).includes(String(fathimaDue)), show(a));
-  const oldLogin = await login(byName("Old Dues Member").unique_id, "9000000007");
   a = await ask(oldLogin, "What were my pending dues for last year?");
   check("Member: 'my pending for last year' - that year's dues, not just this year's", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
   a = await ask(adminLogin, "What were the pending dues of last year?");
@@ -372,8 +392,10 @@ try {
     check("A Malayalam recording through the masjid server becomes Malayalam text", r.status === 200 && /[ഀ-ൿ]/.test(r.body.text ?? ""), r.body.text ?? r.body.error);
   }
 } catch (err) {
-  console.error(`\nStopped: ${err.message}`);
-  total++;
+  if (!(err instanceof OnlyDone)) {
+    console.error(`\nStopped: ${err.message}`);
+    total++;
+  }
 } finally {
   await cleanup();
 }
