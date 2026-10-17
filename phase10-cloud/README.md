@@ -1070,6 +1070,16 @@ Claude Code --Bearer mcp_...--> /api/ai/mcp -> hash found -> that user, role rea
   exists": `claude mcp remove masjid -s local`, then add again.
 - These questions go from Claude Code straight to masjid: no Groq, no AI
   service, no assistant daily limit. What Claude reads goes to Anthropic.
+- Using it: start `claude` (any folder with `-s user`), `/mcp` shows
+  `masjid · connected` and its tools; ask in plain words ("who still owes for
+  2025?"); Claude asks before the first call of each tool.
+- Removing it: `claude mcp remove masjid -s user` (Claude Code stops
+  connecting) and Revoke in masjid Settings (the token stops working
+  anywhere). Revoke is the one that closes access.
+- Keeping it is fine on your own locked Mac: nothing runs until Claude calls a
+  tool. But the token is in plain text in `~/.claude.json`, never expires and
+  survives a password change - revoke it if the Mac is lost, sold or shared,
+  and glance at "last used" in Settings now and then.
 
 Tests: `eval:masjid` section 1c 12/12 (member refused; token shown once, never
 listed; tools listed and called as the admin; the official SDK client; other
