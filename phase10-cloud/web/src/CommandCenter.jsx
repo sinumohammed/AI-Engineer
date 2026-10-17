@@ -993,6 +993,9 @@ function UsagePanels({ d }) {
         {d.freeTier?.length > 0 && (
           <Card className="span2" title="Free tier today" size="small" extra={<span className="muted small">What is left before the free limits stop the service</span>}>
             <FreeTier rows={d.freeTier} />
+            <p className="muted small ft-note">
+              The two Groq models stand in for each other, so questions keep being answered until both run out (with a note under the answer). The estimates use the last 7 days' averages.
+            </p>
           </Card>
         )}
 
@@ -1189,6 +1192,12 @@ const MODEL_ROLES = {
   "gemini-3.5-flash-lite": "voice to text, photos, overviews",
   "gemini-3.8-flash-lite-tts": "reading aloud (Malayalam ...)",
 };
+// What one "use" of each model is, for the estimate line.
+const USE_NAMES = {
+  "whisper-large-v3-turbo": "voice questions",
+  "gemini-3.8-flash-lite-tts": "answers read aloud",
+  "gemini-3.5-flash-lite": "voice questions or files",
+};
 function FreeTier({ rows }) {
   return (
     <div className="freetier">
@@ -1221,6 +1230,22 @@ function FreeTier({ rows }) {
               <span className="grow" />
               {status}
             </div>
+            {m.usesLeft != null && (
+              <Tooltip
+                title={
+                  m.basis
+                    ? `Last ${m.basis.overDays} days: ${m.basis.tokensPerCall ? `~${fmtInt(m.basis.tokensPerCall)} tokens per call, ` : ""}${m.basis.callsPerUse ?? "?"} calls per ${(USE_NAMES[m.model] ?? "questions").replace(/s$/, "")}. Whichever limit runs out first decides.`
+                    : "From today's limits"
+                }
+                trigger={["hover", "click"]}
+              >
+                <div className="ft-estimate" tabIndex={0}>
+                  ≈ <b>{fmtInt(m.usesLeft)}</b> more {USE_NAMES[m.model] ?? "questions"} today
+                  {m.usesLeftLimitedBy === "tokens" && <span className="muted small"> · tokens run out first</span>}
+                  {m.usesLeftLimitedBy === "requests" && <span className="muted small"> · requests run out first</span>}
+                </div>
+              </Tooltip>
+            )}
             {limit != null ? (
               <Meter
                 share={share}

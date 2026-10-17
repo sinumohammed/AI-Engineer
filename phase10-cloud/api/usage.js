@@ -182,7 +182,7 @@ export async function meteredJob({ caller, channel, userRef = null }, fn) {
 // from midnight UTC (when Gemini's daily limits reset; Groq's is rolling).
 export async function freeTierToday() {
   await ensureTable();
-  const [{ rows }, reported] = await Promise.all([
+  const [{ rows }, { rows: week }, reported] = await Promise.all([
     db.query(
       `SELECT m->>'model' AS model, m->>'provider' AS provider,
               sum((m->>'calls')::int)::int AS requests,
@@ -191,8 +191,24 @@ export async function freeTierToday() {
         WHERE at >= (date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
         GROUP BY 1, 2`
     ),
+    // The last 7 days, for the "questions left" estimate: tokens per call,
+    // and calls per question (a question makes 2-4 model calls: router,
+    // specialist, judge, combiner) - averages, so it does not jump about
+    // early in the day.
+    db.query(
+      `SELECT m->>'model' AS model,
+              sum((m->>'calls')::int)::int AS calls,
+              sum((m->>'promptTokens')::bigint + (m->>'completionTokens')::bigint)::bigint AS tokens,
+              count(DISTINCT e.id)::int AS uses
+         FROM usage_events e, jsonb_array_elements(e.models) AS m
+        WHERE e.at >= now() - interval '7 days'
+        GROUP BY 1`
+    ),
     providerStates(),
   ]);
+  const avg = Object.fromEntries(
+    week.map((r) => [r.model, { tokensPerCall: r.calls ? Number(r.tokens) / r.calls : null, callsPerUse: r.uses ? r.calls / r.uses : null }])
+  );
   const used = Object.fromEntries(rows.map((r) => [r.model, { requests: r.requests, tokens: Number(r.tokens), provider: r.provider }]));
   const midnight = new Date();
   midnight.setUTCHours(24, 0, 0, 0);
@@ -205,9 +221,22 @@ export async function freeTierToday() {
     // Groq's own figure when it has given one today; else our count.
     const fromProvider = r.reported && Date.now() - Date.parse(r.reported.at) < 86400000;
     const requestsLeft = exhausted ? 0 : fromProvider ? r.reported.remainingRequests : limit.requestsPerDay != null ? Math.max(0, limit.requestsPerDay - u.requests) : null;
+    // Questions left: whichever limit runs out first (requests, or tokens at
+    // the average tokens per call), over the average calls per question.
+    const a = avg[model] ?? {};
+    const callsByTokens = limit.tokensPerDay != null && a.tokensPerCall ? Math.max(0, limit.tokensPerDay - u.tokens) / a.tokensPerCall : null;
+    const callsLeft = exhausted ? 0 : [requestsLeft, callsByTokens].filter((x) => x != null).reduce((m, x) => Math.min(m, x), Infinity);
+    // No history yet: a model counted in requests only (Whisper, the voice)
+    // is one call per use.
+    const callsPerUse = a.callsPerUse ?? (limit.tokensPerDay == null ? 1 : null);
+    const usesLeft = Number.isFinite(callsLeft) && callsPerUse ? Math.floor(callsLeft / callsPerUse) : exhausted ? 0 : null;
+    const limitedBy = exhausted ? "used up" : callsByTokens != null && requestsLeft != null ? (callsByTokens < requestsLeft ? "tokens" : "requests") : callsByTokens != null ? "tokens" : requestsLeft != null ? "requests" : null;
     return {
       model,
       provider: limit.provider,
+      usesLeft,
+      usesLeftLimitedBy: usesLeft == null ? null : limitedBy,
+      basis: a.tokensPerCall || a.callsPerUse ? { tokensPerCall: a.tokensPerCall ? Math.round(a.tokensPerCall) : null, callsPerUse: a.callsPerUse ? Number(a.callsPerUse.toFixed(1)) : null, overDays: 7 } : null,
       requestsPerDay: fromProvider ? r.reported.limitRequests : limit.requestsPerDay,
       tokensPerDay: limit.tokensPerDay,
       usedToday: u,

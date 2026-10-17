@@ -982,6 +982,12 @@ Gemini reports no limits (only AI Studio shows them) - the TTS limit of 10 a
 day is the figure its own error gave. Counted from midnight UTC; the Mac's
 evals use the same keys but are not counted. `FREE_TIER_LIMITS` overrides the
 limits. The agents can answer "how much free quota is left?" (`usage_free_tier`).
+Each card also estimates "≈ N more questions today": whichever limit runs out
+first (requests, or tokens at the last 7 days' average tokens per call),
+divided by the average calls per question (a question makes 1-3 calls to each
+Groq model). It showed that gpt-oss-20b - router, judge and planner, ~2.7
+calls a question - runs out before gpt-oss-120b; the two stand in for each
+other, so questions keep working until both are used up.
 
 Asking about usage: the console can answer "how many questions today?",
 "what did masjid cost this month?", "who are the top users?" from live data.

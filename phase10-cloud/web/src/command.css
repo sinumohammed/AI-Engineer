@@ -193,6 +193,9 @@
 .ft-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ft-head .ant-tag { margin: 0; }
 .ft-name { font-weight: 600; font-size: 13.5px; }
+.ft-estimate { font-size: 14px; cursor: help; }
+.ft-note { margin: 10px 0 0; }
+.ft-estimate b { font-size: 17px; }
 .ft-meter { display: flex; flex-direction: column; gap: 3px; }
 .ft-track { height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; display: block; }
 .ft-track span { display: block; height: 100%; background: var(--s1); border-radius: 3px; }
