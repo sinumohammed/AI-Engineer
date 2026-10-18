@@ -855,6 +855,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.11</td><td>Tables and charts in answers, for apps whose screen can show them</td><td class="res">Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged</td></tr>
                 <tr><td class="n">10d.12</td><td>The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions</td><td class="res">Screenshots on phone and computer, light and dark; colours checked for colour blindness</td></tr>
                 <tr><td class="n">10d.13</td><td>The masjid assistant on Telegram: members link by sharing their phone number, voice notes answered</td><td class="res">Live: linked as the admin, the bot answered; 21 bot checks against a fake Telegram, Groq 67/67</td></tr>
+                <tr><td class="n">10d.14</td><td>Charts over time: income and expense by month and by day, two series in one chart, the admin's 30-day and this-year cards; Copy, Image, Print under each answer; the time under each message</td><td class="res">Groq: every figure in the charts from the data, both new cards right; print checked on a phone and a computer</td></tr>
+                <tr><td class="n">10d.15</td><td>The masjid assistant answers masjid questions only, for everyone</td><td class="res">Live: a coding question gets the masjid-only reply, with no model call; "show that as a bar chart" still works</td></tr>
               </tbody>
             </table>
           </div>
@@ -1247,6 +1249,31 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.13. A second door to the same assistant, in the masjid app because the logins, roles and limits are there. Telegram gets 200 at once and the work runs after it (<code>waitUntil</code>); a repeated update is skipped. Tested against a fake Telegram, which found an old bug: a member asking about another member's dues was told "he owes nothing" - now refused.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 250" role="img" aria-label="Before: the masjid API gave one total per period and a chart had one series, so a line chart over time had nothing to draw. Now finance_by_month and finance_by_day give a figure per month or day, and a chart block can carry two series, income and expense. Every question from the masjid app and bot goes to the connected-apps agent only.">
+                <defs><marker id="a21" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">CHARTS OVER TIME · MASJID ANSWERS ONLY</text>
+                <rect class="b" x="20" y="40" width="200" height="60" rx="6"/>
+                <text class="t" x="120" y="64" text-anchor="middle">Any masjid question</text>
+                <text class="s" x="120" y="82" text-anchor="middle">app or Telegram, any role</text>
+                <line class="ln" x1="220" y1="70" x2="259" y2="70" marker-end="url(#a21)"/>
+                <rect class="ba" x="260" y="40" width="200" height="60" rx="6"/>
+                <text class="t" x="360" y="64" text-anchor="middle">connected_apps only</text>
+                <text class="s" x="360" y="82" text-anchor="middle">off-topic: fixed reply, no model</text>
+                <line class="ln" x1="460" y1="70" x2="499" y2="70" marker-end="url(#a21)"/>
+                <rect class="b" x="500" y="40" width="200" height="60" rx="6"/>
+                <text class="t" x="600" y="64" text-anchor="middle">finance_by_month / _by_day</text>
+                <text class="s" x="600" y="82" text-anchor="middle">a figure per month or day</text>
+                <path class="ln" d="M600,100 V128 H360 V147" marker-end="url(#a21)"/>
+                <rect class="b" x="200" y="148" width="320" height="50" rx="6"/>
+                <text class="t" x="360" y="169" text-anchor="middle">"series": ["Income", "Expense"]</text>
+                <text class="s" x="360" y="186" text-anchor="middle">two lines in one chart · Copy · Image · Print</text>
+                <text class="s" x="20" y="230">Before: one total per period and one series per chart - "last year's income as a line chart" drew nothing.</text>
+              </svg>
+            </div>
+            <figcaption>Steps 10d.14 and 10d.15. Found by the user: charts over time drew nothing, and members got handbook and coding answers from the masjid assistant. Measured on the way: an extra example in the prompt made the local model draw unasked charts, and the new monthly tool made "spent this month, on what" lose its categories until its description said it has none. The Command Center now greets after two claps: Assalamu alaikum, the time of day, then the free tier left.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1265,6 +1292,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>A service's key and a person's key are different keys: the AI service gets a 5-minute user token per question; Claude Code, used by a person, got its own revocable token with that person's role read at every use.</li>
               <li>What can be measured, measure - even colour: red against green looked fine and failed a colour-blindness check; a model's numbers in a table are checked against the data, not eyeballed.</li>
               <li>A check must fail on the wrong answer, not only on the leak: "does not show Abdul's amount" passed while the answer said Abdul owed nothing - safe, and false.</li>
+              <li>An example in a prompt gets copied: a second example chart made the local model add a chart nobody asked for, under the example's own title.</li>
+              <li>A new tool changes how the old ones are chosen: the monthly-totals tool took "spent this month, on what" and lost its categories; after adding a tool, re-run the questions the others answered.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
@@ -1394,6 +1423,13 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">110</td><td class="n">10d.12</td><td>Dashboard charts: one dot per day, no values; red/green for in/out</td><td>Month-by-month bars with the answer above, categories with amount and share; emerald/gold</td><td class="res">Colour checks pass, light and dark; opening balances left out and named</td></tr>
             <tr><td class="n">111</td><td class="n">10d.13</td><td>The assistant only inside the app; members use their messaging apps every day</td><td>A Telegram bot in the masjid app: link by own phone number or a one-time app link, voice notes, the app chat's own ask function</td><td class="res">21 bot checks against a fake Telegram; Groq 67/67; live answered</td></tr>
             <tr><td class="n">112</td><td class="n">10d.13</td><td>A member asking for another member's dues heard "he has no pending dues" - he owed ₹3000; the check only looked for the amount</td><td>That search refused for members (403), as <code>dues_by_year</code> already was; the check also fails on "no pending"</td><td class="res">Refused, pointing to the admin, on Groq and qwen</td></tr>
+            <tr><td class="n">113</td><td class="n">10d.14</td><td>"Last year's income as a line chart" drew nothing (found by the user): one total per period, one series per chart</td><td><code>finance_by_month</code>; chart blocks with <code>series</code></td><td class="res">Groq: the year as a line chart, income vs expense in one chart, every figure from the API</td></tr>
+            <tr><td class="n">114</td><td class="n">10d.14</td><td>gpt-oss left out <code>"series"</code></td><td>The chat takes the series from the first item's keys</td><td class="res">54/54 on Groq</td></tr>
+            <tr><td class="n">115</td><td class="n">10d.14</td><td>A second example in the chart rule: unasked charts, no citation (qwen)</td><td>The multi-series form as one sentence, figures not the test's</td><td class="res">Plain answers again</td></tr>
+            <tr><td class="n">116</td><td class="n">10d.14</td><td>"Spent this month, on what" lost its categories</td><td>The new tools' descriptions say they have none</td><td class="res">Categories back</td></tr>
+            <tr><td class="n">117</td><td class="n">10d.14</td><td>Print blank on a computer, then everywhere</td><td>A copy of the answer under <code>&lt;body&gt;</code>, made visible past the receipt's print CSS</td><td class="res">Only the answer, phone and computer</td></tr>
+            <tr><td class="n">118</td><td class="n">10d.15</td><td>Members got handbook and coding answers from the masjid assistant</td><td>Everyone pinned to <code>connected_apps</code></td><td class="res">Off-topic: fixed reply, 0.2 s, no model</td></tr>
+            <tr><td class="n">119</td><td class="n">10d.15</td><td>"Show that as a bar chart" broke: a pinned agent skipped rework</td><td>Rework allowed for a pinned <code>connected_apps</code></td><td class="res">Bar chart back</td></tr>
           </tbody>
         </table>
       </div>
@@ -1422,6 +1458,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Masjid app end to end: tokens, roles (admin, member, guest), isolation</td><td class="n">23/23</td><td class="n">6/6 live</td></tr>
             <tr><td><code>eval:masjid</code>: masjid backend and this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions</td><td class="n">51/53 (2 misses: Malayalam answers on the local model); with 10 MCP checks 61/63, over MCP 62/63</td><td class="n">Malayalam ready questions 6/6; live: 2/2 match the app's schedule</td></tr>
             <tr><td>Telegram bot, against a fake Telegram: wrong secret, linking by phone (own number only) and by app link (once only), a retried update not answered twice, groups ignored, roles over Telegram, voice notes</td><td class="n">21/21</td><td class="n">21/21 on Groq; live: linked as the admin, answered</td></tr>
+            <tr><td>Charts over time: month and day endpoints, the year as a line chart, income vs expense in one chart, the admin's two chart cards</td><td class="n">endpoint checks 5/5</td><td class="n">54/54; both cards right</td></tr>
+            <tr><td>Masjid answers only: handbook and coding questions not answered; bar chart after a table</td><td class="n">3/3</td><td class="n">live: masjid-only reply</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
           </tbody>
         </table>
@@ -1458,6 +1496,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>A service's key and a person's key are different keys.</strong> The AI service holds one long-lived service token and gets a fresh 5-minute token per user per question; a person's tool (Claude Code) has neither, so it got its own: made by that person, revocable, with their role read at every use and opening only one door (10d.10). Decide who holds a key before deciding its shape.</li>
         <li><strong>What can be measured, measure - even colour.</strong> Green against red looked fine and failed a colour-blindness check by a wide margin (10d.12); a script found it in a second. The same goes for a model's numbers in a table: check each one against the data, do not eyeball it (10d.11).</li>
         <li><strong>A check must fail on the wrong answer, not only on the leak.</strong> "Does not show Abdul's amount" passed while the answer said Abdul owed nothing - safe, and false (10d.13). Write down what a right answer says, and check for that.</li>
+        <li><strong>An example in a prompt gets copied.</strong> With a second example chart in the prompt, the local model added a chart nobody asked for - under the example's own title, "Pending dues by member" (10d.14). Keep examples few, and never use the test's own numbers in them.</li>
+        <li><strong>A new tool changes how the old ones are chosen.</strong> Adding a monthly-totals endpoint made "what was spent this month, on what" pick it and lose its categories (10d.14). After adding a tool, re-run the questions the other tools answered.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1511,6 +1551,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Claude Code with the masjid tools</td><td>masjid app → Settings → Claude access (MCP) → Create, then <code>claude mcp add -s user --transport http masjid https://masjid-management-omega.vercel.app/api/ai/mcp --header "Authorization: Bearer mcp_..."</code>; check with <code>claude mcp list</code> and <code>/mcp</code>. Remove: <code>claude mcp remove masjid -s user</code>, and Revoke in Settings (the one that closes access; do it if the Mac is lost - the token is in plain text in <code>~/.claude.json</code> and never expires)</td></tr>
             <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice; <code>ONLY=chips</code> only the Malayalam ready questions - run those with the Groq settings)</td></tr>
             <tr><td>The masjid assistant on Telegram</td><td>masjid app → Settings → Telegram (bot status, Connect the bot, Link my Telegram); members: Profile → Telegram, or share their phone number with the bot. Test: <code>cd phase10-cloud/eval &amp;&amp; ONLY=telegram npm run eval:masjid</code> (a fake Telegram; <code>VOICE=1</code> adds a voice note)</td></tr>
+            <tr><td>Ollama memory (Mac)</td><td><code>OLLAMA_KEEP_ALIVE=1m</code>, set at login by <code>~/Library/LaunchAgents/local.ollama-keepalive.plist</code>: the 21 GB model leaves memory a minute after its last question (a cold load is 4.6 s). Quit Ollama from the menu bar when you are not running local evals</td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new &lt;name&gt;</code> - works at once (also <code>askkey list</code>, <code>askkey revoke &lt;id or name&gt;</code>)</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Command Center (usage, cost, agents live)</td><td>live: <code>https://ai-engineer-web-seven.vercel.app/#/command</code>; local: <code>http://localhost:5174/#/command</code> (key: <code>DASHBOARD_KEY</code> or <code>ADMIN_KEY</code> in <code>.env</code>)</td></tr>

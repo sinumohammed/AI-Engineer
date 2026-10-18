@@ -1185,6 +1185,74 @@ Telegram --POST /api/telegram/webhook (secret header, made from the bot token)--
 - Live 2026-10-17: the user connected the bot, linked as the admin, and it
   answered.
 
+### 10d.14 Charts over time, copy / image / print, message times (2026-10-18/19)
+
+Found by the user: "last year's income as a line chart" and "income vs
+expense" drew nothing in the masjid assistant. Two causes, both measured
+first (the model said so itself: "the data does not include monthly income"):
+
+- **No points to draw.** `finance_summary` gives one total for a range. New
+  masjid endpoints (admin only, MCP tools too): `finance_by_month` (default
+  the last 12 months, at most 24; "this year" = 1 January to 31 December) and
+  `finance_by_day` (default the last 30 days, at most 92). Opening balances
+  are left out and named, as on the dashboard.
+- **One series per chart.** A chart block can now carry `"series":
+  ["Income", "Expense"]` with one number per name in each item
+  (`api/display.js`, masjid `answerFormat.ts`); gpt-oss often leaves
+  `series` out, so the chat takes the names from the first item's keys. Up to
+  31 items (a month by day), 4 series.
+
+Found on the way, each measured: a second full example block in the chart
+rule made qwen add charts nobody asked for and drop its citation - the
+multi-series form is now one sentence, with figures that are not the eval's;
+and with the new endpoints listed, "how much was spent this month, on what"
+went to the monthly totals ("categories not available") until their
+descriptions said "no categories (those are in finance_summary)".
+
+- Two admin ready questions in Malayalam: the last 30 days and this year's
+  income and expense, each as a line chart.
+- Under every answer: **Copy** (text with tab-separated tables, plus an HTML
+  table, so they paste into a spreadsheet or Word), **Image** (a PNG of the
+  answer with its chart, html-to-image; the share sheet on a phone) and
+  **Print** ("Save as PDF" gives a PDF). Print uses a copy of the answer under
+  `<body>`: the answer itself sits in a clipped panel that printed blank on a
+  computer, and the receipt's print CSS hides `body *` for every print.
+- The time under each message: today's time, "Yesterday ...", or the date;
+  tap for the full date.
+- Command Center: the first two claps in 30 minutes are greeted - "Assalamu
+  alaikum, Sino!", the time of day, "how are you", then what is left of each
+  free tier today (the "Free tier today" figures) - before it listens.
+- Tests: `eval:masjid` checks the endpoints with no model (opening balance
+  left out, member 403, too long a range 400), "this year's income as a line
+  chart", "income vs expense" as one chart, and both new cards: every figure
+  from the API. Groq 54/54 (`ONLY=tables`), cards passed (`ONLY=chips`).
+
+### 10d.15 The masjid assistant answers masjid questions only (2026-10-19)
+
+The user's decision: from the masjid app and its Telegram bot, masjid answers
+only - no company handbook, coding or general answers, for anyone. Before,
+a guest was pinned to `connected_apps` but a logged-in user got the full
+agent: a member's "what is our rollback process?" was answered from the
+handbook, on the same free quota.
+
+- The masjid server now asks with `mode: "multi", agent: "connected_apps"`
+  for everyone; each role still sees only its own data. An off-topic question
+  gets "None of the connected applications has data for that question." in
+  code - no model call (0.2 s).
+- Found by `eval:masjid`: a pinned agent skipped the rework path
+  (`supervisor.js`), so "show that as a bar chart" went to the planner as a
+  new question and drew nothing. A rework only reuses the conversation, so it
+  is allowed when the pinned agent is `connected_apps`; a specialist picked by
+  hand in the web chat is unchanged.
+- Tests: a member's handbook question and the admin's coding question are not
+  answered; the bar chart after a table is back. Live: a guest's "How do I
+  list git tags?" answered with the masjid-only reply.
+- On the Mac: `OLLAMA_KEEP_ALIVE=1m` (set at login by
+  `~/Library/LaunchAgents/local.ollama-keepalive.plist`). qwen3-coder:30b
+  holds ~21 GB of the Mac's 32 GB; with low memory Ollama hung at
+  "Stopping..." and every eval question timed out. A cold load takes 4.6 s,
+  and evals keep the model loaded, so 1 minute costs almost nothing.
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and

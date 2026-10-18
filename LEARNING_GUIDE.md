@@ -454,6 +454,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.11 | Tables and charts in answers, for apps whose screen can show them | Every figure in a table or chart equal to the API's, on qwen and Groq 3/3; other prompts unchanged |
 | 10d.12 | The masjid app redone: one emerald-and-gold look, About the masjid, photos uploaded in the app, charts that answer questions | Screenshots on phone and computer, light and dark; colours checked for colour blindness |
 | 10d.13 | The masjid assistant on Telegram: members link by sharing their phone number, voice notes answered | Live: linked as the admin, the bot answered; 21 bot checks against a fake Telegram, Groq 67/67 |
+| 10d.14 | Charts over time: income and expense by month and by day, two series in one chart, the admin's 30-day and this-year cards; Copy, Image, Print under each answer; the time under each message | Groq: every figure in the charts from the data, both new cards right; print checked on a phone and a computer |
+| 10d.15 | The masjid assistant answers masjid questions only, for everyone | Live: a coding question gets the masjid-only reply, with no model call; "show that as a bar chart" still works |
 
 - **Challenges, in plain terms:**
 
@@ -693,6 +695,22 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   link from the app (10 minutes, works once). Private chats only, so dues never show in a group.
   Tested against a fake Telegram, which found an old bug: a member asking about another member's
   dues was told "he owes nothing" (the list was already cut to the member's own) - now refused.
+- **Charts over time (10d.14):** "last year's income as a line chart" drew nothing - the masjid API
+  had one total per period, and a chart one series. Now:
+  ```
+  finance_by_month / finance_by_day (masjid API, admin)  ->  a figure per month / per day
+  chart block: "series": ["Income", "Expense"], data: [{label, Income, Expense}]  ->  two lines
+  ```
+  Under every answer: Copy (tables paste as columns), Image (a picture with the chart, shared on a
+  phone) and Print (Save as PDF). Each message shows its time. Two things went wrong on the way
+  and were measured: an extra example in the prompt made the local model draw charts nobody asked
+  for, and adding the monthly endpoint made "what was spent this month, on what" pick it and lose
+  the categories - until its description said it has none.
+- **Masjid answers only (10d.15):** the user's decision - the masjid app and bot answer from masjid
+  data only, for everyone. Logged-in users had the full agent (handbook, coding, general); now
+  every question goes to the connected-apps agent, and an off-topic one gets a fixed reply in code,
+  with no model call. That broke "show that as a bar chart" (a pinned agent skipped the rework
+  step) - the eval found it, and rework is now allowed for that agent.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -818,6 +836,13 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 110 | 10d.12 | Dashboard charts: one dot per day (~280), no values; red/green for in/out | Month-by-month bars with the answer above, categories with amount and share; emerald/gold - red/green failed the colour-blindness check (ΔE 3.7) | Every check passes, light and dark; opening balances (a third of "income") left out and named |
 | 111 | 10d.13 | The assistant only inside the app; members use their messaging apps every day (roadmap #5) | A Telegram bot in the masjid app: webhook, link by the account's own phone number or a one-time app link, voice notes, the app chat's own ask function | 21 bot checks against a fake Telegram; Groq 67/67; live: linked as the admin and answered |
 | 112 | 10d.13 | A member asking for Abdul Rasheed's dues heard "he has no pending dues" - he owed ₹3000. The check passed: it only looked for the amount | `pending-dues?search=` another member, asked by a member: refused (403), as `dues_by_year` already was; the check also fails on "no pending" and wants "admin" | Refused, pointing to the admin, on Groq and qwen. The app's own chat had the same bug |
+| 113 | 10d.14 | "Last year's income as a line chart" drew nothing (found by the user): one total per period, one series per chart | `finance_by_month` in the masjid API; chart blocks with `series` | Groq: a line chart of the year, income vs expense in one chart, every figure from the API |
+| 114 | 10d.14 | gpt-oss wrote `{label, Income, Expense}` without `"series"` | The chat takes the series from the first item's keys | 54/54 on Groq |
+| 115 | 10d.14 | A second full example in the chart rule: qwen added a chart nobody asked for and dropped its citation | The multi-series form as one sentence, with figures that are not the test's | The answer is plain again |
+| 116 | 10d.14 | With the new endpoints listed, "spent this month, on what" lost its categories | Their descriptions say "totals only, no categories (in finance_summary)" | Categories back, on Groq |
+| 117 | 10d.14 | Print: blank on a computer, then blank everywhere | A copy of the answer under `<body>`; the receipt's print CSS hides `body *` for every print, so the copy is made visible | Only the answer, on white, phone and computer |
+| 118 | 10d.15 | Members got handbook and coding answers from the masjid assistant | Everyone pinned to `connected_apps` | Off-topic: a fixed reply in 0.2 s, no model; live checked |
+| 119 | 10d.15 | That broke "show that as a bar chart": a pinned agent skipped the rework step | Rework allowed when the pinned agent is `connected_apps` | Bar chart back; the web chat unchanged |
 
 Where things stand (Phase 10 code):
 
@@ -844,6 +869,8 @@ Where things stand (Phase 10 code):
 | Masjid app end to end: tokens, roles (admin, member, guest), isolation | 23/23 (test database) | 6/6 live (guest questions on real data, web chat and other apps see nothing) |
 | `eval:masjid`: the masjid backend + this API on a throwaway database - roles, limits, names in English letters, isolation, who-asks codes, a past year's dues (one member, and everyone for the admin), the Malayalam ready questions | 51/53 (the 2 misses: Malayalam answers on the local model); with the 10 MCP checks (10d.9) 61/63, and over MCP (`CONNECTOR=mcp`) 62/63 | Malayalam ready questions 6/6 (`ONLY=chips`); live: "Sinu TK this month" and "MR1 in November" match the app's schedule |
 | Telegram bot (10d.13), against a fake Telegram: wrong secret, linking by phone (own number only, unknown number) and by app link (once only), a retried update not answered twice, groups ignored, roles over Telegram, voice notes | 21/21 (`eval:masjid ONLY=telegram`, voice with `VOICE=1`) | 21/21 on Groq; live: linked as the admin, answered |
+| Charts over time (10d.14): month and day endpoints (opening balance left out, member refused, range limits), a line chart of the year, income vs expense in one chart, the admin's two chart cards | endpoint checks 5/5 | 54/54 (`ONLY=tables`), both cards right (`ONLY=chips`) |
+| Masjid answers only (10d.15): a member's handbook question and the admin's coding question not answered; "show that as a bar chart" after a table | 3/3 | live: off-topic question gets the masjid-only reply |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -940,6 +967,12 @@ what changed.
 26. **A check must fail on the wrong answer, not only on the leak.** "Does not show Abdul's
     amount" passed while the answer said Abdul owed nothing - safe, and false (10d.13). Write down
     what a right answer says, and check for that.
+27. **An example in a prompt gets copied.** With a second example chart in the prompt, the local
+    model added a chart nobody asked for - under the example's own title, "Pending dues by member"
+    (10d.14). Keep examples few, and never use the test's own numbers in them.
+28. **A new tool changes how the old ones are chosen.** Adding a monthly-totals endpoint made "what
+    was spent this month, on what" pick it and lose its categories (10d.14). After adding a tool,
+    re-run the questions the other tools answered.
 
 ### What changed when the data got real (Phase 9)
 
@@ -990,6 +1023,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | Connected apps | `cd phase10-cloud/api && npm run app -- list` (also `add <file>`, `try "question"`, `remove <name>`); test: `cd phase10-cloud/eval && npm run eval:apps`; an MCP app: `"mcp": "<url>"` instead of `"openapi"` in its file (`apps/demo-hall-mcp.json`), test `npm run eval:mcp`; masjid over MCP: `CONNECTOR=mcp npm run eval:masjid` |
 | Claude Code with the masjid tools | masjid app → Settings → Claude access (MCP) → Create, then `claude mcp add -s user --transport http masjid https://masjid-management-omega.vercel.app/api/ai/mcp --header "Authorization: Bearer mcp_..."`; check with `claude mcp list` and `/mcp`. Remove: `claude mcp remove masjid -s user`, and Revoke in Settings (the one that closes access; do it if the Mac is lost - the token is in plain text in `~/.claude.json` and never expires) |
 | The masjid assistant on Telegram | masjid app → Settings → Telegram (bot status, Connect the bot, Link my Telegram); members: Profile → Telegram, or share their phone number with the bot. Test: `cd phase10-cloud/eval && ONLY=telegram npm run eval:masjid` (a fake Telegram; `VOICE=1` adds a voice note) |
+| Ollama memory (Mac) | `OLLAMA_KEEP_ALIVE=1m`, set at login by `~/Library/LaunchAgents/local.ollama-keepalive.plist`: the 21 GB model leaves memory a minute after its last question (a cold load is 4.6 s). Quit Ollama from the menu bar when you are not running local evals |
 | The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; `ONLY=chips` only the Malayalam ready questions - run those with the Groq settings; needs the masjid repo at `MASJID_REPO`) |
 | A key for a new app | `cd phase10-cloud/api && API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new <name>` - works at once (also `askkey list`, `askkey revoke <id or name>`) |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
@@ -1051,6 +1085,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `ba9e0c0` | Phase 10d.11: tables and charts in answers (masjid repo: `a16c824` the chat draws them) |
 | - | Phase 10d.12, masjid repo branch `redesign-1`: `29b24d7` look step 1, `0395be0` About the masjid, `58b2c8e` photos in the app, `4d8d296` / `c4d32aa` / `16678ae` the other pages, `ed2f68a` the assistant page on phones, `75182bb` the dashboard's charts |
 | `7fbd63e` | Phase 10d.13: `eval:masjid` Telegram checks against a fake Telegram (masjid repo: `256f15a` the Telegram bot and the dues-search fix, `2d4d0ec` the Profile spinner fix) |
+| `d4e6993`, `1745f83` | Phase 10d.14: charts with several series, `eval:masjid` month and day checks, the Command Center greeting (masjid repo: `9e26b0f` month by month, charts, Copy / Image / Print; `11b3933` the 30-day and this-year cards) |
+| `2edad18` | Phase 10d.15: rework for a pinned `connected_apps` agent, masjid-only checks (masjid repo: `3cf162d` masjid answers only, message times) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
