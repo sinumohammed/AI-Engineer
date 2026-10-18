@@ -279,6 +279,11 @@ try {
   r = await call(`${M}/ai/finance-by-month?startDate=2026-01-01&endDate=2026-12-31`, { headers: { ...svc, "X-User-Token": adminUser } });
   const fm = (k) => r.body.months?.find((m) => m.month === k);
   check("finance-by-month: 12 months, March 2100 in, this month 4250 in / 16830 out, opening balance left out and named", r.body.months?.length === 12 && fm("2026-03")?.income === 2100 && fm(month)?.income === 4250 && fm(month)?.expense === 16830 && fm("2026-01")?.income === 0 && r.body.openingBalancesLeftOut === 50000, JSON.stringify(r.body).slice(0, 200));
+  r = await call(`${M}/ai/finance-by-day`, { headers: { ...svc, "X-User-Token": adminUser } });
+  const fd = (d) => r.body.days?.find((x) => x.date === d);
+  check("finance-by-day: the last 30 days to today, this month's 1st-3rd: 15000 out, 4250 in, 1830 out", r.body.days?.length === 30 && r.body.period?.to === today && fd(`${month}-01`)?.expense === 15000 && fd(`${month}-02`)?.income === 4250 && fd(`${month}-03`)?.expense === 1830, JSON.stringify(r.body.period ?? r.body));
+  r = await call(`${M}/ai/finance-by-day?startDate=2026-01-01&endDate=2026-06-30`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check("finance-by-day: more than 92 days refused", r.status === 400, `${r.status} ${r.body.error ?? ""}`);
   r = await call(`${M}/ai/finance-by-month`, { headers: { ...svc, "X-User-Token": memberUser } });
   check("finance-by-month: refused to a member", r.status === 403, r.status);
   r = await call(`${M}/ai/finance-by-month?startDate=2023-01-01&endDate=2026-12-31`, { headers: { ...svc, "X-User-Token": adminUser } });
@@ -566,6 +571,30 @@ try {
   check("Chip (member, Malayalam): my pending last year", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
   a = await ask(null, "ഇന്ന് ഭക്ഷണം നൽകുന്നത് ആരാണ്?");
   check("Chip (guest, Malayalam): today's food duty", a.sources.includes("masjid API") && !/log in|ലോഗിൻ/i.test(a.answer), show(a));
+  // The admin's two chart cards: a line chart each, both series, figures from the API.
+  const chartIn = (text) => {
+    try {
+      return JSON.parse(text.match(/```\s*chart\s*\n([\s\S]*?)```/)?.[1] ?? "");
+    } catch {
+      return null;
+    }
+  };
+  const seriesOf = (c) => {
+    const names = c?.series ?? Object.keys(c?.data?.[0] ?? {}).filter((k) => k !== "label");
+    return { inK: names.find((n) => /income|വരവ്/i.test(n)), outK: names.find((n) => /expense|ചെലവ്/i.test(n)) };
+  };
+  a = await ask(adminLogin, "കഴിഞ്ഞ 30 ദിവസത്തെ വരവും ചെലവും ദിവസം തിരിച്ച് ലൈൻ ചാർട്ടായി കാണിക്കൂ");
+  let ch = chartIn(a.answer);
+  let k = seriesOf(ch);
+  const ins = (ch?.data ?? []).map((d) => Number(d[k.inK] ?? 0));
+  const outs = (ch?.data ?? []).map((d) => Number(d[k.outK] ?? 0));
+  check("Chip (admin, Malayalam): the last 30 days - a line chart, income and expense by day", ch?.type === "line" && k.inK && k.outK && ins.includes(4250) && outs.includes(15000) && outs.includes(1830) && ins.every((v) => [0, 4250].includes(v)) && outs.every((v) => [0, 15000, 1830].includes(v)) && (ch?.data?.length ?? 0) >= 28, `${ch?.type ?? "no chart"} ${ch?.data?.length ?? 0} days in [${[...new Set(ins)]}] out [${[...new Set(outs)]}] | ${show(a)}`);
+  a = await ask(adminLogin, "ഈ വർഷത്തെ വരവും ചെലവും മാസം തിരിച്ച് ലൈൻ ചാർട്ടായി കാണിക്കൂ");
+  ch = chartIn(a.answer);
+  k = seriesOf(ch);
+  const mar = (ch?.data ?? []).find((d) => Number(d[k.inK]) === 2100);
+  const oct = (ch?.data ?? []).find((d) => Number(d[k.inK]) === 4250);
+  check("Chip (admin, Malayalam): this year by month - a line chart, income and expense", ch?.type === "line" && Boolean(mar && oct && Number(oct[k.outK]) === 16830), `${JSON.stringify(ch ?? "no chart").slice(0, 160)} | ${show(a)}`);
   if (process.env.ONLY === "chips") throw new OnlyDone();
   a = await ask(adminLogin, "Which members have pending dues and how much?");
   check("Admin: everyone's dues", ["Abdul", "Fathima", "Ashraf", "Shameer"].every((x) => a.answer.includes(x)) && a.sources.includes("masjid API"), show(a));

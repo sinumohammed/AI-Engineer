@@ -40,7 +40,7 @@ const CHART_RULE =
   '{"type": "bar", "title": "Pending dues by member", "unit": "₹", "data": [{"label": "Name", "value": 1200}]}\n' +
   "```\n" +
   `"type" is one of ${CHART_TYPES.join(", ")} (pie for parts of a whole, line for values over time, bar for ` +
-  "anything else); \"value\" is a plain number; at most 24 items; labels in the reply's language. To compare " +
+  "anything else); \"value\" is a plain number; at most 31 items; labels in the reply's language. To compare " +
   "two to four values per label (income vs expense by month), replace \"value\" with \"series\": [\"Income\", " +
   "\"Expense\"] next to \"data\" and one number per name in each item: {\"label\": \"Jan 2026\", \"Income\": 52000, " +
   "\"Expense\": 38500} - 0 for a month with none. Without a request for a chart, write no chart block.";
