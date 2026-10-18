@@ -104,7 +104,11 @@ export async function runAgent(
   // Phase 10: "translate that", "make it shorter" - rework the previous
   // answer from the full conversation, no routing and no search (rework.js).
   // Reported as the general specialist, the closest of the UI's agents.
-  if (!manual && isRework(question, history)) {
+  // Also for an app pinned to connected_apps (the masjid assistant, for
+  // everyone since 2026-10-19): the conversation is already that app's data,
+  // and "show that as a bar chart" went to the planner as a new question.
+  // A specialist picked by hand in the web chat still gets the question.
+  if ((!manual || forceAgent === "connected_apps") && isRework(question, history)) {
     const reason = "Rework of the previous answer: answered from the conversation, no new search.";
     const tasks = [{ agent: "general", question }];
     onRoute?.({ reason, tasks, fallback: false, manual: false });

@@ -613,6 +613,12 @@ try {
   );
   a = await ask(fathima, "Do I have any pending dues?");
   check("Member: 'Do I have dues?' answered for them", /\byes\b|you(, [^,]{1,40},)? have|you owe/i.test(a.answer) && plain(a.answer).includes(String(fathimaDue)), show(a));
+  // Masjid only, for everyone (the user's decision, 2026-10-19): no handbook,
+  // coding or general answers from the masjid assistant.
+  a = await ask(fathima, "What is our rollback process?");
+  check("Member: a handbook question - not answered from the handbook", !a.sources.some((x) => !/masjid/i.test(x)) && !/tagged release|redeploy/i.test(a.answer), `${a.sources.join(",") || "no sources"} | ${show(a)}`);
+  a = await ask(adminLogin, "How do I list git tags?");
+  check("Admin: a coding question - no coding answer", !/git tag\b|git tag -l|--list/i.test(a.answer), show(a));
   a = await ask(oldLogin, "What were my pending dues for last year?");
   check("Member: 'my pending for last year' - that year's dues, not just this year's", plain(a.answer).includes("1200") && a.sources.includes("masjid API"), show(a));
   a = await ask(adminLogin, "What were the pending dues of last year?");
