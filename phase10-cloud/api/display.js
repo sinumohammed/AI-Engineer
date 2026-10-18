@@ -5,7 +5,8 @@
 // ask, the web chat and the evals get exactly the prompts they had before.
 //
 // Tables are Markdown (any Markdown renderer shows them). A chart is a fenced
-// ```chart block with JSON the app draws itself; the numbers stay in a table
+// ```chart block with JSON the app draws itself - one series ("value") or
+// several ("series": ["Income", "Expense"]); the numbers stay in a table
 // next to it, so a screen that cannot draw the chart still shows them.
 //
 // The model copies the figures from the data: eval:masjid compares every
@@ -39,8 +40,10 @@ const CHART_RULE =
   '{"type": "bar", "title": "Pending dues by member", "unit": "₹", "data": [{"label": "Name", "value": 1200}]}\n' +
   "```\n" +
   `"type" is one of ${CHART_TYPES.join(", ")} (pie for parts of a whole, line for values over time, bar for ` +
-  "anything else); \"value\" is a plain number; at most 20 items; labels in the reply's language. Without a " +
-  "request for a chart, write no chart block.";
+  "anything else); \"value\" is a plain number; at most 24 items; labels in the reply's language. To compare " +
+  "two to four values per label (income vs expense by month), replace \"value\" with \"series\": [\"Income\", " +
+  "\"Expense\"] next to \"data\" and one number per name in each item: {\"label\": \"Jan 2026\", \"Income\": 52000, " +
+  "\"Expense\": 38500} - 0 for a month with none. Without a request for a chart, write no chart block.";
 
 // The rule for this request ("" for callers that did not ask).
 export function displayRule(access = currentAccess()) {

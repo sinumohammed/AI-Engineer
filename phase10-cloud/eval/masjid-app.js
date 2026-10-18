@@ -216,6 +216,8 @@ try {
     { type: "income", category: "Friday collection", amount: 4250, description: "Jumua collection", date: `${month}-02` },
     { type: "expense", category: "Electricity", amount: 1830, description: "KSEB bill", date: `${month}-03` },
     { type: "expense", category: "Imam salary", amount: 15000, description: "Monthly salary", date: `${month}-01` },
+    // Money carried over when the books started: never counted as income by month.
+    { type: "income", category: "Opening balance", amount: 50000, description: "Carried over", date: "2026-01-01" },
   ]) {
     await call(`${M}/transactions`, { method: "POST", token: adminLogin, body: { ...t, bankId: bank } });
   }
@@ -274,6 +276,13 @@ try {
   check('"Sinu TK" finds the Malayalam-named member (pending dues)', r.body.membersFound?.[0]?.id === sinu.unique_id && r.body.pending?.length === 1, JSON.stringify(r.body.membersFound));
   r = await call(`${M}/ai/pending-dues?search=${encodeURIComponent("Sinu TK")}`, { headers: { ...svc, "X-User-Token": memberUser } });
   check("pending-dues: a member searching another member - refused, not \"no pending dues\"", r.status === 403, `${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
+  r = await call(`${M}/ai/finance-by-month?startDate=2026-01-01&endDate=2026-12-31`, { headers: { ...svc, "X-User-Token": adminUser } });
+  const fm = (k) => r.body.months?.find((m) => m.month === k);
+  check("finance-by-month: 12 months, March 2100 in, this month 4250 in / 16830 out, opening balance left out and named", r.body.months?.length === 12 && fm("2026-03")?.income === 2100 && fm(month)?.income === 4250 && fm(month)?.expense === 16830 && fm("2026-01")?.income === 0 && r.body.openingBalancesLeftOut === 50000, JSON.stringify(r.body).slice(0, 200));
+  r = await call(`${M}/ai/finance-by-month`, { headers: { ...svc, "X-User-Token": memberUser } });
+  check("finance-by-month: refused to a member", r.status === 403, r.status);
+  r = await call(`${M}/ai/finance-by-month?startDate=2023-01-01&endDate=2026-12-31`, { headers: { ...svc, "X-User-Token": adminUser } });
+  check("finance-by-month: more than 24 months refused", r.status === 400, `${r.status} ${r.body.error ?? ""}`);
   r = await call(`${M}/ai/members?search=${encodeURIComponent("sinu t k")}`, { headers: { ...svc, "X-User-Token": adminUser } });
   check('"sinu t k" (spaced initials) finds them too', r.body.items?.length === 1 && r.body.items[0].id === sinu.unique_id, r.body.items?.map((m) => m.nameInEnglishLetters).join(", "));
   r = await call(`${M}/ai/members?search=${encodeURIComponent(shortId)}`, { headers: { ...svc, "X-User-Token": adminUser } });
@@ -517,6 +526,30 @@ try {
     check('Chart: "show that as a bar chart" - a valid chart block with the same figures', ["bar", "pie", "line"].includes(chart?.type) && values === expected, `${chart?.type ?? "no chart"} [${values}] vs [${expected}]`);
     a = await ask(adminLogin, "Who supplies food today?");
     check("One fact: a sentence, no table or chart", !mdTable(a.answer) && !/```\s*chart/.test(a.answer), show(a));
+    // Found by the user: "last year's income as a line chart" and "income vs expense" drew nothing -
+    // finance_summary has one total per range, no months, and a chart had one series only.
+    // The seeded data: March 2100 in, 0 out; this month 4250 in, 16830 out.
+    const chartOf = (text) => {
+      try {
+        return JSON.parse(text.match(/```\s*chart\s*\n([\s\S]*?)```/)?.[1] ?? "");
+      } catch {
+        return null;
+      }
+    };
+    a = await ask(adminLogin, "Show this year's income month by month as a line chart.");
+    let c = chartOf(a.answer);
+    const incomes = (c?.data ?? []).map((d) => Number(d.value ?? d.Income ?? d.income));
+    const labels = (c?.data ?? []).map((d) => d.label).join(", ");
+    check("Line chart: this year's income by month - March ₹2100 and this month ₹4250, no opening balance, nothing invented, no 2025 months", c?.type === "line" && incomes.includes(2100) && incomes.includes(4250) && incomes.every((v) => [0, 2100, 4250].includes(v)) && !/2025/.test(labels), `${c?.type ?? "no chart"} [${incomes}] ${labels} | ${show(a)}`);
+    a = await ask(adminLogin, "Compare income vs expense month by month this year in a chart.");
+    c = chartOf(a.answer);
+    // As the masjid chat reads it: "series", or else the first item's keys.
+    const names = c?.series ?? Object.keys(c?.data?.[0] ?? {}).filter((k) => k !== "label");
+    const inKey = names.find((n) => /income/i.test(n));
+    const outKey = names.find((n) => /expense/i.test(n));
+    const thisMonth = (c?.data ?? []).find((d) => Number(d[inKey]) === 4250);
+    const march = (c?.data ?? []).find((d) => Number(d[inKey]) === 2100);
+    check("Income vs expense: one chart, two series, every month's figures from the API", Boolean(inKey && outKey && thisMonth && Number(thisMonth[outKey]) === 16830 && march && Number(march[outKey] ?? 0) === 0), `${JSON.stringify(c ?? "no chart").slice(0, 200)} | ${show(a)}`);
     if (process.env.ONLY === "tables") throw new OnlyDone();
   }
 

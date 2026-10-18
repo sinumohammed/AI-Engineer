@@ -271,6 +271,43 @@ function chime() {
   }
 }
 
+// What is said after two claps (at most once in 30 minutes): a wish, a
+// "how are you", then what is left of each service's free tier today - the
+// figures of the "Free tier today" panel. The owner's name: "ownerName" in
+// this browser's storage, Sino by default.
+const GREET_EVERY_MS = 30 * 60 * 1000;
+const SPOKEN_MODELS = {
+  "openai/gpt-oss-120b": "Answers, on GPT-OSS 120 B",
+  "openai/gpt-oss-20b": "Routing and judging, on GPT-OSS 20 B",
+  "whisper-large-v3-turbo": "Whisper, the voice backup",
+  "gemini-3.5-flash-lite": "Gemini, for voice and files",
+  "gemini-3.8-flash-lite-tts": "Gemini read-aloud",
+};
+function greetingText(name, rows, now = new Date()) {
+  const h = now.getHours();
+  const wish = h >= 4 && h < 12 ? "Good morning" : h >= 12 && h < 17 ? "Good afternoon" : h >= 17 && h < 22 ? "Good evening" : null;
+  const parts = [`Assalamu alaikum, ${name}!`, wish && `${wish}.`, "How are you feeling today? I hope you are in good health."];
+  if (!rows?.length) {
+    parts.push("I could not read today's free tier yet.");
+  } else {
+    parts.push("Here is what is left of the free tiers today.");
+    for (const m of rows) {
+      const who = SPOKEN_MODELS[m.model] ?? m.model.replace(/^openai\//, "");
+      if (m.usedUpUntil) {
+        parts.push(`${who}: used up until ${new Date(m.usedUpUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`);
+      } else if (m.usesLeft != null) {
+        parts.push(`${who}: about ${fmtInt(m.usesLeft)} more ${USE_NAMES[m.model] ?? "questions"}.`);
+      } else if (m.requestsPerDay != null && m.requestsLeft != null) {
+        parts.push(`${who}: ${fmtInt(m.requestsLeft)} of ${fmtInt(m.requestsPerDay)} requests left.`);
+      } else if (m.usedToday?.requests) {
+        parts.push(`${who}: ${fmtInt(m.usedToday.requests)} requests used so far.`);
+      }
+    }
+  }
+  parts.push("What can I do for you?");
+  return parts.filter(Boolean).join(" ");
+}
+
 // --- data ---
 
 function useUsage(dashKey, days, onUnauthorized) {
@@ -385,7 +422,7 @@ export default function CommandCenter({ isDark }) {
       </header>
 
       <main className="cc-main">
-        <Console accessCode={accessCode} dashKey={dashKey} voiceOnServer={access.voice} onAnswered={usage.reload} />
+        <Console accessCode={accessCode} dashKey={dashKey} voiceOnServer={access.voice} onAnswered={usage.reload} freeTier={d?.freeTier} />
 
         <section className="cc-section">
           <div className="cc-section-head">
@@ -455,7 +492,10 @@ function Unlock({ needsKey, needsCode, reason, onSubmit }) {
 
 // --- the console: ask, watch the agents, hear the answer ---
 
-function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
+function Console({ accessCode, dashKey, voiceOnServer, onAnswered, freeTier }) {
+  const freeTierRef = useRef(freeTier);
+  freeTierRef.current = freeTier;
+  const lastGreet = useRef(0);
   const { message } = AntApp.useApp();
   const [input, setInput] = useState("");
   // Clap to wake holds the microphone open, so it is never switched on by
@@ -554,11 +594,24 @@ function Console({ accessCode, dashKey, voiceOnServer, onAnswered }) {
     startConversation();
     voice.start();
   }
-  // From two claps: a chime first, then record.
+  // From two claps: a chime first, then record. The first clap in 30
+  // minutes is greeted first (greetingText); talking over it stops it, and
+  // the chime and listening follow as after an answer.
   const wake = useCallback(() => {
     if (voice.status !== "idle" || busy) return;
     stopSpeaking();
     startConversation();
+    if (speakRef.current && Date.now() - lastGreet.current > GREET_EVERY_MS) {
+      lastGreet.current = Date.now();
+      setSpeaking(true);
+      speak(greetingText(stored("ownerName") || "Sino", freeTierRef.current))
+        .catch(() => {})
+        .finally(() => {
+          setSpeaking(false);
+          if (convRef.current) nextTurn();
+        });
+      return;
+    }
     chime();
     setTimeout(() => voice.start(), 300);
   }, [voice, busy]);
