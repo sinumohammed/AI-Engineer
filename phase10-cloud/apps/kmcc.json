@@ -1,0 +1,19 @@
+{
+  "name": "kmcc",
+  "description": "KMCC Jeddah savings and loan scheme: members, monthly savings dues (paid and pending months), savings deposits and withdrawals, loans and repayments, profit, interest, zakat, expenses and bank balances",
+  "openapi": "https://kmcc-savings-loans.vercel.app/api/ai/openapi.json",
+  "callers": ["kmcc"],
+  "user": "required",
+  "whoami": "me",
+  "token": "$KMCC_AI_TOKEN",
+  "dataLevel": "internal",
+  "timezone": "Asia/Riyadh",
+  "timeoutMs": 60000,
+  "examples": [
+    "What is my savings balance?",
+    "Which months have I not paid this year?",
+    "Which members have pending dues?",
+    "What is the total bank balance?",
+    "Who has an active loan?"
+  ]
+}
