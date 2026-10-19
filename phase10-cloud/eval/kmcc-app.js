@@ -19,6 +19,7 @@
 //   ONLY=telegram npm run eval:kmcc   the Telegram bot only (after the no-model checks)
 //   ONLY=chips npm run eval:kmcc      the Malayalam ready questions only (after the no-model checks)
 //   DETAIL=1 npm run eval:kmcc        failures in full (the whole answer)
+//   CONNECTOR=mcp npm run eval:kmcc   the app registered through its MCP server (/api/ai/mcp) instead of openapi.json
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomBytes, createHmac } from "node:crypto";
@@ -45,6 +46,7 @@ const RUN_STARTED = new Date();
 const PG_ADMIN = process.env.KMCC_EVAL_PG ?? "postgres://rag:rag@localhost:5432/rag";
 const DB_URL = `postgres://rag:rag@localhost:5432/${DB}`;
 const KMCC_PORT = 5073;
+const CONNECTOR = process.env.CONNECTOR ?? "openapi";
 const AI_PORT = 3017;
 const K = `http://localhost:${KMCC_PORT}/api`;
 const AI = `http://localhost:${AI_PORT}`;
@@ -219,7 +221,7 @@ try {
     body: {
       name: "kmcc",
       description: "KMCC Jeddah savings and loan scheme: members, monthly savings dues (paid and pending months), savings deposits and withdrawals, loans and repayments, profit, interest, zakat, expenses and bank balances",
-      openapi: `${K}/ai/openapi.json`,
+      ...(CONNECTOR === "mcp" ? { mcp: `${K}/ai/mcp` } : { openapi: `${K}/ai/openapi.json` }),
       token: KMCC_AI_TOKEN,
       callers: ["kmcc"],
       user: "required",
@@ -277,7 +279,10 @@ try {
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("Zubair Xyz")}`, as(adminUser));
   check("A name that matches nobody: said so, with every member listed", /No member matched/.test(r.body.noMatch ?? "") && r.body.allMembers?.length >= 4, r.body.noMatch);
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("Zubair Xyz")}`, as(basheerUser));
-  check("…to a member: said so, without listing anyone", /No member matched/.test(r.body.noMatch ?? "") && !r.body.allMembers, JSON.stringify(r.body).slice(0, 120));
+  // Found on Groq over MCP: the model passed "my" as the search, and Mujeeb heard "no loan".
+  check("…to a member: their own record (a member only ever sees themselves), nobody listed", !r.body.allMembers && r.body.members?.length === 1 && r.body.members[0].member.code === basheer.memberCode, JSON.stringify(r.body).slice(0, 120));
+  r = await call(`${K}/ai/loans?search=${encodeURIComponent("എന്റെ")}`, as(userToken(mujeeb)));
+  check('A member\'s loans with "എന്റെ" (my) as the search: their own loan, not "no record"', r.body.loans?.length === 1 && r.body.loans[0].balance === 15000, JSON.stringify(r.body).slice(0, 120));
   r = await call(`${K}/ai/finance-by-month`, as(basheerUser));
   check("finance-by-month: a member gets only their own (Feb ₹1500 in)", r.status === 200 && r.body.totalIn === 1500 && r.body.items?.find((x) => x.month.startsWith("Feb"))?.in === 1500, JSON.stringify(r.body).slice(0, 160));
 
