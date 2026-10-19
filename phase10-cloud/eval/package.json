@@ -16,6 +16,7 @@
     "eval:mcp": "node --env-file=../.env mcp-apps.js",
     "eval:masjid": "node --env-file=../.env masjid-app.js",
     "eval:kmcc": "node --env-file=../.env kmcc-app.js",
+    "eval:app-limits": "node --env-file=../.env app-limits.js",
     "eval:citations": "node --env-file=../.env citation-eval.js",
     "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js",
     "eval:multilingual": "node --env-file=../.env multilingual-eval.js",

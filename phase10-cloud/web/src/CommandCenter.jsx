@@ -22,6 +22,7 @@ import { useClapWake } from "./useClapWake.js";
 import { useCommand } from "./useCommand.js";
 import { BarList, DailyChart, callerColors, callerLabel, fmtInt, fmtMs, fmtTokens, fmtUsd } from "./Charts.jsx";
 import { dayLabel, fullTime, shortTime } from "./time.js";
+import AppControls from "./AppControls.jsx";
 import "./command.css";
 
 const { Text } = Typography;
@@ -436,6 +437,9 @@ export default function CommandCenter({ isDark }) {
           {usage.error && <Alert type="warning" showIcon title={usage.error} className="slim" />}
           {d ? <UsagePanels d={d} /> : !usage.error && <p className="muted">Loading usage…</p>}
         </section>
+
+        {/* Pause an app or change its daily / monthly limits - admin key only. */}
+        <AppControls adminKey={dashKey} />
       </main>
     </div>
   );

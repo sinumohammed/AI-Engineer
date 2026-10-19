@@ -157,22 +157,6 @@ export async function getAttachment(sessionId) {
   }
 }
 
-// Phase 10d: questions an app asked through /api/ask today (UTC), for its
-// daily limit. Returns the new count; 0 if Redis is unreachable - a limit
-// that cannot be counted does not block the app (as with memory above).
-export async function countAppQuestion(appName) {
-  const day = new Date().toISOString().slice(0, 10);
-  const k = `app:${appName}:asks:${day}`;
-  try {
-    const count = await client.incr(k);
-    if (count === 1) await client.expire(k, 60 * 60 * 48);
-    return count;
-  } catch (err) {
-    console.error(`[sessionStore] countAppQuestion failed, not counting: ${err.message}`);
-    return 0;
-  }
-}
-
 export async function removeAttachment(sessionId) {
   try {
     await client.del(attachmentKey(sessionId));

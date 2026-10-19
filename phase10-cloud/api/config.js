@@ -65,9 +65,10 @@ export const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null;
 // Phase 10d: other apps ask through POST /api/ask (askApi.js) with their own
 // key instead of the access code. APP_API_KEYS="crm=ak_...,billing=ak_..." -
 // one name=key pair per app (keys from `npm run new-app-key`). The name says
-// which app asked, keeps its conversations apart, and has its own daily
-// limit, APP_DAILY_LIMIT questions (default 100) - all apps share the same
-// free model quota as the web app.
+// which app asked, keeps its conversations apart, and has its own limits:
+// APP_DAILY_LIMIT questions a day (default 100) until the Command Center sets
+// that app's own daily / monthly limits or pauses it (appLimits.js) - all
+// apps share the same free model quota as the web app.
 export const APP_API_KEYS = (process.env.APP_API_KEYS ?? "")
   .split(",")
   .map((pair) => pair.trim())
@@ -94,6 +95,8 @@ export const DASHBOARD_KEY = process.env.DASHBOARD_KEY || null;
 export const APP_SECRETS_KEY = process.env.APP_SECRETS_KEY || null;
 // The Redis key holding the registry - the eval uses its own.
 export const APPS_KEY = process.env.APPS_KEY ?? "apps:registry";
+// Each app's switch and daily / monthly limits (appLimits.js), set from the Command Center.
+export const APP_LIMITS_KEY = process.env.APP_LIMITS_KEY ?? "apps:limits";
 // Phase 10 UI: voice input (transcribe.js). Gemini writes the text when
 // GEMINI_API_KEY is set (Whisper could not write Malayalam), Groq's Whisper
 // when it is not, or when Gemini fails. Hosted services even when answers

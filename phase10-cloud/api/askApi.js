@@ -28,8 +28,9 @@ import express from "express";
 import { runAgent } from "./agent.js";
 import { runMultiAgent } from "./multiAgent.js";
 import { collectNotices } from "./llmClient.js";
-import { APP_API_KEYS, APP_DAILY_LIMIT, ACCESS_CODE } from "./config.js";
-import { getHistory, getSummary, appendTurn, clearSession, countAppQuestion } from "./sessionStore.js";
+import { APP_API_KEYS, ACCESS_CODE } from "./config.js";
+import { getHistory, getSummary, appendTurn, clearSession } from "./sessionStore.js";
+import { takeAppQuestion, appMayTranscribe } from "./appLimits.js";
 import { withAccess } from "./appAccess.js";
 import { transcribe, TranscribeError } from "./transcribe.js";
 import { metered, meteredJob, recordUsage } from "./usage.js";
@@ -92,10 +93,9 @@ askApi.post("/", async (req, res) => {
     return res.status(400).json({ error: '"user" must be { "token"?: "...", "ref"?: "..." } - a token of up to 4096 characters, a ref of 1-100 letters, digits, _ . : -' });
   }
 
-  const asked = await countAppQuestion(req.appName);
-  if (asked > APP_DAILY_LIMIT) {
-    return res.status(429).json({ error: `This app's daily limit of ${APP_DAILY_LIMIT} question${APP_DAILY_LIMIT === 1 ? "" : "s"} is used up - it resets at midnight UTC.` });
-  }
+  // The app's switch and its daily / monthly limits (appLimits.js, set in the Command Center).
+  const allowed = await takeAppQuestion(req.appName);
+  if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
 
   const sessionId = conversationId && `app:${req.appName}:${conversationId}`;
   const askedAt = new Date().toISOString();
@@ -129,8 +129,11 @@ askApi.post("/", async (req, res) => {
 
 // Phase 10 #4: voice input for apps - the recording as the raw body (up to
 // 4 MB, Vercel's limit is 4.5 MB), the text back. Not counted as a question:
-// the text is checked by the user, then asked through POST /api/ask.
+// the text is checked by the user, then asked through POST /api/ask. Refused
+// when the app is paused or its questions are used up (appLimits.js).
 askApi.post("/transcribe", express.raw({ type: () => true, limit: "4mb" }), async (req, res) => {
+  const allowed = await appMayTranscribe(req.appName);
+  if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
   try {
     res.json(await meteredJob({ caller: req.appName, channel: "transcribe" }, () => transcribe(req.body, req.get("content-type"), req.query.lang)));
   } catch (err) {

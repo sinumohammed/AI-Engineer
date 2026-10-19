@@ -15,6 +15,8 @@
 //   POST   /api/admin/ask-keys             { name, key? } - a new key for an app, shown once in the answer
 //                                          (key: store an existing one, e.g. moved from APP_API_KEYS)
 //   DELETE /api/admin/ask-keys/:idOrName   take back one key (id) or all of an app's keys (name)
+//   GET    /api/admin/app-limits         each /api/ask app: on/off, daily and monthly limits, used today / this month
+//   PUT    /api/admin/app-limits/:app    { paused?, daily?, monthly? } - 0 = no limit (appLimits.js); admin key only
 //   GET    /api/admin/usage?days=30        Phase 10e: usage and cost per app, user, agent, model and
 //                                          app call, latency, recent requests (usage.js) - the Command Center
 //   GET    /api/admin/usage/{summary,users,daily,recent,app-calls}, /usage/openapi.json
@@ -31,6 +33,7 @@ import { withAccess } from "./appAccess.js";
 import { usageReport, freeTierToday } from "./usage.js";
 import { USAGE_OPENAPI } from "./usageOpenapi.js";
 import { createAskKey, listAskKeys, revokeAskKeys } from "./askKeys.js";
+import { appLimitsReport, setAppLimits } from "./appLimits.js";
 
 const digest = (s) => createHash("sha256").update(String(s)).digest();
 
@@ -85,6 +88,9 @@ adminApi.post(
 adminApi.get("/ask-keys", handle(() => listAskKeys()));
 adminApi.post("/ask-keys", handle((req) => createAskKey(req.body?.name, req.body?.key)));
 adminApi.delete("/ask-keys/:idOrName", handle((req) => revokeAskKeys(req.params.idOrName)));
+// Each app's switch and limits - the Command Center's controls (never the dashboard key).
+adminApi.get("/app-limits", handle(() => appLimitsReport()));
+adminApi.put("/app-limits/:app", handle((req) => setAppLimits(req.params.app, req.body)));
 adminApi.get(
   "/usage",
   handle(async (req) => {

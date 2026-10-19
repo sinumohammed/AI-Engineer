@@ -303,7 +303,7 @@ function logServices(firstLine) {
   listAskKeys().then(({ keys }) => {
     const names = [...new Set([...APP_API_KEYS.map((a) => a.name), ...keys.map((k) => k.name)])];
     const askAccess = names.length ? `keys for ${names.join(", ")}` : ACCESS_CODE ? "off (no keys)" : "open (no keys)";
-    console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app`);
+    console.log(`  /api/ask:   ${askAccess}, ${APP_DAILY_LIMIT} questions a day per app unless the Command Center sets its own`);
   }).catch((err) => console.log(`  /api/ask:   could not read the stored keys - ${err.message}`));
   listApps().then((apps) =>
     console.log(`  apps:       ${apps.length ? apps.map((a) => `${a.name} (${a.operations.length} operations, ${a.dataLevel}, for ${(a.callers ?? []).join("/") || "nobody"})`).join(", ") : "none connected"}; admin API ${ADMIN_KEY ? "on" : "off (no ADMIN_KEY)"}`)
