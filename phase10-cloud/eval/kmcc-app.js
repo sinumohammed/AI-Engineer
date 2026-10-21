@@ -205,6 +205,9 @@ try {
   // Shareef: every month of this year paid - the paid-up member.
   await tx({ memberId: shareef.id, date: mid(thisMonth), flow: "INCOME", category: "SAVING_DEPOSIT", amount: 1000 * thisMonth, description: "This year" });
   await tx({ memberId: favas.id, date: mid(1), flow: "INCOME", category: "SAVING_DEPOSIT", amount: 200 });
+  // Found live: a member's profit credited and withdrawals were answered wrongly.
+  await tx({ memberId: basheer.id, date: mid(6), flow: "INCOME", category: "PROFIT", amount: 300, description: "Profit share" });
+  await tx({ memberId: basheer.id, date: mid(7), flow: "EXPENSE", category: "SAVING_WITHDRAWAL", amount: 200, description: "Withdrawal" });
   await tx({ memberId: mujeeb.id, bankId: bank.id, date: `${y}-03-01T09:00:00Z`, flow: "EXPENSE", category: "LOAN_DISBURSEMENT", amount: 20000, description: "Loan" });
   const loanId = (await call(`${K}/loans?memberId=${mujeeb.id}`, { token: adminLogin })).body[0].id;
   await tx({ memberId: mujeeb.id, bankId: bank.id, date: `${y}-05-01T09:00:00Z`, flow: "INCOME", category: "LOAN_REPAYMENT", amount: 5000, linkedLoanId: loanId });
@@ -255,7 +258,7 @@ try {
   r = await call(`${K}/ai/transactions?search=shareef`, as(basheerUser));
   check("A member searching another member's transactions: refused", r.status === 403, `${r.status} ${r.body.error ?? ""}`);
   r = await call(`${K}/ai/transactions`, as(basheerUser));
-  check("A member's transactions: only their own, labelled so", r.status === 200 && r.body.matching === 1 && /only the asking member/i.test(r.body.scope ?? "") && !r.body.transactions[0].member, JSON.stringify(r.body).slice(0, 160));
+  check("A member's transactions: only their own, labelled so", r.status === 200 && r.body.matching === 3 && /only the asking member/i.test(r.body.scope ?? "") && !r.body.transactions[0].member, JSON.stringify(r.body).slice(0, 160));
   r = await call(`${K}/ai/dues`, as(basheerUser));
   const bDues = r.body.dues?.[0];
   check(`A member's own dues: Jan-Mar paid, Apr-${today.slice(5, 7)} pending at ₹500`, bDues?.monthsPaid === 3 && bDues?.pendingAmount === 500 * (thisMonth - 3) && r.body.amountsIn?.includes("INR"), JSON.stringify(bDues ?? r.body).slice(0, 160));
@@ -272,6 +275,8 @@ try {
   check("Totals: the dashboard's figures (bank 100000 - 20000 + 5000 - 750 - 2000 = 82250)", r.body.totalBankBalance === 82250 && r.body.totalLoansOutstanding === 15000, JSON.stringify(r.body).slice(0, 200));
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("ബഷീർ")}`, as(adminUser));
   check('Malayalam "ബഷീർ" finds BASHEER.P', r.body.members?.[0]?.member.code === basheer.memberCode, JSON.stringify(r.body).slice(0, 120));
+  const bs = r.body.members?.[0];
+  check("A member's account as on the Profile statement: deposited 1500, withdrawn 200, savings 1300, profit 300, credit 1800 - debit 200 = balance 1600", bs?.savings.deposited === 1500 && bs.savings.withdrawn === 200 && bs.savings.savingsBalance === 1300 && bs.profitCredited === 300 && bs.statement.totalCredit === 1800 && bs.statement.totalDebit === 200 && bs.statement.balance === 1600, JSON.stringify({ savings: bs?.savings, profit: bs?.profitCredited, statement: bs?.statement }).slice(0, 200));
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("favas t k")}`, as(adminUser));
   check('"favas t k" (spaced initials) finds FAVAS TK', r.body.members?.length === 1 && r.body.members[0].member.code === favas.memberCode);
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent(`kmcc ${Number(mujeeb.memberCode.slice(4))}`)}`, as(adminUser));
@@ -284,7 +289,7 @@ try {
   r = await call(`${K}/ai/loans?search=${encodeURIComponent("എന്റെ")}`, as(userToken(mujeeb)));
   check('A member\'s loans with "എന്റെ" (my) as the search: their own loan, not "no record"', r.body.loans?.length === 1 && r.body.loans[0].balance === 15000, JSON.stringify(r.body).slice(0, 120));
   r = await call(`${K}/ai/finance-by-month`, as(basheerUser));
-  check("finance-by-month: a member gets only their own (Feb ₹1500 in)", r.status === 200 && r.body.totalIn === 1500 && r.body.items?.find((x) => x.month.startsWith("Feb"))?.in === 1500, JSON.stringify(r.body).slice(0, 160));
+  check("finance-by-month: a member gets only their own (Feb ₹1500 in, ₹1800 in the year with profit)", r.status === 200 && r.body.totalIn === 1800 && r.body.items?.find((x) => x.month.startsWith("Feb"))?.in === 1500, JSON.stringify(r.body).slice(0, 160));
 
   console.log("\n1b. The KMCC MCP server, /api/ai/mcp (no model)");
   const mcpUrl = `${K}/ai/mcp`;
@@ -322,7 +327,8 @@ try {
     const res = await call(`${K}/assistant/ask`, { method: "POST", token, body: { question, chatId: chatId ?? `eval${t}` } });
     return { ...res, answer: res.body.answer ?? res.body.error ?? "", sources: (res.body.sources ?? []).map((s) => s.source), ms: Date.now() - t };
   };
-  const plain = (s) => s.replace(/,/g, "");
+  // "82,250" and "82 250" (a space as the thousands separator, as Groq wrote it) -> "82250".
+  const plain = (s) => s.replace(/,/g, "").replace(/(\d)[ \u00a0\u202f](?=\d{3}\b)/g, "$1");
   const show = (a) => `${(a.ms / 1000).toFixed(1)}s ${process.env.DETAIL === "1" ? a.answer : a.answer.slice(0, 120)}`;
   let a;
 
@@ -401,7 +407,11 @@ try {
   // letters, so amounts and sources are checked.
   console.log("\n4. Answers through the KMCC app's assistant");
   a = await ask(basheerLogin, "എന്റെ സേവിംഗ്സ് ബാലൻസ് എത്രയാണ്?");
-  check("Chip (member, Malayalam): my savings balance ₹1500", plain(a.answer).includes("1500") && a.sources.includes(SOURCE), show(a));
+  check("Chip (member, Malayalam): my savings balance ₹1300 (1500 deposited - 200 withdrawn)", plain(a.answer).includes("1300") && a.sources.includes(SOURCE), show(a));
+  a = await ask(adminLogin, "How much has BASHEER.P saved in total, how much profit was credited to him, and how much has he withdrawn?");
+  check("Admin: one member's savings 1500, profit 300, withdrawn 200", ["1500", "300", "200"].every((n) => plain(a.answer).includes(n)) && a.sources.includes(SOURCE), show(a));
+  a = await ask(basheerLogin, "എനിക്ക് ഇതുവരെ എത്ര ലാഭം ക്രെഡിറ്റ് ചെയ്തു?");
+  check("Member (Malayalam): profit credited to me ₹300", plain(a.answer).includes("300") && a.sources.includes(SOURCE), show(a));
   a = await ask(basheerLogin, "ഈ വർഷം ഞാൻ ഏതൊക്കെ മാസങ്ങൾ അടയ്ക്കാനുണ്ട്, ആകെ എത്ര?");
   check(`Chip (member, Malayalam): my pending months, ₹${basheerPending}`, plain(a.answer).includes(String(basheerPending)) && a.sources.includes(SOURCE), show(a));
   a = await ask(mujeebLogin, "എന്റെ ലോൺ ബാക്കി എത്രയാണ്?");
