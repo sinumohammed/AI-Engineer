@@ -857,6 +857,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.13</td><td>The masjid assistant on Telegram: members link by sharing their phone number, voice notes answered</td><td class="res">Live: linked as the admin, the bot answered; 21 bot checks against a fake Telegram, Groq 67/67</td></tr>
                 <tr><td class="n">10d.14</td><td>Charts over time: income and expense by month and by day, two series in one chart, the admin's 30-day and this-year cards; Copy, Image, Print under each answer; the time under each message</td><td class="res">Groq: every figure in the charts from the data, both new cards right; print checked on a phone and a computer</td></tr>
                 <tr><td class="n">10d.15</td><td>The masjid assistant answers masjid questions only, for everyone</td><td class="res">Live: a coding question gets the masjid-only reply, with no model call; "show that as a bar chart" still works</td></tr>
+                <tr><td class="n">10d.16</td><td>A second real app, KMCC savings: the same assistant and Telegram bot, members see only their own money, added with no change to this service</td><td class="res">Live on MCP; a member's savings, profit and withdrawals year by year match the Profile statement; Groq 45/45</td></tr>
+                <tr><td class="n">10d.17</td><td>Each app's on/off switch and its own daily and monthly limits, in the Command Center (admin key only)</td><td class="res"><code>eval:app-limits</code> 14/14: paused refused at once, limits refuse the next question, refused questions not counted</td></tr>
               </tbody>
             </table>
           </div>
@@ -1274,6 +1276,35 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Steps 10d.14 and 10d.15. Found by the user: charts over time drew nothing, and members got handbook and coding answers from the masjid assistant. Measured on the way: an extra example in the prompt made the local model draw unasked charts, and the new monthly tool made "spent this month, on what" lose its categories until its description said it has none. The Command Center now greets after two claps: Assalamu alaikum, the time of day, then the free tier left.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 270" role="img" aria-label="The KMCC app got the same assistant as the masjid app. Its read-only AI API and MCP server are called by this AI service's planner as the asking member; this service needed only an ask key and a registry entry. A member's Saving entries are read by their descriptions to give opening balance, contributions, profit and withdrawals per year. The Command Center can pause any app and set its daily and monthly limits with the admin key.">
+                <defs><marker id="a22" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">A SECOND APP · EACH APP'S LIMITS</text>
+                <rect class="b" x="20" y="40" width="230" height="60" rx="6"/>
+                <text class="t" x="135" y="64" text-anchor="middle">KMCC app (TypeScript)</text>
+                <text class="s" x="135" y="82" text-anchor="middle">chat · Telegram · /api/ai + MCP</text>
+                <line class="ln" x1="250" y1="62" x2="459" y2="62" marker-end="url(#a22)"/>
+                <text class="s" x="355" y="55" text-anchor="middle">question, KMCC's ask key</text>
+                <line class="ln" x1="460" y1="80" x2="251" y2="80" marker-end="url(#a22)"/>
+                <text class="s" x="355" y="96" text-anchor="middle">tool calls, as the member</text>
+                <rect class="ba" x="460" y="40" width="240" height="60" rx="6"/>
+                <text class="t" x="580" y="64" text-anchor="middle">AI service: no new code</text>
+                <text class="s" x="580" y="82" text-anchor="middle">an ask key + a registry entry</text>
+                <rect class="b" x="20" y="130" width="330" height="70" rx="6"/>
+                <text class="t" x="185" y="154" text-anchor="middle">Saving entries read by description</text>
+                <text class="s" x="185" y="172" text-anchor="middle">"Profit 2024" · "opening balance 2017"</text>
+                <text class="s" x="185" y="189" text-anchor="middle">opening · contributed · profit · withdrawn, per year</text>
+                <rect class="b" x="370" y="130" width="330" height="70" rx="6"/>
+                <text class="t" x="535" y="154" text-anchor="middle">Command Center, admin key</text>
+                <text class="s" x="535" y="172" text-anchor="middle">per app: on / off · per day · per month</text>
+                <text class="s" x="535" y="189" text-anchor="middle">a refused question is not counted</text>
+                <text class="s" x="20" y="232">Members see only their own money; the admin everything. Found live: "my" taken as a name,</text>
+                <text class="s" x="20" y="252">in/out instead of credit/debit, and profit hidden under Saving - each fixed and tested.</text>
+              </svg>
+            </div>
+            <figcaption>Steps 10d.16 and 10d.17. The user's savings-and-loan app joined with no code in this service - what 10d.4 promised. Its real data then taught three things: the model passed "my" as a member's name, "in/out" read wrongly for profit credited to a member, and profit and opening balances were filed under Saving and told apart only by their descriptions. The Command Center can now pause any app or cap its questions per day and per month.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1294,6 +1325,9 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>A check must fail on the wrong answer, not only on the leak: "does not show Abdul's amount" passed while the answer said Abdul owed nothing - safe, and false.</li>
               <li>An example in a prompt gets copied: a second example chart made the local model add a chart nobody asked for, under the example's own title.</li>
               <li>A new tool changes how the old ones are chosen: the monthly-totals tool took "spent this month, on what" and lost its categories; after adding a tool, re-run the questions the others answered.</li>
+              <li>Real data hides meaning in free text: KMCC's profit sat under Saving as "Profit 2024"; the category totals said "profit 0". Read real rows before trusting the schema.</li>
+              <li>When figures disagree, first check they are about the same thing: the Profile rows that "disproved" the assistant were another member's.</li>
+              <li>A copy goes stale: this service keeps a copy of each app's tool descriptions, read again only after the app's deploy is Ready.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
@@ -1430,6 +1464,13 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">117</td><td class="n">10d.14</td><td>Print blank on a computer, then everywhere</td><td>A copy of the answer under <code>&lt;body&gt;</code>, made visible past the receipt's print CSS</td><td class="res">Only the answer, phone and computer</td></tr>
             <tr><td class="n">118</td><td class="n">10d.15</td><td>Members got handbook and coding answers from the masjid assistant</td><td>Everyone pinned to <code>connected_apps</code></td><td class="res">Off-topic: fixed reply, 0.2 s, no model</td></tr>
             <tr><td class="n">119</td><td class="n">10d.15</td><td>"Show that as a bar chart" broke: a pinned agent skipped rework</td><td>Rework allowed for a pinned <code>connected_apps</code></td><td class="res">Bar chart back</td></tr>
+            <tr><td class="n">120</td><td class="n">10d.16</td><td>A second app, KMCC: TypeScript and Prisma, no guests, members' money</td><td>The masjid pattern: read-only <code>/api/ai/*</code> and MCP, the assistant, Telegram; dues worked out without writing; this service unchanged</td><td class="res"><code>eval:kmcc</code> 49/49 (no model and Telegram); live</td></tr>
+            <tr><td class="n">121</td><td class="n">10d.16</td><td>Telegram linking would never match a Saudi number: <code>05...</code> on the record, <code>+9665...</code> from Telegram</td><td>Match the last 9 digits; two matches refused</td><td class="res">Linked with <code>+966 50 ...</code></td></tr>
+            <tr><td class="n">122</td><td class="n">10d.16</td><td>Over MCP, a member's "my loan balance" got "no loan found": "my" passed as a name</td><td>A member's search that names nobody means the member</td><td class="res">Right on Groq</td></tr>
+            <tr><td class="n">123</td><td class="n">10d.16</td><td>Live: a member's profit and withdrawals wrong - "in/out" flows, one withdrawal category</td><td>Credit / debit as on the Profile statement; both withdrawal kinds; profit credited</td><td class="res">Right on Groq</td></tr>
+            <tr><td class="n">124</td><td class="n">10d.16</td><td>Live: profit 0 - profit and the 2017 opening balance filed under Saving, told apart by the description</td><td>Saving credits read by description; per year; largest entries with descriptions</td><td class="res">45/45 on Groq; live</td></tr>
+            <tr><td class="n">125</td><td class="n">10d.16</td><td>A fixed tool description did not reach the assistant</td><td>Read the app's tools again after its deploy is Ready</td><td class="res">Confirmed live</td></tr>
+            <tr><td class="n">126</td><td class="n">10d.17</td><td>One daily limit for every app, changed only by a deploy</td><td>Per-app pause, daily and monthly limits; Command Center, admin key only</td><td class="res"><code>eval:app-limits</code> 14/14</td></tr>
           </tbody>
         </table>
       </div>
@@ -1460,6 +1501,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Telegram bot, against a fake Telegram: wrong secret, linking by phone (own number only) and by app link (once only), a retried update not answered twice, groups ignored, roles over Telegram, voice notes</td><td class="n">21/21</td><td class="n">21/21 on Groq; live: linked as the admin, answered</td></tr>
             <tr><td>Charts over time: month and day endpoints, the year as a line chart, income vs expense in one chart, the admin's two chart cards</td><td class="n">endpoint checks 5/5</td><td class="n">54/54; both cards right</td></tr>
             <tr><td>Masjid answers only: handbook and coding questions not answered; bar chart after a table</td><td class="n">3/3</td><td class="n">live: masjid-only reply</td></tr>
+            <tr><td><code>eval:kmcc</code>: KMCC backend and this API on a throwaway database - roles (members refused others' data and the totals), dues worked out, names, MCP, limits, Telegram against a fake Telegram, a member's statement year by year, isolation</td><td class="n">49/49 no model + Telegram; with answers 71/72; over MCP 49/49</td><td class="n">ready questions, statement, year by year: 45/45 on Groq</td></tr>
+            <tr><td><code>eval:app-limits</code>: dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted</td><td class="n">14/14</td><td class="n">- (deploy pending)</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
           </tbody>
         </table>
@@ -1498,6 +1541,9 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>A check must fail on the wrong answer, not only on the leak.</strong> "Does not show Abdul's amount" passed while the answer said Abdul owed nothing - safe, and false (10d.13). Write down what a right answer says, and check for that.</li>
         <li><strong>An example in a prompt gets copied.</strong> With a second example chart in the prompt, the local model added a chart nobody asked for - under the example's own title, "Pending dues by member" (10d.14). Keep examples few, and never use the test's own numbers in them.</li>
         <li><strong>A new tool changes how the old ones are chosen.</strong> Adding a monthly-totals endpoint made "what was spent this month, on what" pick it and lose its categories (10d.14). After adding a tool, re-run the questions the other tools answered.</li>
+        <li><strong>Real data hides meaning in free text.</strong> KMCC's profit was filed under Saving and told apart only by its description, "Profit 2024"; the category totals said "profit 0" and were right about the categories, wrong about the money (10d.16). Read real rows before trusting the schema.</li>
+        <li><strong>When figures disagree, first check they are about the same thing.</strong> The pasted Profile rows that "disproved" the assistant were another member's (10d.16). Name and code first, then numbers.</li>
+        <li><strong>A copy goes stale.</strong> This service keeps a copy of each app's tool descriptions; a fix in the app does nothing until the copy is read again - after the app's deploy is Ready (10d.16).</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1552,6 +1598,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>The masjid app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:masjid</code> (<code>VOICE=1</code> adds voice; <code>ONLY=chips</code> only the Malayalam ready questions - run those with the Groq settings)</td></tr>
             <tr><td>The masjid assistant on Telegram</td><td>masjid app → Settings → Telegram (bot status, Connect the bot, Link my Telegram); members: Profile → Telegram, or share their phone number with the bot. Test: <code>cd phase10-cloud/eval &amp;&amp; ONLY=telegram npm run eval:masjid</code> (a fake Telegram; <code>VOICE=1</code> adds a voice note)</td></tr>
             <tr><td>Ollama memory (Mac)</td><td><code>OLLAMA_KEEP_ALIVE=1m</code>, set at login by <code>~/Library/LaunchAgents/local.ollama-keepalive.plist</code>: the 21 GB model leaves memory a minute after its last question (a cold load is 4.6 s). Quit Ollama from the menu bar when you are not running local evals</td></tr>
+            <tr><td>The KMCC app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:kmcc</code> (<code>CONNECTOR=mcp</code>, <code>ONLY=telegram</code> or <code>ONLY=chips</code> - run those with the Groq settings; <code>DETAIL=1</code> prints whole failing answers). After a KMCC deploy is Ready: <code>npm run app -- add ../apps/kmcc-mcp.json</code> in <code>phase10-cloud/api</code></td></tr>
+            <tr><td>Pause an app or cap its questions</td><td>Command Center, unlocked with <code>ADMIN_KEY</code>: Connected apps · limits. Test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:app-limits</code></td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new &lt;name&gt;</code> - works at once (also <code>askkey list</code>, <code>askkey revoke &lt;id or name&gt;</code>)</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>
             <tr><td>Command Center (usage, cost, agents live)</td><td>live: <code>https://ai-engineer-web-seven.vercel.app/#/command</code>; local: <code>http://localhost:5174/#/command</code> (key: <code>DASHBOARD_KEY</code> or <code>ADMIN_KEY</code> in <code>.env</code>)</td></tr>

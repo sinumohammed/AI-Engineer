@@ -456,6 +456,8 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.13 | The masjid assistant on Telegram: members link by sharing their phone number, voice notes answered | Live: linked as the admin, the bot answered; 21 bot checks against a fake Telegram, Groq 67/67 |
 | 10d.14 | Charts over time: income and expense by month and by day, two series in one chart, the admin's 30-day and this-year cards; Copy, Image, Print under each answer; the time under each message | Groq: every figure in the charts from the data, both new cards right; print checked on a phone and a computer |
 | 10d.15 | The masjid assistant answers masjid questions only, for everyone | Live: a coding question gets the masjid-only reply, with no model call; "show that as a bar chart" still works |
+| 10d.16 | A second real app, KMCC savings: the same assistant and Telegram bot, members see only their own money, added with no change to this service | Live on MCP; a member's savings, profit and withdrawals year by year match the Profile statement; Groq 45/45 |
+| 10d.17 | Each app's on/off switch and its own daily and monthly limits, in the Command Center (admin key only) | `eval:app-limits` 14/14: paused refused at once, limits refuse the next question, refused questions not counted |
 
 - **Challenges, in plain terms:**
 
@@ -711,6 +713,22 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   every question goes to the connected-apps agent, and an off-topic one gets a fixed reply in code,
   with no model call. That broke "show that as a bar chart" (a pinned agent skipped the rework
   step) - the eval found it, and rework is now allowed for that agent.
+- **A second app, KMCC savings (10d.16):** the user's savings-and-loan app got the same assistant
+  - and this service needed no code for it, only a key and a registry entry (the promise of 10d.4):
+  ```
+  KMCC app (TypeScript)                        this AI service
+  /api/ai/* + /api/ai/mcp  (12 read-only)  <-- planner picks tools, calls them as the member
+  /api/assistant/ask, Telegram bot          --> POST /api/ask with KMCC's own key
+  ```
+  Members see only their own money; the admin everything. The real data taught three things after
+  it went live: the model passed "my" as a member's name (now: a member's unmatched search means
+  themselves); "in/out" read wrongly for profit credited to a member (now credit/debit, as on the
+  Profile statement); and profit and the 2017 opening balance were filed under Saving, told apart
+  only by their descriptions ("Profit 2024") - so the assistant reads the description and gives
+  each year's contribution, profit and withdrawals.
+- **App switch and limits (10d.17):** the Command Center can pause any app and give it its own
+  daily and monthly question limits - only with the admin key; the dashboard key just views. Before,
+  one number for all apps, changed only by a deploy.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -843,6 +861,13 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 117 | 10d.14 | Print: blank on a computer, then blank everywhere | A copy of the answer under `<body>`; the receipt's print CSS hides `body *` for every print, so the copy is made visible | Only the answer, on white, phone and computer |
 | 118 | 10d.15 | Members got handbook and coding answers from the masjid assistant | Everyone pinned to `connected_apps` | Off-topic: a fixed reply in 0.2 s, no model; live checked |
 | 119 | 10d.15 | That broke "show that as a bar chart": a pinned agent skipped the rework step | Rework allowed when the pinned agent is `connected_apps` | Bar chart back; the web chat unchanged |
+| 120 | 10d.16 | A second app, KMCC: another language (TypeScript, Prisma), no guests, members' money | The masjid pattern: read-only `/api/ai/*` and MCP, the assistant, Telegram; dues worked out without writing; this service unchanged | `eval:kmcc` 49/49 (no model and Telegram); ready questions right on Groq; live |
+| 121 | 10d.16 | Telegram linking by phone would never match a Saudi number: `05...` on the record, `+9665...` from Telegram | Match the last 9 digits (two matches are refused) | Linked with `+966 50 ...` in the eval |
+| 122 | 10d.16 | Over MCP on Groq, a member's "my loan balance" got "no loan found": the model passed "my" as the member search | A member's search that names nobody means the member | Right on Groq; 2 checks |
+| 123 | 10d.16 | Live: a member's profit and withdrawals answered wrongly - flows were "in/out" (money into KMCC), only one withdrawal category counted | Credit / debit as on the Profile statement; withdrawals of both kinds; profit credited as its own figure | Savings, profit, withdrawn right on Groq |
+| 124 | 10d.16 | Live: KMCC0049's profit was 0 - profit and the 2017 opening balance are filed under Saving, told apart only by the description | A Saving credit is read by its description; opening, contributed, profit, withdrawn and balance, overall and per year; largest entries with descriptions | 45/45 on Groq; live |
+| 125 | 10d.16 | A fixed tool description did not reach the assistant | This service keeps a copy of each app's tools: read it again after the app's deploy is Ready (it was read too early twice) | Confirmed live |
+| 126 | 10d.17 | One daily limit for every app, changed only by a deploy; no way to stop one app | Per-app pause, daily and monthly limits in Redis, set in the Command Center with the admin key only | `eval:app-limits` 14/14 |
 
 Where things stand (Phase 10 code):
 
@@ -871,6 +896,8 @@ Where things stand (Phase 10 code):
 | Telegram bot (10d.13), against a fake Telegram: wrong secret, linking by phone (own number only, unknown number) and by app link (once only), a retried update not answered twice, groups ignored, roles over Telegram, voice notes | 21/21 (`eval:masjid ONLY=telegram`, voice with `VOICE=1`) | 21/21 on Groq; live: linked as the admin, answered |
 | Charts over time (10d.14): month and day endpoints (opening balance left out, member refused, range limits), a line chart of the year, income vs expense in one chart, the admin's two chart cards | endpoint checks 5/5 | 54/54 (`ONLY=tables`), both cards right (`ONLY=chips`) |
 | Masjid answers only (10d.15): a member's handbook question and the admin's coding question not answered; "show that as a bar chart" after a table | 3/3 | live: off-topic question gets the masjid-only reply |
+| `eval:kmcc` (10d.16): KMCC backend + this API on a throwaway database - tokens, roles (members refused others' data and KMCC's totals), dues worked out, names (Malayalam, initials, codes), MCP, limits, Telegram against a fake Telegram, a member's statement and year by year, isolation | 49/49 no model + Telegram; with answers 71/72 (qwen dropped one citation on a right answer); over MCP 49/49 | ready questions, member statement, year by year: 45/45 on Groq |
+| `eval:app-limits` (10d.17): dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted | 14/14 | - (deploy pending) |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -973,6 +1000,13 @@ what changed.
 28. **A new tool changes how the old ones are chosen.** Adding a monthly-totals endpoint made "what
     was spent this month, on what" pick it and lose its categories (10d.14). After adding a tool,
     re-run the questions the other tools answered.
+29. **Real data hides meaning in free text.** KMCC's profit was filed under Saving and told apart
+    only by its description, "Profit 2024"; the category totals said "profit 0" and were right about
+    the categories, wrong about the money (10d.16). Read real rows before trusting the schema.
+30. **When figures disagree, first check they are about the same thing.** The pasted Profile rows
+    that "disproved" the assistant were another member's (10d.16). Name and code first, then numbers.
+31. **A copy goes stale.** This service keeps a copy of each app's tool descriptions; a fix in the
+    app does nothing until the copy is read again - after the app's deploy is Ready (10d.16).
 
 ### What changed when the data got real (Phase 9)
 
@@ -1025,6 +1059,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | The masjid assistant on Telegram | masjid app → Settings → Telegram (bot status, Connect the bot, Link my Telegram); members: Profile → Telegram, or share their phone number with the bot. Test: `cd phase10-cloud/eval && ONLY=telegram npm run eval:masjid` (a fake Telegram; `VOICE=1` adds a voice note) |
 | Ollama memory (Mac) | `OLLAMA_KEEP_ALIVE=1m`, set at login by `~/Library/LaunchAgents/local.ollama-keepalive.plist`: the 21 GB model leaves memory a minute after its last question (a cold load is 4.6 s). Quit Ollama from the menu bar when you are not running local evals |
 | The masjid app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:masjid` (`VOICE=1` adds voice; `ONLY=chips` only the Malayalam ready questions - run those with the Groq settings; needs the masjid repo at `MASJID_REPO`) |
+| The KMCC app end to end (made-up data) | `cd phase10-cloud/eval && npm run eval:kmcc` (`CONNECTOR=mcp`, `ONLY=telegram` or `ONLY=chips` - run those with the Groq settings; `DETAIL=1` prints whole failing answers). After a KMCC deploy is Ready: `npm run app -- add ../apps/kmcc-mcp.json` in `phase10-cloud/api` |
+| Pause an app or cap its questions | Command Center unlocked with `ADMIN_KEY`: Connected apps · limits. Test: `cd phase10-cloud/eval && npm run eval:app-limits` |
 | A key for a new app | `cd phase10-cloud/api && API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new <name>` - works at once (also `askkey list`, `askkey revoke <id or name>`) |
 | Ask like another app | `cd phase10-cloud/examples && npm run ask -- "your question"` (no question: a conversation) |
 | Command Center (usage, cost, agents live) | live: https://ai-engineer-web-seven.vercel.app/#/command; local: http://localhost:5174/#/command (key: `DASHBOARD_KEY` or `ADMIN_KEY` in `.env`) |
@@ -1087,6 +1123,8 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `7fbd63e` | Phase 10d.13: `eval:masjid` Telegram checks against a fake Telegram (masjid repo: `256f15a` the Telegram bot and the dues-search fix, `2d4d0ec` the Profile spinner fix) |
 | `d4e6993`, `1745f83` | Phase 10d.14: charts with several series, `eval:masjid` month and day checks, the Command Center greeting (masjid repo: `9e26b0f` month by month, charts, Copy / Image / Print; `11b3933` the 30-day and this-year cards) |
 | `2edad18` | Phase 10d.15: rework for a pinned `connected_apps` agent, masjid-only checks (masjid repo: `3cf162d` masjid answers only, message times) |
+| `bbc1826`, `5af1af2`, `f073d92`, `40e63ea` | Phase 10d.16: `eval:kmcc`, `apps/kmcc.json` and `kmcc-mcp.json` (KMCC repo: `ceb71fc` the assistant, Telegram and AI API; `563b77f` "my" as a search; `8e9c2f8` credit/debit statement; `2879691` profit and opening balance from descriptions, year by year) |
+| `37f0dac` | Phase 10d.17: each app's switch and daily / monthly limits in the Command Center, `eval:app-limits` |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.

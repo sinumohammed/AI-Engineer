@@ -1253,6 +1253,78 @@ handbook, on the same free quota.
   "Stopping..." and every eval question timed out. A cold load takes 4.6 s,
   and evals keep the model loaded, so 1 minute costs almost nothing.
 
+### 10d.16 A second real app: the KMCC savings app (2026-10-19/21)
+
+The user's KMCC Jeddah savings-and-loan app (`~/Code/Developer/work/kmcc-jeddah`,
+TypeScript, Express, Prisma, React) got the same assistant as the masjid app -
+the second connected app, and the first that is not JavaScript. The user's
+rules: logged-in members and the admin only (no guests); a member sees only
+their own savings, dues, loans and transactions; the admin everything; any
+language; Telegram too. Live at https://kmcc-savings-loans.vercel.app, on MCP.
+
+Nothing changed in this service for it - an ask key (`askkey new kmcc`) and a
+registry entry (`apps/kmcc.json`, `apps/kmcc-mcp.json`) - which is what 10d.4
+promised. In the KMCC app (`server/src/ai/`):
+
+- `/api/ai/*`: 12 read-only endpoints (`me`, `member_summary`, `dues`,
+  `pending_dues`, `transactions`, `loans`, `totals`, `banks`,
+  `flow_by_category`, `finance_by_month`, `finance_by_day`, `members`), the
+  same as MCP tools at `/api/ai/mcp`. Dues are **worked out, not written**:
+  the app creates a month's row only when someone opens a profile, so the AI
+  API computes missing months as pending instead of creating them. Totals come
+  from the dashboard's own code, moved to a shared file, so the assistant and
+  the tiles always agree.
+- The assistant chat (lazy-loaded, KMCC's navy from the antd theme tokens),
+  daily limits per member, and the Telegram bot - ported from the masjid app.
+  Phone linking matches the **last 9 digits**: a member record says
+  `05XXXXXXXX`, Telegram sends `+9665XXXXXXXX`, and the masjid's "last 10"
+  would never match a Saudi number.
+- `npm run eval:kmcc` (throwaway database, fake Telegram, `CONNECTOR=mcp`,
+  `ONLY=telegram|chips`, `DETAIL=1` prints whole failing answers).
+
+Found after it went live, each fixed and added to the eval:
+
+- Over MCP on Groq, a member's "എന്റെ ലോൺ ബാക്കി?" (my loan balance) got "no
+  loan found": the model passed "my" as the member search. A member only ever
+  sees themselves, so a search that names nobody now answers for them.
+- A member's total savings, profit and withdrawals came out wrong. The flows
+  were labelled in/out ("money coming in to KMCC"), which reads wrongly for
+  profit credited to a member; now **credit / debit**, as on the member's
+  Profile statement and PDF.
+- KMCC0049's profit came out as 0. The books (imported from old sheets) file
+  each year's profit and the 2017 opening balance under **Saving**, told
+  apart only by the description ("Profit 2024", "opening balance 2017"). A
+  Saving credit is now read by its description: the member summary gives
+  opening balance, contributed, profit, withdrawn and savings balance, overall
+  and **year by year**, plus the largest entries with their descriptions.
+- A changed tool description reaches this service only when the app's entry is
+  read again (`npm run app -- add ../apps/kmcc-mcp.json`) - after the app's
+  deploy is Ready. Twice it was read too early and kept the old text.
+
+Results: `eval:kmcc` 49/49 with no model and Telegram (local), the Malayalam
+ready questions and the member-statement questions 45/45 on Groq; qwen misses
+one or two citations on right answers. WhatsApp was looked at first and
+postponed by the user: Meta's setup is confusing, and since 1 October 2026 a
+number gets 1,000 free service messages a month, then pays.
+
+### 10d.17 Each app's switch and limits, from the Command Center (2026-10-19)
+
+The user: "I need one control to restrict apps from asking - limit how many
+questions each app can ask." Before, every app had the same daily limit,
+`APP_DAILY_LIMIT` (100 by default in `config.js`), changed only by a deploy.
+
+- `api/appLimits.js`: per app in Redis (`apps:limits`): **paused**, **daily**
+  (an app with no entry gets `APP_DAILY_LIMIT`) and **monthly** (0 = no
+  limit). Counted per UTC day and month; a refused question is not counted;
+  voice input is refused too when paused or used up.
+- `GET/PUT /api/admin/app-limits` - **admin key only** (the user's choice):
+  the read-only dashboard key cannot read or change them.
+- The Command Center: "Connected apps · limits" - per app an on/off switch,
+  bars for today and this month, and the two limits with Save. Opened with the
+  dashboard key it says "read-only". These limits sit above each app's own
+  per-member limits.
+- `npm run eval:app-limits` 14/14 (own Redis keys; one model question).
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and
