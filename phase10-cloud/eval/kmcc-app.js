@@ -208,6 +208,10 @@ try {
   // Found live: a member's profit credited and withdrawals were answered wrongly.
   await tx({ memberId: basheer.id, date: mid(6), flow: "INCOME", category: "PROFIT", amount: 300, description: "Profit share" });
   await tx({ memberId: basheer.id, date: mid(7), flow: "EXPENSE", category: "SAVING_WITHDRAWAL", amount: 200, description: "Withdrawal" });
+  // As KMCC's real books (imported from the old sheets): last year's opening
+  // balance and profit entered under Saving, told apart only by the description.
+  await tx({ memberId: favas.id, date: `${y - 1}-12-31T09:00:00Z`, flow: "INCOME", category: "SAVING_DEPOSIT", amount: 5000, description: `opening balance ${y - 1}` });
+  await tx({ memberId: favas.id, date: `${y - 1}-12-31T09:00:00Z`, flow: "INCOME", category: "SAVING_DEPOSIT", amount: 700, description: `Profit ${y - 1}` });
   await tx({ memberId: mujeeb.id, bankId: bank.id, date: `${y}-03-01T09:00:00Z`, flow: "EXPENSE", category: "LOAN_DISBURSEMENT", amount: 20000, description: "Loan" });
   const loanId = (await call(`${K}/loans?memberId=${mujeeb.id}`, { token: adminLogin })).body[0].id;
   await tx({ memberId: mujeeb.id, bankId: bank.id, date: `${y}-05-01T09:00:00Z`, flow: "INCOME", category: "LOAN_REPAYMENT", amount: 5000, linkedLoanId: loanId });
@@ -276,9 +280,14 @@ try {
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("ബഷീർ")}`, as(adminUser));
   check('Malayalam "ബഷീർ" finds BASHEER.P', r.body.members?.[0]?.member.code === basheer.memberCode, JSON.stringify(r.body).slice(0, 120));
   const bs = r.body.members?.[0];
-  check("A member's account as on the Profile statement: deposited 1500, withdrawn 200, savings 1300, profit 300, credit 1800 - debit 200 = balance 1600", bs?.savings.deposited === 1500 && bs.savings.withdrawn === 200 && bs.savings.savingsBalance === 1300 && bs.profitCredited === 300 && bs.statement.totalCredit === 1800 && bs.statement.totalDebit === 200 && bs.statement.balance === 1600, JSON.stringify({ savings: bs?.savings, profit: bs?.profitCredited, statement: bs?.statement }).slice(0, 200));
+  check("A member's account as on the Profile statement: contributed 1500, profit 300, withdrawn 200, savings 1600, credit 1800 - debit 200 = balance 1600", bs?.savings.contributed === 1500 && bs.savings.withdrawn === 200 && bs.savings.savingsBalance === 1600 && bs.savings.profitCredited === 300 && bs.statement.totalCredit === 1800 && bs.statement.totalDebit === 200 && bs.statement.balance === 1600, JSON.stringify({ savings: bs?.savings, statement: bs?.statement }).slice(0, 200));
+  const thisYear = bs?.byYear?.find((x) => x.year === y);
+  check(`Year by year: ${y} deposited 1500, profit 300, withdrawn 200; the largest entries carry their descriptions`, thisYear?.contributed === 1500 && thisYear.profitCredited === 300 && thisYear.withdrawn === 200 && bs.largestEntries?.[0]?.amount === 1500 && bs.largestEntries[0].description === "Jan-Mar", JSON.stringify({ byYear: bs?.byYear, top: bs?.largestEntries?.[0] }).slice(0, 200));
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("favas t k")}`, as(adminUser));
   check('"favas t k" (spaced initials) finds FAVAS TK', r.body.members?.length === 1 && r.body.members[0].member.code === favas.memberCode);
+  const fs = r.body.members?.[0]?.savings;
+  const fLast = r.body.members?.[0]?.byYear?.find((x) => x.year === y - 1);
+  check(`Profit and opening balance entered under Saving are read from the description: opening 5000, profit 700 (${y - 1}), contributed 200, savings 5900`, fs?.openingBalance === 5000 && fs.profitCredited === 700 && fs.contributed === 200 && fs.savingsBalance === 5900 && fLast?.profitCredited === 700 && fLast.openingBalance === 5000 && fLast.contributed === 0, JSON.stringify({ fs, fLast }).slice(0, 200));
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent(`kmcc ${Number(mujeeb.memberCode.slice(4))}`)}`, as(adminUser));
   check("A short member code finds them", r.body.members?.[0]?.member.code === mujeeb.memberCode, JSON.stringify(r.body).slice(0, 120));
   r = await call(`${K}/ai/member-summary?search=${encodeURIComponent("Zubair Xyz")}`, as(adminUser));
@@ -407,9 +416,13 @@ try {
   // letters, so amounts and sources are checked.
   console.log("\n4. Answers through the KMCC app's assistant");
   a = await ask(basheerLogin, "എന്റെ സേവിംഗ്സ് ബാലൻസ് എത്രയാണ്?");
-  check("Chip (member, Malayalam): my savings balance ₹1300 (1500 deposited - 200 withdrawn)", plain(a.answer).includes("1300") && a.sources.includes(SOURCE), show(a));
+  check("Chip (member, Malayalam): my savings balance ₹1600 (1500 contributed + 300 profit - 200 withdrawn)", plain(a.answer).includes("1600") && a.sources.includes(SOURCE), show(a));
   a = await ask(adminLogin, "How much has BASHEER.P saved in total, how much profit was credited to him, and how much has he withdrawn?");
   check("Admin: one member's savings 1500, profit 300, withdrawn 200", ["1500", "300", "200"].every((n) => plain(a.answer).includes(n)) && a.sources.includes(SOURCE), show(a));
+  a = await ask(adminLogin, `Show ${shareef.memberCode}'s savings deposited each year.`);
+  check(`Admin: a member's deposits year by year - ${y - 1}: 3000, ${y}: ${1000 * thisMonth}`, plain(a.answer).includes("3000") && plain(a.answer).includes(String(1000 * thisMonth)) && a.answer.includes(String(y - 1)) && a.sources.includes(SOURCE), show(a));
+  a = await ask(adminLogin, `${favas.memberCode} - how much has he contributed, how much profit has he earned, and what is his current total savings?`);
+  check("Admin: profit entered under Saving still counted as profit - contributed 200, profit 700, savings 5900", ["200", "700", "5900"].every((n) => plain(a.answer).includes(n)) && a.sources.includes(SOURCE), show(a));
   a = await ask(basheerLogin, "എനിക്ക് ഇതുവരെ എത്ര ലാഭം ക്രെഡിറ്റ് ചെയ്തു?");
   check("Member (Malayalam): profit credited to me ₹300", plain(a.answer).includes("300") && a.sources.includes(SOURCE), show(a));
   a = await ask(basheerLogin, "ഈ വർഷം ഞാൻ ഏതൊക്കെ മാസങ്ങൾ അടയ്ക്കാനുണ്ട്, ആകെ എത്ര?");
