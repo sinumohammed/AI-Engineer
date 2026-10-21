@@ -897,7 +897,7 @@ Where things stand (Phase 10 code):
 | Charts over time (10d.14): month and day endpoints (opening balance left out, member refused, range limits), a line chart of the year, income vs expense in one chart, the admin's two chart cards | endpoint checks 5/5 | 54/54 (`ONLY=tables`), both cards right (`ONLY=chips`) |
 | Masjid answers only (10d.15): a member's handbook question and the admin's coding question not answered; "show that as a bar chart" after a table | 3/3 | live: off-topic question gets the masjid-only reply |
 | `eval:kmcc` (10d.16): KMCC backend + this API on a throwaway database - tokens, roles (members refused others' data and KMCC's totals), dues worked out, names (Malayalam, initials, codes), MCP, limits, Telegram against a fake Telegram, a member's statement and year by year, isolation | 49/49 no model + Telegram; with answers 71/72 (qwen dropped one citation on a right answer); over MCP 49/49 | ready questions, member statement, year by year: 45/45 on Groq |
-| `eval:app-limits` (10d.17): dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted | 14/14 | - (deploy pending) |
+| `eval:app-limits` (10d.17): dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted | 14/14 | live: the controls open with the admin key |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
