@@ -1325,6 +1325,57 @@ questions each app can ask." Before, every app had the same daily limit,
   per-member limits.
 - `npm run eval:app-limits` 14/14 (own Redis keys; one model question).
 
+### 10d.18 Garagentic's AI through this service (2026-10-24)
+
+Garagentic (the user's garage app for Oman) had two AI features - quote
+drafts from a complaint, and reading the car's Mulkiya (registration card)
+from a photo - and called Groq directly with its own key, so their use and
+cost never showed here. The user chose to route them through this service
+("step 5" of the plan).
+
+- **`POST /api/ask/task`** (`api/tasks.js`, in `askApi.js`): an app's small
+  job that is not a question. The app sends its own instructions and text or
+  one photo; the answer is the model's JSON object (code fences and sentences
+  around it are stripped). Same ask key, switch and daily / monthly limits as
+  a question; metered as channel `task` with the app's `user.ref`.
+  ```
+  Garagentic (its instructions)  -- POST /api/ask/task, its ask key -->  this service
+     text (a complaint)                    -> TASK_MODEL   (default JUDGE_MODEL, gpt-oss-20b)
+     one photo (the Mulkiya)               -> VISION_MODEL (Groq qwen/qwen3.8-27b, reasoning off)
+  <-- the model's JSON; Garagentic checks it again (plate 1-5 digits, VIN, dates)
+  ```
+  Photos go to Groq, **never Gemini**: a registration card is personal data
+  and Gemini's free tier may use inputs (`dataPolicy.js`); Groq has Zero Data
+  Retention on.
+- **Found live:** the first scan failed - Groq answered 404
+  `model_not_found` for Llama 4 Maverick (retired). Now `qwen/qwen3.8-27b`, a
+  *preview* model at Groq ($0.80 / $4.00 per million tokens, priced in
+  `usage.js`); `VISION_MODEL` on Vercel switches it without a code change.
+- **Model alert** (`api/modelCheck.js`): every model setting
+  (CHAT/JUDGE/ROUTER/SPECIALIST/FALLBACK/TASK/VISION/TRANSCRIBE_MODEL) is
+  checked against the provider's `/models` (at most hourly, Redis) and against
+  "model not found" answers (`noteMissing`, cleared when the model answers
+  again). The Command Center shows a red alert naming what breaks and the
+  setting to change.
+- **Usage by app**: an app filter (All apps or one, `?app=` on
+  `/api/admin/usage`); tasks count as uses (they were missing); the users list
+  follows the filter - for Garagentic it is **Garages** (`garage:<slug>`),
+  ranked by uses, today, errors and cost. On phones the list never widens the
+  page (fixed columns, long names cut with an ellipsis).
+- **"A new version is ready - Reload"** (`web/src/Root.jsx`): after a deploy
+  the open page kept the old version (PWA), so the new filter looked missing.
+- Tests: `npm run eval:tasks` 13/13 - a fake model server, own Redis keys:
+  key needed, text and photo to the right models, JSON out, bad requests and
+  app limits, the model alert (unlisted, not found, cleared), usage filtered by
+  app.
+- In Garagentic (its own repo): the Mulkiya reader's lessons from real cards
+  - most fields are Arabic only, so the plate letter is copied in Arabic and a
+  table gives the English one (و = W, س = S); the prompt's example must not be
+  the real card (it then returned the engine number as the plate); names are
+  never read (the model invented one); photos are turned upright in a preview
+  before reading; PDFs are read from their first page. Each garage has its own
+  AI uses a day, set by its super admin.
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and

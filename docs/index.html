@@ -859,6 +859,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.15</td><td>The masjid assistant answers masjid questions only, for everyone</td><td class="res">Live: a coding question gets the masjid-only reply, with no model call; "show that as a bar chart" still works</td></tr>
                 <tr><td class="n">10d.16</td><td>A second real app, KMCC savings: the same assistant and Telegram bot, members see only their own money, added with no change to this service</td><td class="res">Live on MCP; a member's savings, profit and withdrawals year by year match the Profile statement; Groq 45/45</td></tr>
                 <tr><td class="n">10d.17</td><td>Each app's on/off switch and its own daily and monthly limits, in the Command Center (admin key only)</td><td class="res"><code>eval:app-limits</code> 14/14: paused refused at once, limits refuse the next question, refused questions not counted</td></tr>
+                <tr><td class="n">10d.18</td><td>Garagentic's AI through this service: small app tasks (read a Mulkiya photo, draft a quote) on <code>POST /api/ask/task</code>; an alert when a model is retired; usage by app with a Garages list</td><td class="res"><code>eval:tasks</code> 13/13; live: a real Mulkiya scan read plate, make, year, VIN and expiry</td></tr>
               </tbody>
             </table>
           </div>
@@ -1305,6 +1306,37 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Steps 10d.16 and 10d.17. The user's savings-and-loan app joined with no code in this service - what 10d.4 promised. Its real data then taught three things: the model passed "my" as a member's name, "in/out" read wrongly for profit credited to a member, and profit and opening balances were filed under Saving and told apart only by their descriptions. The Command Center can now pause any app or cap its questions per day and per month.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 280" role="img" aria-label="Garagentic sends its own instructions with text or one photo to POST /api/ask/task with its ask key. Text goes to the task model, a photo to a Groq vision model, never Gemini. The model's JSON comes back and Garagentic checks it again. The service checks every model it uses against Groq's list and shows a red alert when one is retired. The Command Center shows usage for one app at a time, with Garagentic's garages ranked.">
+                <defs><marker id="a23" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">AN APP'S SMALL AI JOBS · MODELS THAT DISAPPEAR</text>
+                <rect class="b" x="20" y="40" width="230" height="70" rx="6"/>
+                <text class="t" x="135" y="64" text-anchor="middle">Garagentic</text>
+                <text class="s" x="135" y="82" text-anchor="middle">its instructions + a complaint</text>
+                <text class="s" x="135" y="98" text-anchor="middle">or a Mulkiya photo (upright)</text>
+                <line class="ln" x1="250" y1="62" x2="459" y2="62" marker-end="url(#a23)"/>
+                <text class="s" x="355" y="55" text-anchor="middle">POST /api/ask/task, its ask key</text>
+                <line class="ln" x1="460" y1="88" x2="251" y2="88" marker-end="url(#a23)"/>
+                <text class="s" x="355" y="104" text-anchor="middle">JSON - checked again in the app</text>
+                <rect class="ba" x="460" y="40" width="240" height="70" rx="6"/>
+                <text class="t" x="580" y="64" text-anchor="middle">AI service</text>
+                <text class="s" x="580" y="82" text-anchor="middle">text: task model (gpt-oss-20b)</text>
+                <text class="s" x="580" y="98" text-anchor="middle">photo: Groq vision, never Gemini</text>
+                <rect class="b" x="20" y="140" width="330" height="70" rx="6"/>
+                <text class="t" x="185" y="164" text-anchor="middle">Model alert</text>
+                <text class="s" x="185" y="182" text-anchor="middle">every model setting vs Groq's list (hourly)</text>
+                <text class="s" x="185" y="199" text-anchor="middle">+ "model not found" answers · names the setting</text>
+                <rect class="b" x="370" y="140" width="330" height="70" rx="6"/>
+                <text class="t" x="535" y="164" text-anchor="middle">Command Center: one app at a time</text>
+                <text class="s" x="535" y="182" text-anchor="middle">tasks count as uses</text>
+                <text class="s" x="535" y="199" text-anchor="middle">Garagentic: garages ranked by use and cost</text>
+                <text class="s" x="20" y="242">Found live: the vision model had been retired (404). From real cards: Arabic-only fields (و = W by a table),</text>
+                <text class="s" x="20" y="262">the prompt's example copied into the answer, an invented owner name, sideways photos misread.</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.18. The garage app's quote drafts and Mulkiya scans now go through this service, so its keys, limits and costs are in one place. The first real scan failed because Groq had retired the vision model; the service now checks its models against Groq's list and raises a red alert. Real cards taught the rest, and the Command Center can show one app at a time.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1328,6 +1360,8 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Real data hides meaning in free text: KMCC's profit sat under Saving as "Profit 2024"; the category totals said "profit 0". Read real rows before trusting the schema.</li>
               <li>When figures disagree, first check they are about the same thing: the Profile rows that "disproved" the assistant were another member's.</li>
               <li>A copy goes stale: this service keeps a copy of each app's tool descriptions, read again only after the app's deploy is Ready.</li>
+              <li>Hosted models disappear: keep model names in settings, check them against the provider's list, and alert before a user finds out.</li>
+              <li>Don't show the model the answer, and don't ask for a field that may be missing: the real card's plate as the example brought back the engine number, and an owner name the card does not have was invented.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
@@ -1471,6 +1505,13 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">124</td><td class="n">10d.16</td><td>Live: profit 0 - profit and the 2017 opening balance filed under Saving, told apart by the description</td><td>Saving credits read by description; per year; largest entries with descriptions</td><td class="res">45/45 on Groq; live</td></tr>
             <tr><td class="n">125</td><td class="n">10d.16</td><td>A fixed tool description did not reach the assistant</td><td>Read the app's tools again after its deploy is Ready</td><td class="res">Confirmed live</td></tr>
             <tr><td class="n">126</td><td class="n">10d.17</td><td>One daily limit for every app, changed only by a deploy</td><td>Per-app pause, daily and monthly limits; Command Center, admin key only</td><td class="res"><code>eval:app-limits</code> 14/14</td></tr>
+            <tr><td class="n">127</td><td class="n">10d.18</td><td>Garagentic held its own Groq key; its AI use was invisible here</td><td><code>POST /api/ask/task</code>: instructions + text or one photo in, JSON out; same key, limits, metering</td><td class="res"><code>eval:tasks</code> 8/8</td></tr>
+            <tr><td class="n">128</td><td class="n">10d.18</td><td>First live scan: 404 <code>model_not_found</code> - Llama 4 Maverick retired</td><td><code>qwen/qwen3.8-27b</code>, reasoning off; <code>VISION_MODEL</code> setting</td><td class="res">Live scan read</td></tr>
+            <tr><td class="n">129</td><td class="n">10d.18</td><td>A retired model is found only when someone hits it</td><td>Model alert: models vs Groq's list and "not found" answers</td><td class="res"><code>eval:tasks</code> 11/11</td></tr>
+            <tr><td class="n">130</td><td class="n">10d.18</td><td>Real card: و read as K, Cherokee as Wrangler (Arabic only)</td><td>Arabic letter copied, a table gives English; fields by Arabic labels</td><td class="res">51571 W, Jeep Cherokee</td></tr>
+            <tr><td class="n">131</td><td class="n">10d.18</td><td>Plate = engine number (the example was the real plate); a name invented</td><td>Made-up examples; plate checked in code; names never read</td><td class="res">Garagentic tests</td></tr>
+            <tr><td class="n">132</td><td class="n">10d.18</td><td>Sideways photos misread; PDFs not read</td><td>Upright preview before Read; PDF first page with pdf.js</td><td class="res">Browser checks</td></tr>
+            <tr><td class="n">133</td><td class="n">10d.18</td><td>Tasks not counted, no per-app view, too wide on phones, old version after deploys</td><td>Tasks are uses; app filter; Garages ranked; fixed columns; Reload bar</td><td class="res"><code>eval:tasks</code> 13/13</td></tr>
           </tbody>
         </table>
       </div>
@@ -1503,6 +1544,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>Masjid answers only: handbook and coding questions not answered; bar chart after a table</td><td class="n">3/3</td><td class="n">live: masjid-only reply</td></tr>
             <tr><td><code>eval:kmcc</code>: KMCC backend and this API on a throwaway database - roles (members refused others' data and the totals), dues worked out, names, MCP, limits, Telegram against a fake Telegram, a member's statement year by year, isolation</td><td class="n">49/49 no model + Telegram; with answers 71/72; over MCP 49/49</td><td class="n">ready questions, statement, year by year: 45/45 on Groq</td></tr>
             <tr><td><code>eval:app-limits</code>: dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted</td><td class="n">14/14</td><td class="n">live: the controls open with the admin key</td></tr>
+            <tr><td><code>eval:tasks</code> (10d.18), fake model server: key needed, text and photo to the right models, JSON out, bad requests and the app's limit, model alert, usage filtered by app</td><td class="n">13/13</td><td class="n">live: Mulkiya scans, Garagentic in the Command Center</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
           </tbody>
         </table>
@@ -1544,6 +1586,9 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Real data hides meaning in free text.</strong> KMCC's profit was filed under Saving and told apart only by its description, "Profit 2024"; the category totals said "profit 0" and were right about the categories, wrong about the money (10d.16). Read real rows before trusting the schema.</li>
         <li><strong>When figures disagree, first check they are about the same thing.</strong> The pasted Profile rows that "disproved" the assistant were another member's (10d.16). Name and code first, then numbers.</li>
         <li><strong>A copy goes stale.</strong> This service keeps a copy of each app's tool descriptions; a fix in the app does nothing until the copy is read again - after the app's deploy is Ready (10d.16).</li>
+        <li><strong>Hosted models disappear.</strong> The vision model was retired at Groq and the first real scan got "model not found" (10d.18). Keep model names in settings, check them against the provider's list, and alert before a user finds out.</li>
+        <li><strong>Don't show the model the answer.</strong> With the real card's plate as the prompt's example, the model returned a different number - the engine number (10d.18). Use made-up examples, and back every field the model fills with a check in code.</li>
+        <li><strong>Asked for something that is not there, a model invents it.</strong> The card has no owner name; the model gave one (10d.18). Don't ask for a field that may be missing when a wrong value is worse than none.</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">
@@ -1599,6 +1644,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td>The masjid assistant on Telegram</td><td>masjid app → Settings → Telegram (bot status, Connect the bot, Link my Telegram); members: Profile → Telegram, or share their phone number with the bot. Test: <code>cd phase10-cloud/eval &amp;&amp; ONLY=telegram npm run eval:masjid</code> (a fake Telegram; <code>VOICE=1</code> adds a voice note)</td></tr>
             <tr><td>Ollama memory (Mac)</td><td><code>OLLAMA_KEEP_ALIVE=1m</code>, set at login by <code>~/Library/LaunchAgents/local.ollama-keepalive.plist</code>: the 21 GB model leaves memory a minute after its last question (a cold load is 4.6 s). Quit Ollama from the menu bar when you are not running local evals</td></tr>
             <tr><td>The KMCC app end to end (made-up data)</td><td><code>cd phase10-cloud/eval &amp;&amp; npm run eval:kmcc</code> (<code>CONNECTOR=mcp</code>, <code>ONLY=telegram</code> or <code>ONLY=chips</code> - run those with the Groq settings; <code>DETAIL=1</code> prints whole failing answers). After a KMCC deploy is Ready: <code>npm run app -- add ../apps/kmcc-mcp.json</code> in <code>phase10-cloud/api</code></td></tr>
+            <tr><td>See one app's use, or which garage used the AI most</td><td>Command Center → Usage and cost → pick the app (garagentic shows Garages). Test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:tasks</code></td></tr>
             <tr><td>Pause an app or cap its questions</td><td>Command Center, unlocked with <code>ADMIN_KEY</code>: Connected apps · limits. Test: <code>cd phase10-cloud/eval &amp;&amp; npm run eval:app-limits</code></td></tr>
             <tr><td>A key for a new app</td><td><code>cd phase10-cloud/api &amp;&amp; API_URL=https://ai-engineer-api-jet.vercel.app npm run app -- askkey new &lt;name&gt;</code> - works at once (also <code>askkey list</code>, <code>askkey revoke &lt;id or name&gt;</code>)</td></tr>
             <tr><td>Ask like another app</td><td><code>cd phase10-cloud/examples &amp;&amp; npm run ask -- "your question"</code> (no question: a conversation)</td></tr>

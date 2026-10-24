@@ -458,6 +458,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.15 | The masjid assistant answers masjid questions only, for everyone | Live: a coding question gets the masjid-only reply, with no model call; "show that as a bar chart" still works |
 | 10d.16 | A second real app, KMCC savings: the same assistant and Telegram bot, members see only their own money, added with no change to this service | Live on MCP; a member's savings, profit and withdrawals year by year match the Profile statement; Groq 45/45 |
 | 10d.17 | Each app's on/off switch and its own daily and monthly limits, in the Command Center (admin key only) | `eval:app-limits` 14/14: paused refused at once, limits refuse the next question, refused questions not counted |
+| 10d.18 | Garagentic's AI through this service: small app tasks (read a Mulkiya photo, draft a quote) on `POST /api/ask/task`; an alert when a model is retired; usage by app with a Garages list | `eval:tasks` 13/13; live: a real Mulkiya scan read plate, make, year, VIN and expiry |
 
 - **Challenges, in plain terms:**
 
@@ -729,6 +730,21 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 - **App switch and limits (10d.17):** the Command Center can pause any app and give it its own
   daily and monthly question limits - only with the admin key; the dashboard key just views. Before,
   one number for all apps, changed only by a deploy.
+- **Garagentic's AI through this service (10d.18):** the garage app's quote drafts and Mulkiya
+  scans called Groq with their own key, so this service never saw them. Now:
+  ```
+  Garagentic (its instructions)  --POST /api/ask/task, its ask key-->  this service
+     text (a complaint)          -> the task model (gpt-oss-20b)
+     one photo (the Mulkiya)     -> the vision model (Groq Qwen) - never Gemini: personal data
+  <-- the model's JSON, checked again by Garagentic (plate 1-5 digits, VIN, dates)
+  ```
+  The first live scan failed: Groq had retired the vision model (404). So the service now checks
+  every model it uses against Groq's list and shows a red alert naming the setting to change. Real
+  cards taught the rest: most fields are Arabic only (the plate letter is copied and turned into
+  English by a table, و = W); using the real card's plate as the prompt's example made the model
+  return the engine number; asked for an owner name the card does not have, it invented one; and
+  sideways photos were misread - so the photo is turned upright before reading. The Command Center
+  can now show one app at a time, with Garagentic's garages ranked by use and cost.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -868,6 +884,13 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 124 | 10d.16 | Live: KMCC0049's profit was 0 - profit and the 2017 opening balance are filed under Saving, told apart only by the description | A Saving credit is read by its description; opening, contributed, profit, withdrawn and balance, overall and per year; largest entries with descriptions | 45/45 on Groq; live |
 | 125 | 10d.16 | A fixed tool description did not reach the assistant | This service keeps a copy of each app's tools: read it again after the app's deploy is Ready (it was read too early twice) | Confirmed live |
 | 126 | 10d.17 | One daily limit for every app, changed only by a deploy; no way to stop one app | Per-app pause, daily and monthly limits in Redis, set in the Command Center with the admin key only | `eval:app-limits` 14/14 |
+| 127 | 10d.18 | Garagentic held its own Groq key; its AI use and cost were invisible here | `POST /api/ask/task`: the app's instructions with text or one photo in, JSON out; same key, limits and metering as a question | `eval:tasks` 8/8 (fake model server) |
+| 128 | 10d.18 | First live Mulkiya scan: 404 `model_not_found` - Groq had retired Llama 4 Maverick | Vision model `qwen/qwen3.8-27b` with reasoning off; `VISION_MODEL` changes it without code | Live scan read plate, make, year, VIN, expiry |
+| 129 | 10d.18 | A retired model is found only when someone hits it | Model alert: models in use vs Groq's `/models` (hourly) and "model not found" answers; a red alert naming the setting | `eval:tasks` 11/11 |
+| 130 | 10d.18 | Real card: plate letter و read as K, Cherokee read as Wrangler (the card is Arabic only) | The AI copies the Arabic letter, a table gives the English one; fields named by their Arabic labels; the model copied word for word | 51571 W, Jeep Cherokee |
+| 131 | 10d.18 | The plate came back as the engine number after the prompt used the real card's plate as its example; an owner name was invented | Made-up examples; code rejects plates over 5 digits or inside the engine number / VIN; names never read | Garagentic tests |
+| 132 | 10d.18 | Sideways photos misread (header on the right, sometimes the left); PDFs could not be read | A preview to turn the photo upright before Read; a PDF's first page drawn with pdf.js | Browser checks |
+| 133 | 10d.18 | Command Center: tasks not counted, no per-app view, the users list wider than a phone, the old version shown after deploys | Tasks count as uses; app filter; Garages ranked; fixed columns; "A new version is ready - Reload" | `eval:tasks` 13/13; 375 px fits |
 
 Where things stand (Phase 10 code):
 
@@ -898,6 +921,7 @@ Where things stand (Phase 10 code):
 | Masjid answers only (10d.15): a member's handbook question and the admin's coding question not answered; "show that as a bar chart" after a table | 3/3 | live: off-topic question gets the masjid-only reply |
 | `eval:kmcc` (10d.16): KMCC backend + this API on a throwaway database - tokens, roles (members refused others' data and KMCC's totals), dues worked out, names (Malayalam, initials, codes), MCP, limits, Telegram against a fake Telegram, a member's statement and year by year, isolation | 49/49 no model + Telegram; with answers 71/72 (qwen dropped one citation on a right answer); over MCP 49/49 | ready questions, member statement, year by year: 45/45 on Groq |
 | `eval:app-limits` (10d.17): dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted | 14/14 | live: the controls open with the admin key |
+| `eval:tasks` (10d.18), against a fake model server: key needed, text and photo to the right models, JSON out, bad requests and the app's limit, model alert (not listed, not found, cleared), usage filtered by app | 13/13 | live: Mulkiya scans through the service, Garagentic in the Command Center |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -1007,6 +1031,15 @@ what changed.
     that "disproved" the assistant were another member's (10d.16). Name and code first, then numbers.
 31. **A copy goes stale.** This service keeps a copy of each app's tool descriptions; a fix in the
     app does nothing until the copy is read again - after the app's deploy is Ready (10d.16).
+32. **Hosted models disappear.** The vision model was retired at Groq and the first real scan got
+    "model not found" (10d.18). Keep model names in settings, check them against the provider's
+    list, and alert before a user finds out.
+33. **Don't show the model the answer.** With the real card's plate as the prompt's example, the
+    model returned a different number - the engine number (10d.18). Use made-up examples, and back
+    every field the model fills with a check in code.
+34. **Asked for something that is not there, a model invents it.** The card has no owner name; the
+    model gave one (10d.18). Don't ask for a field that may be missing when a wrong value is worse
+    than none.
 
 ### What changed when the data got real (Phase 9)
 
@@ -1125,6 +1158,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `2edad18` | Phase 10d.15: rework for a pinned `connected_apps` agent, masjid-only checks (masjid repo: `3cf162d` masjid answers only, message times) |
 | `bbc1826`, `5af1af2`, `f073d92`, `40e63ea` | Phase 10d.16: `eval:kmcc`, `apps/kmcc.json` and `kmcc-mcp.json` (KMCC repo: `ceb71fc` the assistant, Telegram and AI API; `563b77f` "my" as a search; `8e9c2f8` credit/debit statement; `2879691` profit and opening balance from descriptions, year by year) |
 | `37f0dac` | Phase 10d.17: each app's switch and daily / monthly limits in the Command Center, `eval:app-limits` |
+| `645b0ac`, `3cea9f2`, `e9a3e06`, `92e19d9`, `71f3f87`, `eb46a44`, `80d5998` | Phase 10d.18: `POST /api/ask/task` and `eval:tasks`, the vision model, the model alert, usage by app with Garages, the new-version bar, the Command Center on phones (Garagentic repo: `005b624` AI through this service, `ec28532` / `1774567` Mulkiya fields from real cards, `e1ba593` no names, `29a3fad` upright preview, `dfb8d81` photo or PDF, `1242b3f` AI uses a day per garage, `03d429c` garage names) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
