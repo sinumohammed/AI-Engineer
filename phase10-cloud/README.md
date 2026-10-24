@@ -1376,6 +1376,57 @@ cost never showed here. The user chose to route them through this service
   before reading; PDFs are read from their first page. Each garage has its own
   AI uses a day, set by its super admin.
 
+### 10d.19 Each app's own help pages, and Garagentic's assistant (2026-10-24)
+
+The service's handbook is sample documents from the learning steps; the apps
+needed answers about *themselves* ("how do I send a quote?"). The user chose a
+loosely coupled design: each app brings its help pages the way it brings its
+API, and this service only indexes them. Details: `apps/README.md` ("Help
+pages: `knowledge`").
+
+- **Registry `knowledge`** (`api/knowledge.js`, `appRegistry.js`): the URL of
+  the app's help pages, one Markdown file (`# page`, `## section`). `add` and
+  every `refresh` fetch it, cut it into chunks (at most ~1,200 characters,
+  labelled "<app> help: <page> > <section>"), embed them and store them in
+  Neon table `app_knowledge` (`APP_KNOWLEDGE_TABLE`) tagged with the app; a
+  refresh replaces the app's chunks in one transaction, a failed one keeps the
+  old ones. An app can bring help pages only (`kind: "knowledge"`). Refused: an
+  HTML page (a wrong URL on a single-page app), JSON, an empty file, over
+  300 KB / 200 pages / 500 chunks.
+  ```
+  app's repo: help.md  --npm run app -- add / refresh-->  app_knowledge (Neon), tagged with the app
+  a question -> apps.js: the caller's apps only -> English for the search -> judge -> up to 3 excerpts
+             -> cited "<app> help: <page>", next to the app's live API data
+  ```
+- **Roles**: a line `Roles: owner, manager` under a heading limits that page
+  or section; apps send `user.role` on `/api/ask`. Another role's page reaches
+  the answer without its steps, only who can do it ("only the owner can").
+- **Garagentic** (help-only first, then data): `apps/garagentic.json` -
+  `knowledge` https://garagentic.co/help.md (22 role-tagged pages in its repo)
+  plus `openapi` https://garagentic.co/api/ai-data/openapi.json (10 read-only
+  operations: me with my open jobs, jobs, job details, reminders, customers,
+  car history, money with per-day figures, parts, team, quote requests),
+  `token: $GARAGENTIC_AI_TOKEN` (= `AI_DATA_TOKEN` on Garagentic's Vercel),
+  `user: required`, `whoami: me`, `internal`. Garagentic makes a 5-minute asker
+  token per question; its rules apply (branch staff their branch, mechanics no
+  prices, money for owners and managers); customer phone numbers are never
+  sent. Its assistant: saved chats and recent questions, ready questions per
+  role, voice (`/api/ask/transcribe`), tables and charts (`display`), Copy /
+  Image / Print, "Chat with Sino on WhatsApp".
+- **Found**: an answer called the page title "Garage settings" a menu (pages
+  now give full paths, and a "Where things are" page lists the real menu with
+  roles); the app's 100 questions a day (Command Center limit) now cover help,
+  data, scans and drafts - raise it there; Groq's per-minute limit can delay a
+  big chart answer past Garagentic's 45 s timeout.
+- Tests: `npm run eval:knowledge` (28 without answers; `ANSWERS=1` 34/34 on
+  Groq) - reading pages and roles, add / refresh / remove, refused files, one
+  app's pages never in another's search, role-limited steps, data questions
+  still calling the API. `eval:apps` 31/31, `eval:mcp` 27/27 unchanged.
+- **Next (agreed)**: help pages for masjid, then KMCC; then remove the sample
+  handbook (drop `chunks_local_q8`, the web chat's handbook search, rewrite its
+  evals) and make the web chat the owner's admin assistant (usage, every app's
+  help pages, general questions).
+
 ### 10e Command Center: usage, cost per app, and the agents at work (2026-10-16)
 
 With more apps coming, the question is "who uses the service, how much, and

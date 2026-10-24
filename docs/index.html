@@ -860,6 +860,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
                 <tr><td class="n">10d.16</td><td>A second real app, KMCC savings: the same assistant and Telegram bot, members see only their own money, added with no change to this service</td><td class="res">Live on MCP; a member's savings, profit and withdrawals year by year match the Profile statement; Groq 45/45</td></tr>
                 <tr><td class="n">10d.17</td><td>Each app's on/off switch and its own daily and monthly limits, in the Command Center (admin key only)</td><td class="res"><code>eval:app-limits</code> 14/14: paused refused at once, limits refuse the next question, refused questions not counted</td></tr>
                 <tr><td class="n">10d.18</td><td>Garagentic's AI through this service: small app tasks (read a Mulkiya photo, draft a quote) on <code>POST /api/ask/task</code>; an alert when a model is retired; usage by app with a Garages list</td><td class="res"><code>eval:tasks</code> 13/13; live: a real Mulkiya scan read plate, make, year, VIN and expiry</td></tr>
+                <tr><td class="n">10d.19</td><td>Each app brings its own help pages (role-tagged), and Garagentic gets a full assistant: how-to answers, its garage's live data, voice, tables and charts</td><td class="res"><code>eval:knowledge</code> 34/34 on Groq (one app's pages never reach another app; a mechanic hears "only the owner can"); live in Garagentic</td></tr>
               </tbody>
             </table>
           </div>
@@ -1337,6 +1338,35 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
             </div>
             <figcaption>Step 10d.18. The garage app's quote drafts and Mulkiya scans now go through this service, so its keys, limits and costs are in one place. The first real scan failed because Groq had retired the vision model; the service now checks its models against Groq's list and raises a red alert. Real cards taught the rest, and the Command Center can show one app at a time.</figcaption>
           </figure>
+          <figure>
+            <div class="scroll">
+              <svg class="dg" viewBox="0 0 720 300" role="img" aria-label="An app's help.md, with Roles lines under headings, is read by npm run app add or refresh, cut into chunks, embedded and stored in the app_knowledge table tagged with the app. A question searches only the asking app's pages and its live data; the user's role decides which pages give steps. Garagentic's assistant uses both: help pages and read-only garage data with a five-minute token for the person asking.">
+                <defs><marker id="a24" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+                <text class="k" x="20" y="22">EACH APP'S OWN HELP PAGES · AN ASSISTANT PER APP</text>
+                <rect class="b" x="20" y="40" width="230" height="78" rx="6"/>
+                <text class="t" x="135" y="64" text-anchor="middle">The app's repo: help.md</text>
+                <text class="s" x="135" y="82" text-anchor="middle"># page · ## section</text>
+                <text class="s" x="135" y="99" text-anchor="middle">"Roles: owner" under a heading</text>
+                <line class="ln" x1="250" y1="79" x2="459" y2="79" marker-end="url(#a24)"/>
+                <text class="s" x="355" y="71" text-anchor="middle">npm run app -- add / refresh</text>
+                <rect class="ba" x="460" y="40" width="240" height="78" rx="6"/>
+                <text class="t" x="580" y="64" text-anchor="middle">AI service: app_knowledge</text>
+                <text class="s" x="580" y="82" text-anchor="middle">chunks + embeddings in Neon</text>
+                <text class="s" x="580" y="99" text-anchor="middle">tagged with the app's name</text>
+                <rect class="b" x="20" y="150" width="330" height="78" rx="6"/>
+                <text class="t" x="185" y="174" text-anchor="middle">A question (with user.role)</text>
+                <text class="s" x="185" y="192" text-anchor="middle">searches ONLY the asking app's pages</text>
+                <text class="s" x="185" y="209" text-anchor="middle">other roles' pages: "only the owner can"</text>
+                <rect class="b" x="370" y="150" width="330" height="78" rx="6"/>
+                <text class="t" x="535" y="174" text-anchor="middle">+ the app's live data</text>
+                <text class="s" x="535" y="192" text-anchor="middle">Garagentic /api/ai-data, read-only</text>
+                <text class="s" x="535" y="209" text-anchor="middle">app token + 5-minute asker token</text>
+                <text class="s" x="20" y="262">Garagentic's assistant: help pages and its garage's data, saved chats, voice, tables and charts,</text>
+                <text class="s" x="20" y="282">and "Chat with Sino on WhatsApp" when it cannot help. A mechanic never sees prices.</text>
+              </svg>
+            </div>
+            <figcaption>Step 10d.19. The service's handbook was sample documents; the apps needed answers about themselves. Now each app keeps its help pages in its own repo and the service only indexes them, per app and per role. Garagentic then got the masjid-style assistant on top: how-to answers, its garage's live data, voice, tables and charts. Real answers taught two fixes: page titles were taken as menu names, and a mechanic's "Mark ready" left the front desk no button to tell the customer.</figcaption>
+          </figure>
           <dl class="parts">
             <dt>Learned</dt><dd><ul>
               <li>"Change the URL" was never the whole job: each new provider brought its own format, characters, wording and limits, and each was found by an eval.</li>
@@ -1363,6 +1393,7 @@ npm run eval:citations</pre><button type="button">Copy</button></div> In the cha
               <li>Hosted models disappear: keep model names in settings, check them against the provider's list, and alert before a user finds out.</li>
               <li>Don't show the model the answer, and don't ask for a field that may be missing: the real card's plate as the example brought back the engine number, and an owner name the card does not have was invented.</li>
               <li>Measure in the one place everything passes through: usage is recorded in <code>chat()</code> once, for every caller, and each key gets only what it needs - the dashboard's key reads usage and nothing else.</li>
+                          <li>Put knowledge where it changes: each app's help pages live next to its features and the service only indexes them, by app and by role - like its API, read again on refresh.</li>
             </ul></dd>
             <dt>Try it</dt><dd>Open <a href="https://ai-engineer-web-seven.vercel.app">the deployed app</a>; the access code is <code>HOSTED_ACCESS_CODE</code> in <code>phase10-cloud/.env</code>. To test it from the terminal: <div class="cmd"><pre>cd phase10-cloud/eval
 npm run eval:public</pre><button type="button">Copy</button></div> Asked the way another app asks: <div class="cmd"><pre>cd phase10-cloud/examples
@@ -1512,6 +1543,12 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td class="n">131</td><td class="n">10d.18</td><td>Plate = engine number (the example was the real plate); a name invented</td><td>Made-up examples; plate checked in code; names never read</td><td class="res">Garagentic tests</td></tr>
             <tr><td class="n">132</td><td class="n">10d.18</td><td>Sideways photos misread; PDFs not read</td><td>Upright preview before Read; PDF first page with pdf.js</td><td class="res">Browser checks</td></tr>
             <tr><td class="n">133</td><td class="n">10d.18</td><td>Tasks not counted, no per-app view, too wide on phones, old version after deploys</td><td>Tasks are uses; app filter; Garages ranked; fixed columns; Reload bar</td><td class="res"><code>eval:tasks</code> 13/13</td></tr>
+            <tr><td class="n">134</td><td class="n">10d.19</td><td>Every app answered "how do I...?" from nothing; the handbook was sample documents</td><td>Registry <code>knowledge</code>: the app's help Markdown, chunked and embedded per app, searched only for its callers</td><td class="res"><code>eval:knowledge</code> 26/26</td></tr>
+            <tr><td class="n">135</td><td class="n">10d.19</td><td>Same answer for every role: a mechanic could get the owner's salary steps</td><td><code>Roles:</code> under a heading + <code>user.role</code>; other roles get who can do it, not the steps</td><td class="res">34/34</td></tr>
+            <tr><td class="n">136</td><td class="n">10d.19</td><td>A page title taken as a menu ("Garage settings"); an advisor told where Expenses is</td><td>Full paths in every section; a "Where things are" page with roles</td><td class="res">Right live</td></tr>
+            <tr><td class="n">137</td><td class="n">10d.19</td><td>Only help pages; owners asked "which cars are ready?"</td><td>Garagentic <code>/api/ai-data</code> (10 read-only operations) on the same entry; app token + asker token</td><td class="res">87/87; live</td></tr>
+            <tr><td class="n">138</td><td class="n">10d.19</td><td>"What am I working on?" and "the Land Cruiser job" found nothing</td><td>"Who am I" lists the asker's open jobs; search covers make and model</td><td class="res">Answered on Groq</td></tr>
+            <tr><td class="n">139</td><td class="n">10d.19</td><td>Big chart answers hit Groq's per-minute limit; 100 questions a day now cover every Garagentic AI use</td><td>Pause between tests; raise the app's limit in the Command Center</td><td class="res">Noted</td></tr>
           </tbody>
         </table>
       </div>
@@ -1545,6 +1582,7 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
             <tr><td><code>eval:kmcc</code>: KMCC backend and this API on a throwaway database - roles (members refused others' data and the totals), dues worked out, names, MCP, limits, Telegram against a fake Telegram, a member's statement year by year, isolation</td><td class="n">49/49 no model + Telegram; with answers 71/72; over MCP 49/49</td><td class="n">ready questions, statement, year by year: 45/45 on Groq</td></tr>
             <tr><td><code>eval:app-limits</code>: dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted</td><td class="n">14/14</td><td class="n">live: the controls open with the admin key</td></tr>
             <tr><td><code>eval:tasks</code> (10d.18), fake model server: key needed, text and photo to the right models, JSON out, bad requests and the app's limit, model alert, usage filtered by app</td><td class="n">13/13</td><td class="n">live: Mulkiya scans, Garagentic in the Command Center</td></tr>
+            <tr><td><code>eval:knowledge</code> (10d.19), demo app + a help-only app: pages and roles, add / refresh / remove, refused files, one app's pages never in another's search, role-limited steps</td><td class="n">28/28</td><td class="n">34/34 on Groq: right pages, Arabic, "only the owner can"</td></tr>
             <tr><td>Usage metering and Command Center: caller, agents, models, cost; dashboard key reads usage only; clap to wake</td><td class="n">right on Ollama and Groq; 200/401; claps 5/5; phone voice 3/3; conversation 3/3 (simulated)</td><td class="n">live: web and masjid questions recorded with cost; masjid users as codes</td></tr>
           </tbody>
         </table>
@@ -1589,6 +1627,8 @@ npm run ask -- "What is our rollback process?"</pre><button type="button">Copy</
         <li><strong>Hosted models disappear.</strong> The vision model was retired at Groq and the first real scan got "model not found" (10d.18). Keep model names in settings, check them against the provider's list, and alert before a user finds out.</li>
         <li><strong>Don't show the model the answer.</strong> With the real card's plate as the prompt's example, the model returned a different number - the engine number (10d.18). Use made-up examples, and back every field the model fills with a check in code.</li>
         <li><strong>Asked for something that is not there, a model invents it.</strong> The card has no owner name; the model gave one (10d.18). Don't ask for a field that may be missing when a wrong value is worse than none.</li>
+        <li><strong>Put knowledge where it changes.</strong> Help pages live in each app's repo, next to the features they describe; the service only indexes them. A page written once in the service would go stale with the first new button (10d.19).</li>
+        <li><strong>A page title is not a menu name.</strong> The model repeated "Garage settings and documents" as if it were a screen. Write the path the user taps in every section, and list the real menu once (10d.19).</li>
       </ol>
       <h3>What changed when the data got real</h3>
       <div class="scroll wide">

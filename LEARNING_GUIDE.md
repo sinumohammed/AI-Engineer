@@ -459,6 +459,7 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
 | 10d.16 | A second real app, KMCC savings: the same assistant and Telegram bot, members see only their own money, added with no change to this service | Live on MCP; a member's savings, profit and withdrawals year by year match the Profile statement; Groq 45/45 |
 | 10d.17 | Each app's on/off switch and its own daily and monthly limits, in the Command Center (admin key only) | `eval:app-limits` 14/14: paused refused at once, limits refuse the next question, refused questions not counted |
 | 10d.18 | Garagentic's AI through this service: small app tasks (read a Mulkiya photo, draft a quote) on `POST /api/ask/task`; an alert when a model is retired; usage by app with a Garages list | `eval:tasks` 13/13; live: a real Mulkiya scan read plate, make, year, VIN and expiry |
+| 10d.19 | Each app brings its own help pages (role-tagged), and Garagentic gets a full assistant: how-to answers, its garage's live data, voice, tables and charts | `eval:knowledge` 34/34 on Groq (one app's pages never reach another app; a mechanic hears "only the owner can"); live in Garagentic |
 
 - **Challenges, in plain terms:**
 
@@ -745,6 +746,25 @@ A stricter prompt reduced the problem but did not remove it. Removing the choice
   return the engine number; asked for an owner name the card does not have, it invented one; and
   sideways photos were misread - so the photo is turned upright before reading. The Command Center
   can now show one app at a time, with Garagentic's garages ranked by use and cost.
+- **Each app's own help pages, and Garagentic's assistant (10d.19):** the service's own
+  handbook was sample documents from the learning steps; the apps needed answers about
+  *themselves*. Now an app brings its help pages the way it brings its API:
+  ```
+  app's repo: help.md (# page, ## section, "Roles: owner" under a heading)
+      | npm run app -- add / refresh   (registry: "knowledge": "<url>")
+      v
+  this service: fetch -> chunks -> embeddings -> Neon table app_knowledge, tagged with the app
+      a question -> search ONLY the asking app's pages (translated to English) -> judge -> up to 3
+      the user's role (user.role): another role's page gives "only the owner can", never its steps
+  ```
+  Garagentic then got the masjid-style assistant: its help pages, its garage's live data through
+  read-only `/api/ai-data` endpoints (OpenAPI; the app's token plus a 5-minute token for the person
+  asking, so a mechanic sees no prices and branch staff only their branch; customer phone numbers
+  never sent), saved chats and recent questions, ready questions per role, voice, tables and charts
+  with Copy / Image / Print, and "Chat with Sino on WhatsApp" when it can't help. Found on the way:
+  an answer named the help page's title as a menu ("Garage settings") - pages now give full paths
+  and a "Where things are" page lists the real menu with roles; and a mechanic's Mark ready left no
+  button to tell the customer - the front desk now gets one.
 - **Try it:** open https://ai-engineer-web-seven.vercel.app (the access code is `HOSTED_ACCESS_CODE`
   in `phase10-cloud/.env`). Locally: `cd phase10-cloud && ./start.sh`, then
   `cd eval && npm run eval:public` to test the deployed app. Another app's view:
@@ -891,6 +911,12 @@ Every row is one loop of "find a problem, change one thing, measure again".
 | 131 | 10d.18 | The plate came back as the engine number after the prompt used the real card's plate as its example; an owner name was invented | Made-up examples; code rejects plates over 5 digits or inside the engine number / VIN; names never read | Garagentic tests |
 | 132 | 10d.18 | Sideways photos misread (header on the right, sometimes the left); PDFs could not be read | A preview to turn the photo upright before Read; a PDF's first page drawn with pdf.js | Browser checks |
 | 133 | 10d.18 | Command Center: tasks not counted, no per-app view, the users list wider than a phone, the old version shown after deploys | Tasks count as uses; app filter; Garages ranked; fixed columns; "A new version is ready - Reload" | `eval:tasks` 13/13; 375 px fits |
+| 134 | 10d.19 | Every app answered "how do I...?" from nothing; the service's handbook was sample documents | Registry `knowledge`: the app's help Markdown fetched, chunked, embedded per app; searched only for that app's callers | `eval:knowledge` 26/26 |
+| 135 | 10d.19 | Help pages answered the same for everyone: a mechanic could get the owner's salary steps | `Roles:` under a heading + `user.role` on `/api/ask`; another role's page reaches the answer without its steps | 34/34: "Only the owner can use Pay a salary" |
+| 136 | 10d.19 | An answer called the page title "Garage settings" a menu; an advisor was told where Expenses is (they have none) | Page titles that can't pass for menus, full paths in every section, a "Where things are" page with roles beside each item | Right answers live |
+| 137 | 10d.19 | The assistant knew only help pages; owners asked "which cars are ready?" | Garagentic `/api/ai-data` (10 read-only operations, OpenAPI) as the same registry entry; app token + a per-question asker token | Garagentic tests 87/87; live |
+| 138 | 10d.19 | "What am I working on?" found nothing (only "who am I" was called); "the Land Cruiser job" found nothing | "Who am I" includes the asker's open jobs; job search covers make and model | Both answered locally on Groq |
+| 139 | 10d.19 | Big chart answers back to back hit Groq's per-minute limit and Garagentic's 45 s timeout; the app's 100 questions a day now cover help, data, scans and drafts | Pause between test questions; raise the `garagentic` limit in the Command Center | Noted for the owner |
 
 Where things stand (Phase 10 code):
 
@@ -922,6 +948,7 @@ Where things stand (Phase 10 code):
 | `eval:kmcc` (10d.16): KMCC backend + this API on a throwaway database - tokens, roles (members refused others' data and KMCC's totals), dues worked out, names (Malayalam, initials, codes), MCP, limits, Telegram against a fake Telegram, a member's statement and year by year, isolation | 49/49 no model + Telegram; with answers 71/72 (qwen dropped one citation on a right answer); over MCP 49/49 | ready questions, member statement, year by year: 45/45 on Groq |
 | `eval:app-limits` (10d.17): dashboard key refused, pause refuses questions and voice, daily and monthly limits, refused not counted | 14/14 | live: the controls open with the admin key |
 | `eval:tasks` (10d.18), against a fake model server: key needed, text and photo to the right models, JSON out, bad requests and the app's limit, model alert (not listed, not found, cleared), usage filtered by app | 13/13 | live: Mulkiya scans through the service, Garagentic in the Command Center |
+| `eval:knowledge` (10d.19), against the demo app and a help-only app: reading pages and roles, add / refresh / remove, refused files (HTML, JSON, empty), one app's pages never in another's search, role-limited steps | 28/28 without answers | 34/34 on Groq: right pages cited, an Arabic question, "only the owner can" for a mechanic, data questions still call the API |
 | Usage metering and Command Center: caller, agents, models, cost recorded; dashboard key reads usage only; clap to wake (synthetic audio) | right on Ollama and on Groq; key 200 / 401; claps 5/5; phone voice 3/3; read-aloud unlock and languages; conversation 3/3 (simulated) | live: web and masjid questions recorded with app calls and cost; masjid users as codes |
 
 ---
@@ -1040,6 +1067,11 @@ what changed.
 34. **Asked for something that is not there, a model invents it.** The card has no owner name; the
     model gave one (10d.18). Don't ask for a field that may be missing when a wrong value is worse
     than none.
+35. **Put knowledge where it changes.** Help pages live in each app's repo, next to the features
+    they describe; the service only indexes them. A page written once in the service would go stale
+    with the first new button (10d.19).
+36. **A page title is not a menu name.** The model repeated "Garage settings and documents" as if it
+    were a screen. Write the path the user taps in every section, and list the real menu once (10d.19).
 
 ### What changed when the data got real (Phase 9)
 
@@ -1159,6 +1191,7 @@ Phase 10 (`phase10-cloud/`, its own `.env`; see `phase10-cloud/README.md`):
 | `bbc1826`, `5af1af2`, `f073d92`, `40e63ea` | Phase 10d.16: `eval:kmcc`, `apps/kmcc.json` and `kmcc-mcp.json` (KMCC repo: `ceb71fc` the assistant, Telegram and AI API; `563b77f` "my" as a search; `8e9c2f8` credit/debit statement; `2879691` profit and opening balance from descriptions, year by year) |
 | `37f0dac` | Phase 10d.17: each app's switch and daily / monthly limits in the Command Center, `eval:app-limits` |
 | `645b0ac`, `3cea9f2`, `e9a3e06`, `92e19d9`, `71f3f87`, `eb46a44`, `80d5998` | Phase 10d.18: `POST /api/ask/task` and `eval:tasks`, the vision model, the model alert, usage by app with Garages, the new-version bar, the Command Center on phones (Garagentic repo: `005b624` AI through this service, `ec28532` / `1774567` Mulkiya fields from real cards, `e1ba593` no names, `29a3fad` upright preview, `dfb8d81` photo or PDF, `1242b3f` AI uses a day per garage, `03d429c` garage names) |
+| `9d691df`, `24dec16`, `fd8b18e` | Phase 10d.19: app knowledge (`api/knowledge.js`, registry `knowledge`, role tags, `user.role`, `eval:knowledge`), `apps/garagentic.json` with help pages and data (Garagentic repo: `cc9afe2` help, `8fde368` assistant screen, `e6c0f68` `/api/ai-data`, `2dad69a` voice, tables and charts, `37f11d3` bell read per notification, `08d4f90` changes show at once) |
 
 Phase 9 commits are on the `phase9-real-docs` branch. Phase 10 work happens on the `phase10-cloud`
 branch, and `master` is fast-forwarded to it after each shipped step.
