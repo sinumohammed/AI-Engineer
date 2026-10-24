@@ -31,6 +31,8 @@ import { FREE_TIER, providerStates } from "./limits.js";
 const DEFAULT_PRICES = {
   "openai/gpt-oss-120b": [0.15, 0.6],
   "openai/gpt-oss-20b": [0.075, 0.3],
+  // Vision for app tasks with a photo (tasks.js) - console.groq.com/docs/models, 2026-10-24 (a preview model there).
+  "qwen/qwen3.8-27b": [0.8, 4],
   "gemini-3.5-flash-lite": [0.25, 1.5],
   // Text in, audio tokens out; $6 per million audio tokens until 2026-12-31, then $12.
   "gemini-3.8-flash-lite-tts": [0.5, 6],
