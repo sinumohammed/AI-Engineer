@@ -9,6 +9,11 @@
 //            -> each result is one numbered excerpt, cited like a handbook
 //               page: "masjid API: GET /ai/today-duty?date=2026-10-16"
 //
+// Apps with help pages (registry "knowledge", knowledge.js): the same question
+// is also searched among the asking caller's apps' pages - never another
+// app's - and the relevance judge (retrieve.js) keeps the ones that answer it.
+// They are excerpts like the API results, labelled "<app> help: <page>".
+//
 // The planner is structured output, not tool calling - the same choice as the
 // router (routing.js) and the relevance judge (retrieve.js): the model picks
 // from a fixed list in one call, the code does the calling. No loop, so no
@@ -34,6 +39,8 @@ import { appAllowed } from "./dataPolicy.js";
 import { currentAccess, callerMayUse } from "./appAccess.js";
 import { createHash } from "node:crypto";
 import { recordAppCall } from "./usage.js";
+import { searchKnowledge } from "./knowledge.js";
+import { englishForSearch, selectRelevant, CANDIDATES } from "./retrieve.js";
 
 const MAX_CALLS = 3;
 // What one result may put in the prompt: ~1,500 tokens. Groq's free tier
@@ -245,8 +252,23 @@ function toChunk(app, op, r) {
   };
 }
 
-// Said in the system prompt when app data is among the excerpts.
+// Said in the system prompt when app data or app help pages are among the excerpts.
 export function appNote(chunks, offset = 0) {
+  return liveNote(chunks, offset) + helpNote(chunks, offset);
+}
+
+function helpNote(chunks, offset) {
+  const numbers = chunks.map((c, i) => (c.help ? `[${offset + i + 1}]` : null)).filter(Boolean);
+  if (!numbers.length) return "";
+  return (
+    `\n\nExcerpt${numbers.length > 1 ? "s" : ""} ${numbers.join(", ")} ${numbers.length > 1 ? "are" : "is"} from the help pages of the ` +
+    "user's application (the ones starting with \"<app> help:\"). For questions about how to use the application, " +
+    "answer from them: give the steps with the button and screen names as written there, and cite them. Do not " +
+    "add features, buttons or settings the pages do not mention - if they do not cover the question, say so."
+  );
+}
+
+function liveNote(chunks, offset) {
   const numbers = chunks.map((c, i) => (c.app ? `[${offset + i + 1}]` : null)).filter(Boolean);
   if (!numbers.length) return "";
   return (
@@ -277,7 +299,7 @@ const RECENT_MAX = 50;
 // another's answer.
 export async function appContext(question, callbacks = {}) {
   const access = currentAccess();
-  const key = [access.caller, access.userToken ? createHash("sha256").update(access.userToken).digest("hex") : "", question].join("\n");
+  const key = [access.caller, access.userToken ? createHash("sha256").update(access.userToken).digest("hex") : "", access.role ?? "", question].join("\n");
   const hit = recent.get(key);
   if (hit && Date.now() - hit.at < RECENT_MS) {
     const data = await hit.promise;
@@ -295,9 +317,54 @@ export async function appContext(question, callbacks = {}) {
   return promise;
 }
 
-async function planAndFetch(question, { onCall, onResult } = {}) {
+async function planAndFetch(question, callbacks = {}) {
   const apps = await availableApps();
   if (!apps.length) return { chunks: [], calls: [], dropped: [], usage: null, apps: 0 };
+  const [live, help] = await Promise.all([
+    planCalls(question, apps.filter((a) => a.operations?.length), callbacks),
+    helpPages(question, apps.filter((a) => a.knowledge), callbacks),
+  ]);
+  const usage = [live.usage, help.usage].filter(Boolean).reduce((a, b) => ({ promptTokens: a.promptTokens + b.promptTokens, completionTokens: a.completionTokens + b.completionTokens }), { promptTokens: 0, completionTokens: 0 });
+  return { chunks: [...live.chunks, ...help.chunks], calls: live.calls, dropped: live.dropped, help: help.chunks.map((c) => ({ app: c.help, source: c.source })), usage, apps: apps.length };
+}
+
+// The apps' help pages for this question: searched in English (the pages and the
+// embedding model are English-first, as for the handbook), only among these apps,
+// then judged - the judge's empty list means the pages do not cover it.
+// A broken search must not break the answer: no pages, logged.
+const HELP_KEEP = 3;
+async function helpPages(question, apps, { onCall, onResult } = {}) {
+  if (!apps.length) return { chunks: [], usage: null };
+  try {
+    const english = await englishForSearch(question);
+    const rows = await searchKnowledge(english, apps.map((a) => a.name), CANDIDATES);
+    if (!rows.length) return { chunks: [], usage: null };
+    const { picked, usage } = await selectRelevant(english, rows);
+    const access = currentAccess();
+    const chunks = picked.slice(0, HELP_KEEP).map((r) => ({ source: r.source, help: r.app, content: forRole(r, access) }));
+    for (const app of new Set(chunks.map((c) => c.help))) {
+      onCall?.({ app, operation: "help pages", args: {} });
+      onResult?.({ app, operation: "help pages", ok: true });
+    }
+    return { chunks, usage };
+  } catch (err) {
+    console.error(`[apps] help pages search failed: ${err.message}`);
+    return { chunks: [], usage: null };
+  }
+}
+
+// A page for other roles: found, so the answer can say who does it, but without its steps -
+// a mechanic asking how to pay salaries hears "only the owner can", not the owner's steps.
+// The app still checks every action itself; this keeps answers to what the asker can follow.
+function forRole(row, access) {
+  const roles = row.roles ?? [];
+  if (!roles.length || access.admin || (access.role && roles.includes(access.role))) return row.content;
+  const where = row.content.split("\n")[0];
+  return `${where}\n(This part is only for: ${roles.join(", ")}. The person asking is ${access.role ? `"${access.role}"` : "not signed in with one of these roles"}, so do not give its steps - say who can do it.)`;
+}
+
+async function planCalls(question, apps, { onCall, onResult } = {}) {
+  if (!apps.length) return { chunks: [], calls: [], dropped: [], usage: null };
   const ids = apps.flatMap((a) => a.operations.map((op) => `${a.name}.${op.id}`));
   const res = await chat({
     model: JUDGE_MODEL,
@@ -333,6 +400,5 @@ async function planAndFetch(question, { onCall, onResult } = {}) {
     calls: results.map(({ chunk, ...r }) => r),
     dropped,
     usage: { promptTokens: res.promptTokens, completionTokens: res.completionTokens },
-    apps: apps.length,
   };
 }

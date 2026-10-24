@@ -77,8 +77,8 @@ check("Required arguments and enums kept", JSON.stringify(app.operations.find((o
 const raw = await redis.hGet(process.env.APPS_KEY, "hall");
 check("Token stored encrypted, not shown", !raw.includes("demo-token") && app.hasToken && !("tokenEnc" in app));
 check("Wrong token: refused at registration", (await refused(() => saveApp({ ...HALL, name: "hall-bad", token: "wrong" }), /401.*check the token/)) === true);
-check("Both openapi and mcp: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", openapi: "http://localhost:4041/api/ai/openapi.json" }), /one of the two/)) === true);
-check("Neither: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", mcp: undefined }), /one of the two/)) === true);
+check("Both openapi and mcp: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", openapi: "http://localhost:4041/api/ai/openapi.json" }), /not both/)) === true);
+check("None of openapi, mcp, knowledge: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", mcp: undefined }), /openapi.*mcp.*knowledge/)) === true);
 check("http to another machine: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", mcp: "http://example.com/mcp" }), /must use https/)) === true);
 check("whoami naming no read-only tool: refused", (await refused(() => saveApp({ ...HALL, name: "hall-x", whoami: "add_announcement" }), /whoami.*read-only tools/)) === true);
 check("Not an MCP server: refused with a clear message", (await refused(() => saveApp({ ...HALL, name: "hall-x", mcp: "http://localhost:4043/other" }), /could not read the MCP server's tools: 404/)) === true);

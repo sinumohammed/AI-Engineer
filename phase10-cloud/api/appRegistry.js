@@ -4,12 +4,15 @@
 // with no deployment of this service.
 //
 // An entry, as given by the admin:
-//   { name, description, openapi | mcp, callers, user?, token?, dataLevel?, timezone?, timeoutMs?, allow?, examples? }
+//   { name, description, openapi | mcp, knowledge?, callers, user?, token?, dataLevel?, timezone?, timeoutMs?, allow?, examples? }
 // - description: what the router and planner read to decide when to ask this app
 // - openapi: the URL of the app's OpenAPI 3 file; read at registration, so the
 //   app's GET operations are stored with the entry (openapiTools.js)
 // - mcp: instead of openapi - the URL of the app's MCP server (Streamable
 //   HTTP); its read-only tools are stored the same way (mcpTools.js, 10d.9)
+// - knowledge: the URL of the app's help pages (Markdown) - fetched, chunked
+//   and embedded at registration and on every refresh (knowledge.js); with or
+//   without openapi/mcp, so an app can bring only its help pages
 // - token: sent as "Authorization: Bearer <token>"; stored encrypted
 // - dataLevel: public | internal | confidential (dataPolicy.js, default internal)
 // - callers: who may ask this app's data - "web" (the web chat) and/or the
@@ -31,6 +34,7 @@ import { redis } from "./sessionStore.js";
 import { APPS_KEY, APP_SECRETS_KEY } from "./config.js";
 import { readOpenApi } from "./openapiTools.js";
 import { listMcpTools, readMcpTools } from "./mcpTools.js";
+import { fetchKnowledge, indexKnowledge, removeKnowledge, KnowledgeError } from "./knowledge.js";
 
 export const DATA_LEVELS = ["public", "internal", "confidential"];
 export const USER_MODES = ["none", "optional", "required"];
@@ -136,8 +140,10 @@ function validate(input, existing) {
   if (!/^[a-z0-9-]{1,30}$/.test(e.name ?? "")) throw new AppConfigError('name: 1-30 characters, a-z 0-9 and "-"');
   if (typeof e.description !== "string" || e.description.trim().length < 10) throw new AppConfigError("description: say in a sentence what data the app has (the router reads it)");
   e.description = e.description.trim().slice(0, 300);
-  if (Boolean(e.openapi) === Boolean(e.mcp)) throw new AppConfigError('give the app\'s "openapi" file URL or its "mcp" server URL - one of the two');
-  checkUrl(e.openapi ?? e.mcp, e.openapi ? "openapi" : "mcp");
+  if (e.openapi && e.mcp) throw new AppConfigError('give the app\'s "openapi" file URL or its "mcp" server URL - not both');
+  if (!e.openapi && !e.mcp && !e.knowledge) throw new AppConfigError('give the app\'s "openapi" file URL, its "mcp" server URL or its "knowledge" (help pages) URL');
+  if (e.openapi || e.mcp) checkUrl(e.openapi ?? e.mcp, e.openapi ? "openapi" : "mcp");
+  if (e.knowledge !== undefined && (typeof e.knowledge !== "string" || !checkUrl(e.knowledge, "knowledge"))) throw new AppConfigError("knowledge: the URL of the app's help pages (Markdown)");
   e.dataLevel = e.dataLevel ?? existing?.dataLevel ?? "internal";
   if (!DATA_LEVELS.includes(e.dataLevel)) throw new AppConfigError(`dataLevel: one of ${DATA_LEVELS.join(", ")}`);
   e.callers = e.callers ?? existing?.callers;
@@ -172,16 +178,31 @@ export async function saveApp(input) {
   const existing = await rawApp(input?.name);
   const e = validate(input, existing);
   const token = e.token ?? (existing?.tokenEnc ? decrypt(existing.tokenEnc) : null);
-  const { baseUrl, title, operations, skipped } = e.mcp ? await readMcpServer(e.mcp, token, e.timeoutMs, e.allow) : await readSpec(e.openapi, token, e.timeoutMs, e.allow);
-  checkUrl(baseUrl, e.mcp ? "mcp" : "the OpenAPI servers[0].url");
+  const { baseUrl, title, operations, skipped } = e.mcp ? await readMcpServer(e.mcp, token, e.timeoutMs, e.allow)
+    : e.openapi ? await readSpec(e.openapi, token, e.timeoutMs, e.allow)
+    : { baseUrl: null, title: e.name, operations: [], skipped: {} };
+  if (baseUrl) checkUrl(baseUrl, e.mcp ? "mcp" : "the OpenAPI servers[0].url");
   if (e.whoami && !operations.some((o) => o.id === e.whoami)) {
     throw new AppConfigError(`whoami: "${e.whoami}" is not one of the app's ${e.mcp ? "read-only tools" : "GET operations"} (${operations.map((o) => o.id).join(", ")})`);
   }
+  // Help pages: read and indexed before the entry is saved, so a bad file leaves the old entry as it was.
+  let knowledgeInfo = null;
+  if (e.knowledge) {
+    try {
+      knowledgeInfo = await indexKnowledge(e.name, await fetchKnowledge(e.knowledge, token, e.timeoutMs));
+    } catch (err) {
+      if (err instanceof KnowledgeError) throw new AppConfigError(err.message, err.status);
+      throw new AppConfigError(`could not index the knowledge file: ${err.message}`, 500);
+    }
+  } else if (existing?.knowledge) {
+    await removeKnowledge(e.name);
+  }
   const entry = {
     name: e.name,
-    kind: e.mcp ? "mcp" : "openapi",
+    kind: e.mcp ? "mcp" : e.openapi ? "openapi" : "knowledge",
     description: e.description,
-    ...(e.mcp ? { mcp: e.mcp } : { openapi: e.openapi }),
+    ...(e.mcp ? { mcp: e.mcp } : e.openapi ? { openapi: e.openapi } : {}),
+    ...(e.knowledge ? { knowledge: e.knowledge, knowledgeInfo } : {}),
     baseUrl,
     title,
     dataLevel: e.dataLevel,
@@ -233,16 +254,18 @@ async function rawApp(name) {
   return v ? JSON.parse(v) : null;
 }
 
-// Read the app's OpenAPI file (or MCP tools) again - after the app added or changed an endpoint.
+// Read the app's OpenAPI file (or MCP tools) and help pages again - after the app changed them.
 export async function refreshApp(name) {
   const existing = await rawApp(name);
   if (!existing) throw new AppConfigError(`no app named "${name}"`, 404);
-  const { tokenEnc, operations, baseUrl, title, updatedAt, kind, ...config } = existing;
+  const { tokenEnc, operations, baseUrl, title, updatedAt, kind, knowledgeInfo, ...config } = existing;
   return saveApp(config);
 }
 
 export async function removeApp(name) {
+  const existing = await rawApp(name);
   const removed = await redis.hDel(APPS_KEY, name);
   cache = null;
   if (!removed) throw new AppConfigError(`no app named "${name}"`, 404);
+  if (existing?.knowledge) await removeKnowledge(name);
 }

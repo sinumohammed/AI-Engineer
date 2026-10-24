@@ -49,7 +49,8 @@ const RERANK_PROMPT =
   "Sharing words or a general topic with the question is not enough. If none of them answer it, return an " +
   "empty list - that is the right answer for a question these documents do not cover.";
 
-async function selectRelevant(question, candidates) {
+// Also judges the connected apps' help pages (apps.js).
+export async function selectRelevant(question, candidates) {
   const excerpts = candidates.map((c, i) => `[${i + 1}] ${c.content.replace(/\s+/g, " ").trim()}`).join("\n\n");
   const res = await chat({
     model: JUDGE_MODEL,
@@ -162,7 +163,7 @@ const TRANSLATE_PROMPT =
   "and numbers exactly as written. Translate only - do not answer, explain or add anything. If it is already " +
   "English, return it unchanged.";
 
-async function englishForSearch(question) {
+export async function englishForSearch(question) {
   if (!TRANSLATE_SEARCH || !looksNonEnglish(question)) return question;
   const res = await chat({
     model: JUDGE_MODEL,

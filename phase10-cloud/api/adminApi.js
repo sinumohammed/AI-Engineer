@@ -5,7 +5,7 @@
 //
 //   GET    /api/admin/apps                 the apps (tokens never shown)
 //   PUT    /api/admin/apps/:name           add or replace one - body: the app's entry
-//   POST   /api/admin/apps/:name/refresh   read its OpenAPI file again
+//   POST   /api/admin/apps/:name/refresh   read its OpenAPI file (or MCP tools) and help pages again
 //   DELETE /api/admin/apps/:name
 //   POST   /api/admin/try                  { question, userToken? } - plan and fetch only, no answer:
 //                                          which app calls a question makes, and what came back.
@@ -83,7 +83,8 @@ adminApi.post(
     if (!question) throw new AppConfigError("question is required");
     const userToken = typeof req.body?.userToken === "string" && req.body.userToken ? req.body.userToken : null;
     const data = await withAccess({ admin: true, userToken }, () => appContext(question));
-    return { calls: data.calls, dropped: data.dropped, excerpts: data.chunks.map((c) => c.content.slice(0, 1500)) };
+    // Excerpts: one per call, in order, then the help pages kept.
+    return { calls: data.calls, dropped: data.dropped, help: data.help ?? [], excerpts: data.chunks.map((c) => c.content.slice(0, 1500)) };
   })
 );
 adminApi.get("/ask-keys", handle(() => listAskKeys()));

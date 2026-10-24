@@ -44,6 +44,7 @@ import { parseTask, runTask, TaskError } from "./tasks.js";
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 const USER_REF = CONVERSATION_ID;
+const USER_ROLE = /^[A-Za-z0-9_-]{1,30}$/;
 
 // Compared through hashes with timingSafeEqual, as the access code is (server.js).
 const digest = (s) => createHash("sha256").update(String(s)).digest();
@@ -96,8 +97,10 @@ askApi.post("/", async (req, res) => {
   // so the usage dashboard can show use per user inside an app. Never a name.
   const validToken = user?.token === undefined || (typeof user.token === "string" && user.token.length > 0 && user.token.length <= 4096);
   const validRef = user?.ref === undefined || (typeof user.ref === "string" && USER_REF.test(user.ref));
-  if (user !== undefined && !(user && (user.token !== undefined || user.ref !== undefined) && validToken && validRef)) {
-    return res.status(400).json({ error: '"user" must be { "token"?: "...", "ref"?: "..." } - a token of up to 4096 characters, a ref of 1-100 letters, digits, _ . : -' });
+  // The user's role in the app ("mechanic", "member") - which help pages they get the steps of (apps.js).
+  const validRole = user?.role === undefined || (typeof user.role === "string" && USER_ROLE.test(user.role));
+  if (user !== undefined && !(user && (user.token !== undefined || user.ref !== undefined || user.role !== undefined) && validToken && validRef && validRole)) {
+    return res.status(400).json({ error: '"user" must be { "token"?: "...", "ref"?: "...", "role"?: "..." } - a token of up to 4096 characters, a ref of 1-100 letters, digits, _ . : -, a role of 1-30 a-z 0-9 _ -' });
   }
 
   // The app's switch and its daily / monthly limits (appLimits.js, set in the Command Center).
@@ -114,7 +117,7 @@ askApi.post("/", async (req, res) => {
       const [history, summary] = sessionId ? await Promise.all([getHistory(sessionId), getSummary(sessionId)]) : [[], null];
       const q = question.trim();
       // Notices (e.g. "answered by the fallback model") are returned with the answer.
-      const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token, display }, () =>
+      const { result, notices } = await withAccess({ caller: req.appName, userToken: user?.token, role: user?.role?.toLowerCase(), display }, () =>
         collectNotices(() => (mode === "multi" ? runMultiAgent(q, history, { summary, forceAgent: agent }) : runAgent(q, history, { summary })))
       );
       const { answer, usage, fromCompanyDocs, sources = [] } = result;

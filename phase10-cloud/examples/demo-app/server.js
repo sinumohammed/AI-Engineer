@@ -3,6 +3,7 @@
 //   - read-only endpoints under /api/ai/, returning only what the AI needs
 //   - an access token for them ("Authorization: Bearer <token>")
 //   - /api/ai/openapi.json describing them
+//   - /api/ai/help.md: its help pages (Markdown), for "how do I...?" questions
 // Made-up data in the shape of a community hall: a volunteer duty roster,
 // members, monthly dues, announcements. Dates are relative to today, so
 // "who is on duty today?" always has an answer. No packages: node:http only.
@@ -117,6 +118,28 @@ const OPENAPI = {
   components: { parameters: { Limit: { name: "limit", in: "query", required: false, description: "How many, default 5", schema: { type: "integer" } } } },
 };
 
+// The app's help pages: "# " starts a page, "## " a section (api/knowledge.js).
+const HELP = `# Duty swaps
+## Swap a duty day
+Open Duty roster, tap your day, then tap Swap. Pick the member you swap with; they get a message and must tap Accept.
+The swap shows on the roster only after they accept.
+
+## Cancel a swap
+A swap that is not accepted yet can be cancelled: open the day and tap Cancel swap.
+
+# Paying dues
+## Pay this month's dues
+Open Profile, then Dues, and tap Pay now. You can pay by card or bank transfer. Cash goes to the treasurer, who marks it paid.
+
+## Receipts
+Every payment gets a receipt under Profile > Dues > Receipts. Tap one to share it on WhatsApp.
+
+# Booking the hall
+## Book the hall for an event
+Open Bookings, tap New booking, pick a date and the hours. The secretary approves it within two days.
+Members pay no hall fee; guests pay 50 a day.
+`;
+
 function viewer(req) {
   const t = req.headers["x-user-token"];
   if (!t) return { all: true };
@@ -127,6 +150,7 @@ function viewer(req) {
 
 function route(path, q, who) {
   if (path === "/api/ai/openapi.json") return [200, OPENAPI];
+  if (path === "/api/ai/help.md") return [200, HELP];
   if (path === "/api/ai/me") {
     if (!who.memberId) return [200, { role: who.admin ? "admin" : "anonymous" }];
     const m = MEMBERS.find((x) => x.id === who.memberId);
@@ -170,8 +194,9 @@ function route(path, q, who) {
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const send = (status, body) => {
-    res.writeHead(status, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(body));
+    const text = typeof body === "string";
+    res.writeHead(status, { "Content-Type": text ? "text/markdown; charset=utf-8" : "application/json" });
+    res.end(text ? body : JSON.stringify(body));
   };
   if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: "access token required" });
   if (req.method !== "GET") return send(405, { error: "read-only" });

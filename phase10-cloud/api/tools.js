@@ -30,7 +30,8 @@ function extractIdentifiers(text) {
 // crashed the whole server. A pool opens connections as queries need them
 // and drops broken ones, so either only fails the query it happens during -
 // including when Neon closes connections as it suspends after 5 idle minutes.
-const db = new pg.Pool({ connectionString: DATABASE_URL });
+// Shared with the apps' help pages (knowledge.js), which live in the same database.
+export const db = new pg.Pool({ connectionString: DATABASE_URL });
 // The pool reports a broken idle connection here; without a listener Node
 // treats it as an unhandled error and the process exits.
 db.on("error", (err) => console.error(`[db] idle connection error: ${err.message}`));

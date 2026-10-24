@@ -195,7 +195,8 @@ export const specialists = {
   connected_apps: {
     description:
       "Questions about live data kept in the user's connected applications (listed below with what each holds): " +
-      "their records, schedules, people, amounts and dates. Only when an application is listed.",
+      "their records, schedules, people, amounts and dates - and how to use those applications (their help pages). " +
+      "Only when an application is listed.",
     prepare: async (question) => {
       const data = await appContext(question);
       if (!data.apps) return { answer: "No applications are connected yet, so I cannot look that up.", meta: { appCalls: [] } };
@@ -204,8 +205,8 @@ export const specialists = {
       }
       return {
         systemContent:
-          "You are a helpful assistant answering from live data fetched from the user's connected applications. " +
-          "Answer from that data only. You have no access to this company's internal documents - if the question " +
+          "You are a helpful assistant answering from the user's connected applications: live data fetched from " +
+          "them and their help pages. Answer from those excerpts only. You have no access to this company's internal documents - if the question " +
           "needs them, say so. " +
           CITE_INSTRUCTION +
           appNote(data.chunks) +

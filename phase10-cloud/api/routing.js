@@ -80,7 +80,7 @@ export const ROUTER_PROMPT =
   "to attachment. A question that compares the file with the company's rules has two parts: one for " +
   "attachment, one for company_docs. With no file attached, never choose attachment.\n" +
   "- A question about data kept in one of the connected applications listed below (their records, schedules, " +
-  "people, amounts) goes to connected_apps, even when it sounds like a company question. A question about the " +
+  "people, amounts) or about how to use one of them goes to connected_apps, even when it sounds like a company question. A question about the " +
   "company's written policies stays with company_docs. With no application listed, never choose connected_apps.";
 
 // Phase 10 #4: the connected apps are added without a deployment, so the
@@ -235,8 +235,9 @@ export async function applyAppPriority(decision) {
   const tasks = await Promise.all(
     decision.tasks.map(async (t) => {
       if (!["general", "coding", "company_docs"].includes(t.agent)) return [t];
-      const { calls } = await appContext(t.question);
-      if (!calls.length) return [t];
+      // Live data to fetch, or help pages that answer it ("how do I send a quote?").
+      const { chunks } = await appContext(t.question);
+      if (!chunks.length) return [t];
       overridden.push(t.agent);
       // A handbook choice is kept and the app asked as well: with the demo
       // hall app connected, "When does the on-call rotation hand off?" made

@@ -18,6 +18,7 @@
     "eval:kmcc": "node --env-file=../.env kmcc-app.js",
     "eval:app-limits": "node --env-file=../.env app-limits.js",
     "eval:tasks": "node --env-file=../.env tasks.js",
+    "eval:knowledge": "node --env-file=../.env app-knowledge.js",
     "eval:citations": "node --env-file=../.env citation-eval.js",
     "eval:citations:multi": "AGENT=multi node --env-file=../.env citation-eval.js",
     "eval:multilingual": "node --env-file=../.env multilingual-eval.js",

@@ -95,6 +95,8 @@ export const DASHBOARD_KEY = process.env.DASHBOARD_KEY || null;
 export const APP_SECRETS_KEY = process.env.APP_SECRETS_KEY || null;
 // The Redis key holding the registry - the eval uses its own.
 export const APPS_KEY = process.env.APPS_KEY ?? "apps:registry";
+// Each app's own help pages (knowledge.js), in the handbook's database - the eval uses its own table.
+export const APP_KNOWLEDGE_TABLE = process.env.APP_KNOWLEDGE_TABLE ?? "app_knowledge";
 // Each app's switch and daily / monthly limits (appLimits.js), set from the Command Center.
 export const APP_LIMITS_KEY = process.env.APP_LIMITS_KEY ?? "apps:limits";
 // Phase 10 UI: voice input (transcribe.js). Gemini writes the text when

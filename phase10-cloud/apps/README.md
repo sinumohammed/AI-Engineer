@@ -146,6 +146,7 @@ npm run eval:mcp            (in eval/; ANSWERS=1 adds the model questions)
 | `description` | what data the app has - the router and planner decide by it |
 | `openapi` | URL of the app's OpenAPI file (https; http only on this machine) |
 | `mcp` | instead of `openapi`: URL of the app's MCP server (Streamable HTTP, e.g. `https://app.example.com/mcp`) - see above |
+| `knowledge` | optional - URL of the app's help pages, one Markdown file (`# Page`, `## Section`); with or without `openapi`/`mcp`, so an app can bring only its help pages - see below |
 | `token` | `"$ENV_NAME"` reads it from `../.env`; stored encrypted |
 | `callers` | **required** - who may ask this app's data: `"web"` (this service's web chat) and/or `/api/ask` app names (the name of the app's ask-key: `npm run app -- askkey new <name>`, or `APP_API_KEYS`). The masjid entry is `["masjid"]`: only the masjid app's own chat, never the general web chat |
 | `user` | `"none"` (default), `"optional"` or `"required"` - pass the caller's logged-in user on to the app (header `X-User-Token`), so it answers as that user may see it; `"required"`: never used without a user |
@@ -156,8 +157,34 @@ npm run eval:mcp            (in eval/; ANSWERS=1 adds the model questions)
 | `allow` | optional `["GET /ai/today-duty", ...]` - use only these operations (MCP: tool names) |
 | `examples` | 3-5 questions users ask - kept with the app for testing |
 
-After the app adds or changes an endpoint in its `openapi.json` (or a tool on its MCP server):
-`npm run app -- refresh <name>`.
+After the app adds or changes an endpoint in its `openapi.json` (or a tool on its MCP server),
+or changes its help pages: `npm run app -- refresh <name>`.
+
+## Help pages: `knowledge`
+
+An app's "how do I...?" answers come from its own help pages, kept in the app's
+repo next to the features they describe. The app serves them as one Markdown
+file; this service reads it on `add` and every `refresh` (`../api/knowledge.js`):
+
+```
+# Quotes                      <- a page (the label under answers: "garagentic help: Quotes")
+## Send a quote               <- a section; sections longer than ~1,200 characters are cut between paragraphs
+Open the job, tap Draft quote, ...
+```
+
+- Chunks are embedded and stored in the handbook's database (table `app_knowledge`, tagged with the app's name).
+  A refresh replaces all of the app's chunks at once; a refresh that fails keeps the old ones.
+- **Roles:** a line `Roles: owner, manager` right under a `#` or `##` heading limits that page or section to
+  those roles (a section's own line wins; no line = everyone). The app sends the asking user's role with
+  `/api/ask` as `user.role` (e.g. `{ "user": { "ref": "garage:sino", "role": "mechanic" } }`). A page for other
+  roles is still found, but reaches the answer without its steps - only who can do it ("only the owner can").
+  No role sent: only untagged pages give steps. The app still checks every action itself.
+- A question searches only the pages of apps its caller may use (`callers`), in English (translated first,
+  like the handbook), and the relevance judge keeps up to 3 that answer it. They are excerpts next to the
+  app's live data, cited "<app> help: <page>".
+- Refused: an HTML page (a single-page app's fallback for a wrong URL), JSON, an empty file, over 300 KB,
+  200 pages or 500 chunks.
+- Test: `npm run eval:knowledge` in `eval/` (ANSWERS=1 adds the model questions).
 
 ## Who sees what: callers and users
 

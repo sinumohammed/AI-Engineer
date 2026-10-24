@@ -5,6 +5,8 @@
 //   { caller: "web" }                              the web chat (server.js)
 //   { caller: "masjid", userToken: "..." }         POST /api/ask with the masjid app's key,
 //                                                  for one of its logged-in users (askApi.js)
+//   role: "mechanic"                               that user's role in the app - which help pages
+//                                                  they get the steps of (apps.js, knowledge.js)
 //   display: { tables, charts }                    what the asking app's screen can show (display.js)
 //
 // Kept per request with AsyncLocalStorage instead of being passed through
@@ -17,11 +19,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 const store = new AsyncLocalStorage();
 
 export function withAccess(access, fn) {
-  return store.run({ caller: access.caller ?? null, userToken: access.userToken ?? null, admin: Boolean(access.admin), display: access.display ?? null }, fn);
+  return store.run({ caller: access.caller ?? null, userToken: access.userToken ?? null, role: access.role ?? null, admin: Boolean(access.admin), display: access.display ?? null }, fn);
 }
 
 export function currentAccess() {
-  return store.getStore() ?? { caller: null, userToken: null, admin: false, display: null };
+  return store.getStore() ?? { caller: null, userToken: null, role: null, admin: false, display: null };
 }
 
 // May this request use this app? The admin's "try" may use any app, but an
