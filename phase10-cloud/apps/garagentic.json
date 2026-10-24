@@ -1,13 +1,22 @@
 {
   "name": "garagentic",
-  "description": "Garagentic, the garage management app (job cards, quotes, invoices, customers, reminders, parts, team, pay): its help pages - how to use each screen, by role",
+  "description": "Garagentic garage app: live data as the asking team member may see it (jobs and cars in the garage, invoices and unpaid ones, customers, car history, reminders due, parts and stock, money, team, quote requests) and its help pages - how to use each screen, by role",
+  "openapi": "https://garagentic.co/api/ai-data/openapi.json",
   "knowledge": "https://garagentic.co/help.md",
-  "callers": ["garagentic"],
-  "dataLevel": "public",
+  "token": "$GARAGENTIC_AI_TOKEN",
+  "callers": [
+    "garagentic"
+  ],
+  "user": "required",
+  "whoami": "me",
+  "dataLevel": "internal",
   "timezone": "Asia/Muscat",
+  "timeoutMs": 20000,
   "examples": [
-    "How do I send a quote?",
-    "How do I add a mechanic to my team?",
-    "How do I pay a salary?"
+    "Which cars are ready today?",
+    "Unpaid invoices this week?",
+    "Whose service is due?",
+    "How much did we take this month?",
+    "How do I send a quote?"
   ]
 }
