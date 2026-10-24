@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { App as AntApp, theme } from "antd";
+import { App as AntApp, Button, theme } from "antd";
 import { XProvider } from "@ant-design/x";
 import App from "./App.jsx";
 
@@ -40,7 +40,30 @@ function useSystemDark() {
   return dark;
 }
 
+// A new version was deployed: the service worker (vite-plugin-pwa, autoUpdate) has it, but this page
+// still runs the old one until it reloads - so after a deploy the Command Center looked unchanged.
+// Says so with a Reload button; never reloads by itself (a question or a voice conversation may be going).
+// Also asks for updates when the page comes back into view, for pages left open for hours.
+function useNewVersion() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const sw = navigator.serviceWorker;
+    if (!sw) return undefined;
+    const hadOne = !!sw.controller; // the first install also "changes" the controller - not an update
+    const onChange = () => hadOne && setReady(true);
+    const check = () => document.visibilityState === "visible" && sw.getRegistration().then((r) => r?.update()).catch(() => {});
+    sw.addEventListener("controllerchange", onChange);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      sw.removeEventListener("controllerchange", onChange);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+  return ready;
+}
+
 export default function Root() {
+  const newVersion = useNewVersion();
   const [themeMode, setThemeModeState] = useState(readStored);
   const systemDark = useSystemDark();
   const hash = useHash();
@@ -77,6 +100,12 @@ export default function Root() {
       }}
     >
       <AntApp>
+        {newVersion && (
+          <div className="new-version" role="status">
+            A new version is ready.
+            <Button size="small" type="primary" onClick={() => window.location.reload()}>Reload</Button>
+          </div>
+        )}
         {hash.startsWith("#/command") ? (
           <Suspense fallback={null}>
             <CommandCenter isDark={isDark} />

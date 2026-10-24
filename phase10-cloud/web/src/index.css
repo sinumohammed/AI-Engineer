@@ -585,3 +585,10 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* "A new version is ready" (Root.jsx) - above everything, out of the way of the chat box. */
+.new-version {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2000;
+  display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px;
+  background: #1f1f2e; color: #fff; border-radius: 999px; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); font-size: 14px;
+}
