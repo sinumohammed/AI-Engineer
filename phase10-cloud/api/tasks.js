@@ -12,7 +12,8 @@ import { chat } from "./llmClient.js";
 import { LLM_FORMAT, JUDGE_MODEL, JUDGE_REASONING_EFFORT } from "./config.js";
 
 export const TASK_MODEL = process.env.TASK_MODEL || JUDGE_MODEL;
-export const VISION_MODEL = process.env.VISION_MODEL || "meta-llama/llama-4-maverick-17b-128e-instruct";
+// Groq's vision model as of 2026-10-24 (console.groq.com/docs/vision; Llama 4 Maverick is gone - 404).
+export const VISION_MODEL = process.env.VISION_MODEL || "qwen/qwen3.8-27b";
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_TEXT = 8000;
 const MAX_IMAGE_CHARS = 4_400_000; // base64; Vercel takes request bodies up to 4.5 MB
@@ -59,8 +60,9 @@ export async function runTask({ instructions, input, image }) {
   const user = image
     ? [{ type: "text", text: input || "Read this image." }, { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.data}` } }]
     : input;
-  // Text tasks run like the judge (same model and effort); the vision model does not think first.
-  const res = await chat({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], label: image ? "task-vision" : "task", reasoningEffort: image ? null : JUDGE_REASONING_EFFORT });
+  // Text tasks run like the judge (same model and effort). The vision model (Qwen) can think first;
+  // "none" turns that off, so the reply is the JSON alone (Groq docs, reasoning).
+  const res = await chat({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], label: image ? "task-vision" : "task", reasoningEffort: image ? "none" : JUDGE_REASONING_EFFORT });
   const result = jsonOf(res.content ?? "");
   if (!result) throw new TaskError("The model's reply was not JSON - please try again.", 502);
   return { result, model };

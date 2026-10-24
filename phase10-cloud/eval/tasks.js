@@ -71,7 +71,7 @@ try {
   check("photo task: read", vision.status === 200 && vision.body.result?.plate === "4521 AB" && vision.body.model === "fake-vision", JSON.stringify(vision.body));
   const v = seen.at(-1);
   const parts = v.messages[1].content;
-  check("photo task: the vision model gets the photo as an image part, no reasoning effort", v.model === "fake-vision" && parts[1]?.image_url?.url === `data:image/jpeg;base64,${photo}` && v.reasoning_effort === undefined, JSON.stringify(v).slice(0, 200));
+  check("photo task: the vision model gets the photo as an image part, thinking off", v.model === "fake-vision" && parts[1]?.image_url?.url === `data:image/jpeg;base64,${photo}` && v.reasoning_effort === "none", JSON.stringify(v).slice(0, 200));
 
   reply = "Sorry, I cannot read that.";
   const notJson = await task({ instructions: "Read the card", input: "?" });
