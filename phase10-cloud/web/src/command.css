@@ -237,3 +237,5 @@
 .app-limit-edit label { display: flex; flex-direction: column; gap: 2px; }
 .app-limit-edit .ant-input-number { width: 104px; }
 .ft-track.is-high span { background: var(--s4); }
+
+.cc-model-alert { margin-bottom: 12px; }

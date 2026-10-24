@@ -5,6 +5,8 @@
 // image part; the reply's JSON comes back as an object (code fences and all);
 // a reply that is not JSON, a bad request and a used-up app limit are refused
 // plainly; a refused request is not counted.
+// Also the Command Center's model alert (api/modelCheck.js): a model in use that the provider
+// no longer lists, or that answered "model not found", is named with the setting to change.
 //   npm run eval:tasks
 import { spawn } from "node:child_process";
 import http from "node:http";
@@ -19,13 +21,23 @@ const RUN = `tasks-eval-${process.pid}`;
 const APP = `taskapp${process.pid % 100000}`;
 
 let reply = "{}";
+let listed = ["fake-small", "fake-vision"]; // fake-chat is "retired"
+let gone = null; // a model that answers 404 model_not_found
 const seen = [];
 const fake = http.createServer((req, res) => {
+  res.setHeader("content-type", "application/json");
+  if (req.method === "GET" && req.url === "/v1/models") return res.end(JSON.stringify({ data: listed.map((id) => ({ id })) }));
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
-    seen.push(JSON.parse(body));
-    res.setHeader("content-type", "application/json");
+    const b = JSON.parse(body);
+    seen.push(b);
+    if (b.model === gone) {
+      res.statusCode = 404;
+      return res.end(JSON.stringify({ error: { message: `The model \`${gone}\` does not exist or you do not have access to it.`, code: "model_not_found" } }));
+    }
+    res.setHeader("x-ratelimit-limit-requests", "1000"); // as Groq does: a working call clears the alert
+    res.setHeader("x-ratelimit-remaining-requests", "999");
     res.end(JSON.stringify({ choices: [{ message: { content: reply } }], usage: { prompt_tokens: 100, completion_tokens: 20 } }));
   });
 }).listen(FAKE);
@@ -34,7 +46,8 @@ const env = {
   LLM_PROVIDER: "openai", LLM_BASE_URL: `http://localhost:${FAKE}/v1`, LLM_API_KEY: "fake",
   CHAT_MODEL: "fake-chat", JUDGE_MODEL: "fake-small", VISION_MODEL: "fake-vision", TASK_MODEL: "",
   APPS_KEY: `apps:registry:${RUN}`, APP_LIMITS_KEY: `apps:limits:${RUN}`, ASK_KEYS_KEY: `ask:keys:${RUN}`,
-  APP_API_KEYS: `${APP}=${ASK_KEY}`, APP_DAILY_LIMIT: "4", PORT: String(PORT), ACCESS_CODE: "", FALLBACK_MODEL: "",
+  APP_API_KEYS: `${APP}=${ASK_KEY}`, APP_DAILY_LIMIT: "6", PORT: String(PORT), ACCESS_CODE: "", FALLBACK_MODEL: "",
+  MODELS_LIST_KEY: `models:${RUN}`, LIMITS_KEY: `limits:${RUN}`, ADMIN_KEY: `adm_${randomBytes(18).toString("base64url")}`,
 };
 
 let passed = 0;
@@ -85,10 +98,31 @@ try {
   ]);
   check("bad requests: 400, not counted", bad.every((b) => b.status === 400), bad.map((b) => b.status).join(","));
 
+  // The model alert. The provider's list lacks the chat model: named ahead of time, with every
+  // setting that uses it; the models it lists raise nothing.
+  const alerts = async () => (await (await fetch(`${AI}/api/admin/usage?days=1`, { headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } })).json()).modelAlerts;
+  const a0 = await alerts();
+  const chatAlert = a0?.find((a) => a.model === "fake-chat");
+  check("model alert: a model the provider no longer lists is named before anything fails", a0?.length === 1 && chatAlert && /no longer lists/.test(chatAlert.reason) && ["CHAT_MODEL", "ROUTER_MODEL", "SPECIALIST_MODEL"].every((x) => chatAlert.settings.includes(x)), JSON.stringify(a0));
+
+  // The vision model answers "model not found" (as Llama 4 Maverick did live): named, with its setting.
+  gone = "fake-vision";
+  const failed = await task({ instructions: "Read the card", image: { mimeType: "image/jpeg", data: photo } });
+  const a1 = await alerts();
+  const v1 = a1?.find((a) => a.model === "fake-vision");
+  check("model alert: a 'model not found' answer names the model and VISION_MODEL", failed.status >= 500 && v1 && v1.settings.includes("VISION_MODEL") && /model not found/.test(v1.reason) && /Mulkiya/.test(v1.purposes.join()), JSON.stringify(a1));
+
+  // Fixed (the model works again): the alert goes.
+  gone = null;
+  reply = '{"ok":true}';
+  await task({ instructions: "Read the card", image: { mimeType: "image/jpeg", data: photo } });
+  const a2 = await alerts();
+  check("model alert: gone once the model answers again", !a2?.some((a) => a.model === "fake-vision"), JSON.stringify(a2));
+
   reply = "{}";
-  const fourth = await task({ instructions: "x", input: "y" });
-  const fifth = await task({ instructions: "x", input: "y" });
-  check("the app's daily limit counts tasks (4 a day here): the fifth is refused", fourth.status === 200 && fifth.status === 429, `${fourth.status} ${fifth.status} ${fifth.body.error ?? ""}`);
+  const sixth = await task({ instructions: "x", input: "y" });
+  const seventh = await task({ instructions: "x", input: "y" });
+  check("the app's daily limit counts tasks (6 a day here): the seventh is refused", sixth.status === 200 && seventh.status === 429, `${sixth.status} ${seventh.status} ${seventh.body.error ?? ""}`);
 } finally {
   server.kill();
   fake.close();

@@ -423,6 +423,12 @@ export default function CommandCenter({ isDark }) {
       </header>
 
       <main className="cc-main">
+        {/* A model this service uses is gone at Groq (api/modelCheck.js): what breaks and which setting to change. */}
+        {d?.modelAlerts?.map((m) => (
+          <Alert key={m.model} type="error" showIcon className="cc-model-alert"
+            title={`Model missing: ${m.model}`}
+            description={`${m.reason}. This breaks ${m.purposes.join(", ")}. Set ${m.settings.join(" / ")} on Vercel (ai-engineer-api) to a current model from console.groq.com/docs/models, then redeploy.`} />
+        ))}
         <Console accessCode={accessCode} dashKey={dashKey} voiceOnServer={access.voice} onAnswered={usage.reload} freeTier={d?.freeTier} />
 
         <section className="cc-section">

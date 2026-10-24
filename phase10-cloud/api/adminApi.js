@@ -31,6 +31,7 @@ import { listApps, saveApp, refreshApp, removeApp, publicView, AppConfigError } 
 import { appContext } from "./apps.js";
 import { withAccess } from "./appAccess.js";
 import { usageReport, freeTierToday } from "./usage.js";
+import { modelAlerts } from "./modelCheck.js";
 import { USAGE_OPENAPI } from "./usageOpenapi.js";
 import { createAskKey, listAskKeys, revokeAskKeys } from "./askKeys.js";
 import { appLimitsReport, setAppLimits } from "./appLimits.js";
@@ -95,9 +96,9 @@ adminApi.get(
   "/usage",
   handle(async (req) => {
     const days = Math.min(365, Math.max(1, Math.round(Number(req.query.days) || 30)));
-    const [report, apps, freeTier] = await Promise.all([usageReport(days), listApps(), freeTierToday()]);
-    // The registry too, so an app with no use yet still shows (with zeros).
-    return { ...report, freeTier, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
+    const [report, apps, freeTier, alerts] = await Promise.all([usageReport(days), listApps(), freeTierToday(), modelAlerts()]);
+    // The registry too, so an app with no use yet still shows (with zeros). modelAlerts: models gone at Groq.
+    return { ...report, freeTier, modelAlerts: alerts, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
   })
 );
 

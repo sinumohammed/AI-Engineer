@@ -14,7 +14,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { withRetry } from "./retry.js";
 import { recordModel } from "./usage.js";
-import { noteRateHeaders, noteExhausted } from "./limits.js";
+import { noteRateHeaders, noteExhausted, noteMissing } from "./limits.js";
 import { LLM_FORMAT, LLM_PROVIDER, LLM_BASE_URL, CHAT_MODEL, FALLBACK_MODELS, NUM_CTX, TEMPERATURE, REASONING_EFFORT, authHeaders } from "./config.js";
 
 export async function chat({ model = CHAT_MODEL, messages, format, tools, label = "chat", reasoningEffort = REASONING_EFFORT }) {
@@ -121,6 +121,8 @@ async function post(url, body) {
     // Groq says which limit: "tokens per day (TPD)" or "requests per day (RPD)".
     if (res.status === 429 && /per day/i.test(err.message)) err.dailyLimit = true;
     if (res.status === 400 && /json_validate_failed/.test(err.message)) err.schemaFailed = true;
+    // A retired or unknown model: the Command Center shows an alert (modelCheck.js).
+    if (res.status === 404 && /model_not_found|does not exist/.test(err.message)) await noteMissing(body.model, err.message);
     throw err;
   }
   return res.json();

@@ -35,7 +35,7 @@ function loadLimits() {
 }
 export const FREE_TIER = loadLimits();
 
-const KEY = "limits:v1";
+const KEY = process.env.LIMITS_KEY || "limits:v1";
 const save = (field, value) => redis.hSet(KEY, field, JSON.stringify(value)).catch((err) => console.error(`[limits] ${err.message}`));
 
 // Groq's headers on any response (also errors): requests per day left.
@@ -61,6 +61,12 @@ export function waitFrom(message) {
 export async function noteExhausted(model, message) {
   const wait = waitFrom(message);
   await save(`${model}:exhausted`, { until: new Date(Date.now() + (wait ?? 3600000)).toISOString(), exact: wait !== null, at: new Date().toISOString() });
+}
+
+// The provider said the model does not exist (Groq: 404 model_not_found) - the Command Center's
+// model alert (modelCheck.js) until a later call to it works.
+export async function noteMissing(model, message) {
+  await save(`${model}:missing`, { at: new Date().toISOString(), message: String(message).slice(0, 300) });
 }
 
 export async function providerStates() {
