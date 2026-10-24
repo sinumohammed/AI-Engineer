@@ -31,6 +31,8 @@ import { FREE_TIER, providerStates } from "./limits.js";
 const DEFAULT_PRICES = {
   "openai/gpt-oss-120b": [0.15, 0.6],
   "openai/gpt-oss-20b": [0.075, 0.3],
+  // Vision (POST /api/ask/task with a photo, tasks.js) - Groq's list price as last checked; MODEL_PRICES overrides.
+  "meta-llama/llama-4-maverick-17b-128e-instruct": [0.2, 0.6],
   "gemini-3.5-flash-lite": [0.25, 1.5],
   // Text in, audio tokens out; $6 per million audio tokens until 2026-12-31, then $12.
   "gemini-3.8-flash-lite-tts": [0.5, 6],

@@ -11,6 +11,9 @@
 //   DELETE /api/ask/conversations/:conversationId  - forget a conversation
 //   POST /api/ask/transcribe?lang=Malayalam  (raw audio body) -> { text, language } - voice input
 //       for the app's own chat screen, the same speech-to-text as the web chat (transcribe.js)
+//   POST /api/ask/task  { "instructions": "...", "input"?: "...", "image"?: { "mimeType", "data" }, "user"?: { "ref" } }
+//       -> { result: {...}, model } - a small job that is not a question (tasks.js): the app's own
+//       instructions, text or one photo in, the model's JSON object out. Counted like a question.
 //
 // Without conversationId every question stands alone. With one, earlier
 // questions in it are remembered (Redis, 24 hours), like a chat in the web
@@ -36,6 +39,7 @@ import { transcribe, TranscribeError } from "./transcribe.js";
 import { metered, meteredJob, recordUsage } from "./usage.js";
 import { appForKey, hasAskKeys } from "./askKeys.js";
 import { parseDisplay } from "./display.js";
+import { parseTask, runTask, TaskError } from "./tasks.js";
 
 const MAX_QUESTION_CHARS = 4000;
 const CONVERSATION_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
@@ -60,7 +64,10 @@ async function appFor(req) {
 }
 
 export const askApi = express.Router();
-askApi.use(express.json({ limit: "64kb" }));
+// Questions are short; a task may carry one photo (tasks.js).
+const smallJson = express.json({ limit: "64kb" });
+const taskJson = express.json({ limit: "4500kb" });
+askApi.use((req, res, next) => (req.path === "/task" ? taskJson : smallJson)(req, res, next));
 askApi.use(async (req, res, next) => {
   let appName;
   try {
@@ -139,6 +146,32 @@ askApi.post("/transcribe", express.raw({ type: () => true, limit: "4mb" }), asyn
   } catch (err) {
     if (!(err instanceof TranscribeError)) console.error(`[ask] app=${req.appName} transcribe: ${err.message}`);
     res.status(err.status ?? 500).json({ error: err instanceof TranscribeError ? err.message : "Could not turn the recording into text." });
+  }
+});
+
+// Step 5: an app's small AI jobs - a quote drafted from a complaint, a registration card read
+// from a photo. Same switch and limits as a question; metered as channel "task" (Command Center).
+askApi.post("/task", async (req, res) => {
+  let task;
+  try {
+    task = parseTask(req.body);
+  } catch (err) {
+    return res.status(err.status).json({ error: err.message });
+  }
+  const ref = req.body?.user?.ref;
+  if (ref !== undefined && (typeof ref !== "string" || !USER_REF.test(ref))) return res.status(400).json({ error: '"user.ref" must be 1-100 letters, digits, _ . : -' });
+  const allowed = await takeAppQuestion(req.appName);
+  if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+  const started = Date.now();
+  try {
+    const out = await meteredJob({ caller: req.appName, channel: "task", userRef: ref ?? null }, () => runTask(task));
+    console.log(`[ask] app=${req.appName} task${task.image ? " (photo)" : ""} ${Date.now() - started} ms`);
+    res.json(out);
+  } catch (err) {
+    if (!(err instanceof TaskError)) console.error(`[ask] app=${req.appName} task failed: ${err.message}`);
+    if (err instanceof TaskError) return res.status(err.status).json({ error: err.message });
+    if (err.status === 429) return res.status(429).json({ error: err.message });
+    res.status(500).json({ error: "Could not do that task - please try again." });
   }
 });
 
