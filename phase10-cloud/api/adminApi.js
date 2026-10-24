@@ -96,7 +96,9 @@ adminApi.get(
   "/usage",
   handle(async (req) => {
     const days = Math.min(365, Math.max(1, Math.round(Number(req.query.days) || 30)));
-    const [report, apps, freeTier, alerts] = await Promise.all([usageReport(days), listApps(), freeTierToday(), modelAlerts()]);
+    // ?app=<caller>: one app only (the Command Center's filter); none = every app.
+    const app = typeof req.query.app === "string" && /^[A-Za-z0-9_.:-]{1,64}$/.test(req.query.app) ? req.query.app : null;
+    const [report, apps, freeTier, alerts] = await Promise.all([usageReport(days, app), listApps(), freeTierToday(), modelAlerts()]);
     // The registry too, so an app with no use yet still shows (with zeros). modelAlerts: models gone at Groq.
     return { ...report, freeTier, modelAlerts: alerts, connectedApps: apps.map((a) => ({ name: a.name, dataLevel: a.dataLevel, callers: a.callers ?? [], operations: a.operations.length })) };
   })

@@ -254,18 +254,21 @@ export async function freeTierToday() {
 
 const percentile = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : null);
 
-// Everything the Command Center shows, for the last `days` days (UTC).
-export async function usageReport(days = 30) {
+// Everything the Command Center shows, for the last `days` days (UTC) - for every app, or one
+// (`app`: its caller name; the filter at the top of the Command Center).
+// A "use" is a question (chat, ask) or an app's task (a Mulkiya scan, a quote draft - tasks.js).
+export async function usageReport(days = 30, app = null) {
   await ensureTable();
-  const since = `now() - make_interval(days => $1)`;
-  const q = (sql) => db.query(sql, [days]).then((r) => r.rows);
-  const QUESTION = `channel IN ('chat', 'ask')`;
-  const [byApp, byDay, byAgent, byModel, appCalls, byUser, latency, recent, failures] = await Promise.all([
+  const since = `now() - make_interval(days => $1) AND ($2::text IS NULL OR caller = $2)`;
+  const q = (sql) => db.query(sql, [days, app]).then((r) => r.rows);
+  const QUESTION = `channel IN ('chat', 'ask', 'task')`;
+  const [byApp, byDay, byAgent, byModel, appCalls, byUser, latency, recent, failures, everyApp] = await Promise.all([
     q(`SELECT caller,
               count(*) FILTER (WHERE ${QUESTION})::int AS questions,
               count(*) FILTER (WHERE NOT ok)::int AS errors,
               count(*) FILTER (WHERE channel = 'transcribe')::int AS voice,
               count(*) FILTER (WHERE channel = 'attachment')::int AS files,
+              count(*) FILTER (WHERE channel = 'task')::int AS tasks,
               count(DISTINCT user_ref)::int AS users,
               sum(prompt_tokens)::bigint AS prompt_tokens,
               sum(completion_tokens)::bigint AS completion_tokens,
@@ -295,20 +298,24 @@ export async function usageReport(days = 30) {
               round(avg((c->>'latencyMs')::int))::int AS avg_ms
          FROM usage_events, jsonb_array_elements(app_calls) AS c WHERE at >= ${since}
         GROUP BY 1, 2 ORDER BY calls DESC LIMIT 25`),
-    // Users inside apps - only apps that send user.ref (askApi.js).
+    // Users inside apps - only apps that send user.ref (askApi.js): masjid members, Garagentic's
+    // garages ("garage:<slug>"). More rows when one app is picked.
     q(`SELECT caller, user_ref,
               count(*) FILTER (WHERE ${QUESTION})::int AS questions,
+              count(*) FILTER (WHERE channel = 'task')::int AS tasks,
               count(*) FILTER (WHERE NOT ok)::int AS errors,
               sum(cost_usd)::float AS cost_usd,
+              count(*) FILTER (WHERE at >= date_trunc('day', now()) AND ${QUESTION})::int AS questions_today,
               max(at) AS last_at
          FROM usage_events WHERE at >= ${since} AND user_ref IS NOT NULL
-        GROUP BY 1, 2 ORDER BY questions DESC, cost_usd DESC LIMIT 20`),
+        GROUP BY 1, 2 ORDER BY questions DESC, cost_usd DESC LIMIT ${app ? 100 : 20}`),
     q(`SELECT latency_ms FROM usage_events WHERE at >= ${since} AND ${QUESTION} AND ok AND latency_ms IS NOT NULL ORDER BY latency_ms`),
     db
       .query(
         `SELECT at, caller, channel, mode, ok, error, latency_ms, agents, llm_calls,
                 prompt_tokens + completion_tokens AS tokens, cost_usd::float AS cost_usd, app_calls
-           FROM usage_events ORDER BY at DESC LIMIT 30`
+           FROM usage_events WHERE ($1::text IS NULL OR caller = $1) ORDER BY at DESC LIMIT 30`,
+        [app]
       )
       .then((r) => r.rows),
     // What failed, newest first - the Errors tile's list. A failed call to a
@@ -319,12 +326,16 @@ export async function usageReport(days = 30) {
          FROM usage_events
         WHERE at >= ${since} AND (NOT ok OR app_calls @> '[{"ok": false}]')
         ORDER BY at DESC LIMIT 50`),
+    // Every app with use in the period, for the filter (whatever is picked).
+    db.query(`SELECT DISTINCT caller FROM usage_events WHERE at >= now() - make_interval(days => $1) ORDER BY 1`, [days]).then((r) => r.rows.map((x) => x.caller)),
   ]);
   const ms = latency.map((r) => r.latency_ms);
   const num = (v) => Number(v ?? 0);
   const apps = byApp.map((r) => ({ ...r, prompt_tokens: num(r.prompt_tokens), completion_tokens: num(r.completion_tokens), cost_usd: num(r.cost_usd) }));
   return {
     days,
+    app,
+    everyApp,
     generatedAt: new Date().toISOString(),
     totals: {
       questions: apps.reduce((s, a) => s + a.questions, 0),

@@ -311,7 +311,7 @@ function greetingText(name, rows, now = new Date()) {
 
 // --- data ---
 
-function useUsage(dashKey, days, onUnauthorized) {
+function useUsage(dashKey, days, app, onUnauthorized) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -319,7 +319,7 @@ function useUsage(dashKey, days, onUnauthorized) {
     if (!dashKey) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/usage?days=${days}`, { headers: { Authorization: `Bearer ${dashKey}` } });
+      const res = await fetch(`${API_BASE}/api/admin/usage?days=${days}${app ? `&app=${encodeURIComponent(app)}` : ""}`, { headers: { Authorization: `Bearer ${dashKey}` } });
       const body = await res.json().catch(() => ({}));
       if (res.status === 401 || res.status === 404) {
         onUnauthorized(body.error ?? "That key was not accepted.");
@@ -333,7 +333,7 @@ function useUsage(dashKey, days, onUnauthorized) {
     } finally {
       setLoading(false);
     }
-  }, [dashKey, days, onUnauthorized]);
+  }, [dashKey, days, app, onUnauthorized]);
 
   useEffect(() => {
     load();
@@ -353,6 +353,9 @@ export default function CommandCenter({ isDark }) {
   const [access, setAccess] = useState({ checked: false, needed: false, voice: false });
   const [lockReason, setLockReason] = useState(null);
   const [days, setDays] = useState(30);
+  // One app, or every app ("") - remembered on this device.
+  const [app, setAppState] = useState(() => stored("ccApp") || "");
+  const setApp = (v) => { setAppState(v); store("ccApp", v); };
 
   useEffect(() => {
     fetch(`${API_BASE}/api/access`, { headers: accessCode ? { "x-access-code": accessCode } : {} })
@@ -366,7 +369,7 @@ export default function CommandCenter({ isDark }) {
     setDashKey("");
     setLockReason(reason);
   }, []);
-  const usage = useUsage(dashKey, days, lock);
+  const usage = useUsage(dashKey, days, app, lock);
 
   const cssVars = {
     "--bg": token.colorBgLayout,
@@ -435,13 +438,14 @@ export default function CommandCenter({ isDark }) {
           <div className="cc-section-head">
             <h2>Usage and cost</h2>
             <div className="grow" />
+            <AppFilter d={d} value={app} onChange={setApp} />
             <Segmented size="small" options={RANGES} value={days} onChange={setDays} />
             <Tooltip title="Refresh now (it also refreshes every 30 seconds)">
               <Button size="small" type="text" icon={<ReloadOutlined spin={usage.loading} />} onClick={usage.reload} aria-label="Refresh" />
             </Tooltip>
           </div>
           {usage.error && <Alert type="warning" showIcon title={usage.error} className="slim" />}
-          {d ? <UsagePanels d={d} /> : !usage.error && <p className="muted">Loading usage…</p>}
+          {d ? <UsagePanels d={d} app={app} /> : !usage.error && <p className="muted">Loading usage…</p>}
         </section>
 
         {/* Pause an app or change its daily / monthly limits - admin key only. */}
@@ -969,10 +973,24 @@ function CommsLog({ run }) {
 
 // --- usage panels ---
 
-function UsagePanels({ d }) {
+// Which app the usage section shows: every app, or one (the API filters, ?app=).
+function AppFilter({ d, value, onChange }) {
+  const names = [...new Set([...(d?.everyApp ?? []), ...(d?.connectedApps ?? []).flatMap((a) => (a.callers ?? []).filter((c) => c !== "command")), ...(value ? [value] : [])])].sort();
+  return (
+    <Select size="small" value={value} onChange={onChange} style={{ minWidth: 150 }} aria-label="App"
+      options={[{ value: "", label: "All apps" }, ...names.map((n) => ({ value: n, label: callerLabel(n) }))]} />
+  );
+}
+
+// "garage:sino-garage" -> "sino-garage" under Garagentic; other apps' refs as they are.
+const refLabel = (r) => (r.caller === "garagentic" ? r.user_ref.replace(/^garage:/, "") : r.user_ref);
+const usersTitle = (app) => (app === "garagentic" ? "Garages" : app ? `Users in ${callerLabel(app)}` : "Top users");
+
+function UsagePanels({ d, app }) {
   // undefined: closed; null: every app; a name: that app's failures.
   const [errorsFor, setErrorsFor] = useState(undefined);
-  const callers = [...new Set([...d.byApp.map((a) => a.caller), ...d.connectedApps.flatMap((a) => (a.callers ?? []).filter((c) => c !== "web")), "web"])];
+  const allCallers = [...new Set([...d.byApp.map((a) => a.caller), ...d.connectedApps.flatMap((a) => (a.callers ?? []).filter((c) => c !== "web")), "web"])];
+  const callers = app ? [app] : allCallers;
   const colors = callerColors(callers);
   const totalCost = d.totals.costUsd;
   const errorRate = d.totals.questions ? d.totals.errors / d.totals.questions : 0;
@@ -993,7 +1011,7 @@ function UsagePanels({ d }) {
         </span>
       ),
     },
-    { title: "Questions", dataIndex: "questions", align: "right", render: fmtInt, sorter: (a, b) => a.questions - b.questions },
+    { title: <Tooltip title="Questions, plus apps' tasks such as Garagentic's Mulkiya scans and quote drafts">Uses</Tooltip>, dataIndex: "questions", align: "right", render: fmtInt, sorter: (a, b) => a.questions - b.questions },
     { title: "Today", dataIndex: "questions_today", align: "right", render: fmtInt, responsive: ["md"] },
     { title: "Users", dataIndex: "users", align: "right", render: (v) => (v ? fmtInt(v) : "—"), responsive: ["lg"] },
     { title: "Voice", dataIndex: "voice", align: "right", render: fmtInt, responsive: ["lg"] },
@@ -1035,8 +1053,8 @@ function UsagePanels({ d }) {
     <>
       <FailuresDrawer d={d} app={errorsFor} colors={colors} onClose={() => setErrorsFor(undefined)} />
       <div className="kpis">
-        <Kpi label="Questions today" value={fmtInt(d.totals.questionsToday)} />
-        <Kpi label={`Questions, ${d.days} days`} value={fmtInt(d.totals.questions)} />
+        <Kpi label="Uses today" value={fmtInt(d.totals.questionsToday)} hint="Questions, plus apps' tasks (Mulkiya scans, quote drafts). Today = since midnight UTC." />
+        <Kpi label={`Uses, ${d.days} days`} value={fmtInt(d.totals.questions)} />
         <Kpi label="Est. cost" value={fmtUsd(totalCost)} hint="What this use would cost at the providers' paid prices. On free tiers the bill is $0." />
         <Kpi label="Tokens" value={fmtTokens(d.totals.tokens)} />
         <Kpi label="Typical answer" value={fmtMs(d.totals.p50Ms)} hint={`Half of the answers took less than this. 95% took less than ${fmtMs(d.totals.p95Ms)}.`} />
@@ -1062,7 +1080,7 @@ function UsagePanels({ d }) {
           </Card>
         )}
 
-        <Card className="span2" title="Questions per day" size="small">
+        <Card className="span2" title={`Uses per day${app ? ` · ${callerLabel(app)}` : ""}`} size="small">
           <DailyChart rows={d.byDay} days={d.days} colors={colors} />
         </Card>
 
@@ -1079,12 +1097,12 @@ function UsagePanels({ d }) {
           {unpriced.length > 0 && <p className="muted small">No price set for {unpriced.map((m) => m.model).join(", ")} - add it to MODEL_PRICES.</p>}
         </Card>
 
-        <Card title="Top users" size="small" extra={<span className="muted small">Inside apps that say who asks</span>}>
+        <Card className={app ? "span2" : undefined} title={usersTitle(app)} size="small" extra={<span className="muted small">{app === "garagentic" ? "Which garage used the AI most" : "Inside apps that say who asks"}</span>}>
           {d.byUser?.length ? (
             <Table
               size="small"
               rowKey={(r) => `${r.caller}:${r.user_ref}`}
-              pagination={false}
+              pagination={app ? { pageSize: 20, hideOnSinglePage: true } : false}
               dataSource={d.byUser}
               columns={[
                 {
@@ -1093,12 +1111,14 @@ function UsagePanels({ d }) {
                   render: (_, r) => (
                     <span className="app-cell">
                       <i style={{ background: colors[r.caller] ?? "var(--other)" }} />
-                      <span className="mono">{r.user_ref}</span>
+                      <span className="mono">{refLabel(r)}</span>
                     </span>
                   ),
                 },
-                { title: "Questions", dataIndex: "questions", align: "right", render: fmtInt },
-                { title: "Est. cost", dataIndex: "cost_usd", align: "right", render: fmtUsd },
+                { title: "Uses", dataIndex: "questions", align: "right", render: fmtInt, sorter: (a, b) => a.questions - b.questions },
+                ...(app ? [{ title: "Today", dataIndex: "questions_today", align: "right", render: fmtInt }] : []),
+                ...(app ? [{ title: "Errors", dataIndex: "errors", align: "right", render: (v) => (v ? <Tag color="error">{v}</Tag> : <span className="muted">0</span>), responsive: ["md"] }] : []),
+                { title: "Est. cost", dataIndex: "cost_usd", align: "right", render: fmtUsd, sorter: (a, b) => a.cost_usd - b.cost_usd },
                 { title: "Last", dataIndex: "last_at", align: "right", render: (v) => <When at={v} />, responsive: ["sm"] },
               ]}
             />

@@ -119,6 +119,16 @@ try {
   const a2 = await alerts();
   check("model alert: gone once the model answers again", !a2?.some((a) => a.model === "fake-vision"), JSON.stringify(a2));
 
+  // The Command Center's app filter: tasks count as uses, and the users list ranks this app's garages.
+  const report = async (q) => (await fetch(`${AI}/api/admin/usage?days=1${q}`, { headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } })).json();
+  const mine = await report(`&app=${APP}`);
+  const g1 = mine.byUser?.find((u) => u.user_ref === "garage:g1");
+  check("usage filtered to the app: only its rows, tasks counted as uses, its garage ranked",
+    mine.app === APP && mine.byApp?.length === 1 && mine.byApp[0].caller === APP && mine.byApp[0].tasks === 5 && mine.byApp[0].questions === mine.byApp[0].tasks && g1?.questions === 1 && mine.everyApp?.includes(APP),
+    JSON.stringify({ app: mine.app, byApp: mine.byApp, g1 }));
+  const none = await report("&app=no-such-app");
+  check("another app's filter shows none of it", none.byApp?.length === 0 && !none.byUser?.length && none.everyApp?.includes(APP), JSON.stringify(none.byApp));
+
   reply = "{}";
   const sixth = await task({ instructions: "x", input: "y" });
   const seventh = await task({ instructions: "x", input: "y" });
