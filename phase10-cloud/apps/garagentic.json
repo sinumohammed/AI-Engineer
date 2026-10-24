@@ -1,0 +1,13 @@
+{
+  "name": "garagentic",
+  "description": "Garagentic, the garage management app (job cards, quotes, invoices, customers, reminders, parts, team, pay): its help pages - how to use each screen, by role",
+  "knowledge": "https://garagentic.co/help.md",
+  "callers": ["garagentic"],
+  "dataLevel": "public",
+  "timezone": "Asia/Muscat",
+  "examples": [
+    "How do I send a quote?",
+    "How do I add a mechanic to my team?",
+    "How do I pay a salary?"
+  ]
+}
