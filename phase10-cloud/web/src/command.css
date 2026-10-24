@@ -239,3 +239,12 @@
 .ft-track.is-high span { background: var(--s4); }
 
 .cc-model-alert { margin-bottom: 12px; }
+/* Users / Garages list: a long name is cut with an ellipsis (full name in the tooltip). */
+.user-cell { display: flex; min-width: 0; max-width: 100%; }
+.user-cell .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Usage section header on phones: title on its own line, then the app filter, days and refresh. */
+.cc-section-head { flex-wrap: wrap; row-gap: 8px; }
+@media (max-width: 560px) {
+  .cc-section-head h2 { flex-basis: 100%; }
+  .cc-section-head .grow { display: none; }
+}

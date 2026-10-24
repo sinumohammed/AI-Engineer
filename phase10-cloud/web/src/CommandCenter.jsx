@@ -982,8 +982,12 @@ function AppFilter({ d, value, onChange }) {
   );
 }
 
-// "garage:sino-garage" -> "sino-garage" under Garagentic; other apps' refs as they are.
-const refLabel = (r) => (r.caller === "garagentic" ? r.user_ref.replace(/^garage:/, "") : r.user_ref);
+// "garage:sino-garage" -> "sino-garage" under Garagentic; other apps' refs as they are. An id
+// (older Garagentic rows: "garage:<uuid>") shows its first 8 characters - the full ref is in the tooltip.
+const refLabel = (r) => {
+  const ref = r.caller === "garagentic" ? r.user_ref.replace(/^garage:/, "") : r.user_ref;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(ref) ? `${ref.slice(0, 8)}…` : ref;
+};
 const usersTitle = (app) => (app === "garagentic" ? "Garages" : app ? `Users in ${callerLabel(app)}` : "Top users");
 
 function UsagePanels({ d, app }) {
@@ -1101,25 +1105,30 @@ function UsagePanels({ d, app }) {
           {d.byUser?.length ? (
             <Table
               size="small"
+              tableLayout="fixed"
               rowKey={(r) => `${r.caller}:${r.user_ref}`}
               pagination={app ? { pageSize: 20, hideOnSinglePage: true } : false}
               dataSource={d.byUser}
               columns={[
                 {
-                  title: "User",
+                  // Long names never widen the table: cut with "…", the full ref on hover / tap.
+                  title: app === "garagentic" ? "Garage" : "User",
                   key: "user",
+                  ellipsis: { showTitle: false },
                   render: (_, r) => (
-                    <span className="app-cell">
-                      <i style={{ background: colors[r.caller] ?? "var(--other)" }} />
-                      <span className="mono">{refLabel(r)}</span>
-                    </span>
+                    <Tooltip title={r.user_ref} placement="topLeft">
+                      <span className="app-cell user-cell">
+                        <i style={{ background: colors[r.caller] ?? "var(--other)" }} />
+                        <span className="mono">{refLabel(r)}</span>
+                      </span>
+                    </Tooltip>
                   ),
                 },
-                { title: "Uses", dataIndex: "questions", align: "right", render: fmtInt, sorter: (a, b) => a.questions - b.questions },
-                ...(app ? [{ title: "Today", dataIndex: "questions_today", align: "right", render: fmtInt }] : []),
-                ...(app ? [{ title: "Errors", dataIndex: "errors", align: "right", render: (v) => (v ? <Tag color="error">{v}</Tag> : <span className="muted">0</span>), responsive: ["md"] }] : []),
-                { title: "Est. cost", dataIndex: "cost_usd", align: "right", render: fmtUsd, sorter: (a, b) => a.cost_usd - b.cost_usd },
-                { title: "Last", dataIndex: "last_at", align: "right", render: (v) => <When at={v} />, responsive: ["sm"] },
+                { title: "Uses", dataIndex: "questions", align: "right", width: 78, render: fmtInt, sorter: (a, b) => a.questions - b.questions },
+                ...(app ? [{ title: "Today", dataIndex: "questions_today", align: "right", width: 64, render: fmtInt, responsive: ["sm"] }] : []),
+                ...(app ? [{ title: "Errors", dataIndex: "errors", align: "right", width: 70, render: (v) => (v ? <Tag color="error">{v}</Tag> : <span className="muted">0</span>), responsive: ["md"] }] : []),
+                { title: "Cost", dataIndex: "cost_usd", align: "right", width: 86, render: fmtUsd, sorter: (a, b) => a.cost_usd - b.cost_usd },
+                { title: "Last", dataIndex: "last_at", align: "right", width: 96, render: (v) => <When at={v} />, responsive: ["md"] },
               ]}
             />
           ) : (
